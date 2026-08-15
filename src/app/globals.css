@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/* Tailwind v4 has no `darkMode` config option — a class-based `dark:`
+   variant is opted into explicitly like this. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Light is the default theme; `.dark` (toggled by ThemeProvider) overrides it. */
+:root {
+  --background: #fafafa;
+  --foreground: #0b0c0e;
+  --muted-foreground: #6b6b72;
+  --accent: #3968d6;
+  --success: #047857;
+  --card-strong: #ffffff;
+  --grid-dot: rgba(11, 12, 14, 0.14);
+}
+
+.dark {
+  --background: #08090a;
+  --foreground: #f5f5f2;
+  --muted-foreground: #96969e;
+  --accent: #4c8dff;
+  --success: #34d399;
+  --card-strong: #0b0c0e;
+  --grid-dot: rgba(255, 255, 255, 0.14);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-card-strong: var(--card-strong);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --animate-spin-slow: spin-slow 3s linear infinite;
+}
+
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}

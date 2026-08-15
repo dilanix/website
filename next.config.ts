@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Statically typed `<Link href>` and `useRouter` — invalid routes fail at compile time.
+  typedRoutes: true,
 };
 
 export default nextConfig;
