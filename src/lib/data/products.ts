@@ -19,7 +19,7 @@ const products: Product[] = [
       { label: "Unit economics" },
     ],
     ctaLabel: "Explore CostOps",
-    ctaHref: "#products",
+    ctaHref: "/products/costops",
   },
 ];
 
@@ -50,7 +50,7 @@ const dashboardSnapshots: Record<string, ProductDashboardSnapshot> = {
   },
 };
 
-/** Stand-in for `GET /api/products`. */
+// TODO: replace with `fetch(`${env.NEXT_PUBLIC_API_URL}/products`)` once the backend ships.
 export async function getProducts(): Promise<Product[]> {
   return products;
 }
@@ -60,7 +60,15 @@ export async function getFeaturedProduct(): Promise<Product | undefined> {
   return all.find((product) => product.featured);
 }
 
-/** Stand-in for `GET /api/products/{slug}/dashboard-snapshot`. */
+// TODO: replace with `fetch(`${env.NEXT_PUBLIC_API_URL}/products/${slug}`)` once the backend ships.
+export async function getProductBySlug(
+  slug: string,
+): Promise<Product | undefined> {
+  const all = await getProducts();
+  return all.find((product) => product.slug === slug);
+}
+
+// TODO: replace with `fetch(`${env.NEXT_PUBLIC_API_URL}/products/${slug}/dashboard-snapshot`)` once the backend ships.
 export async function getProductDashboardSnapshot(
   slug: string,
 ): Promise<ProductDashboardSnapshot | undefined> {

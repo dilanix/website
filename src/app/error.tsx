@@ -1,6 +1,7 @@
 "use client"; // Error boundaries must be Client Components
 
 import { useEffect } from "react";
+import { buttonVariants } from "@/components/ui/button";
 
 export default function Error({
   error,
@@ -17,10 +18,7 @@ export default function Error({
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
       <h2 className="text-xl font-semibold">Something went wrong</h2>
-      <button
-        onClick={() => retry()}
-        className="bg-foreground text-background hover:bg-foreground/80 rounded-full px-5 py-2 text-sm font-medium transition-colors"
-      >
+      <button onClick={() => retry()} className={buttonVariants("primary")}>
         Try again
       </button>
     </div>

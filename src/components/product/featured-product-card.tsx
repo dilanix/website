@@ -5,9 +5,12 @@ import { DashboardMockup } from "@/components/product/dashboard-mockup";
 export function FeaturedProductCard({
   product,
   snapshot,
+  showCta = true,
 }: {
   product: Product;
   snapshot: ProductDashboardSnapshot;
+  /** Hide the drill-in CTA when the card is already rendered on its own detail page. */
+  showCta?: boolean;
 }) {
   return (
     <div className="border-foreground/10 from-foreground/[0.03] hover:border-foreground/15 grid gap-10 rounded-2xl border bg-gradient-to-b to-transparent p-6 transition-colors duration-300 sm:p-8 lg:grid-cols-2 lg:items-center lg:gap-12 lg:p-12">
@@ -39,13 +42,15 @@ export function FeaturedProductCard({
           ))}
         </ul>
 
-        <a
-          href={product.ctaHref}
-          className="text-foreground hover:text-accent inline-flex w-fit items-center gap-1.5 text-sm font-medium transition-colors"
-        >
-          {product.ctaLabel}
-          <span aria-hidden="true">→</span>
-        </a>
+        {showCta ? (
+          <a
+            href={product.ctaHref}
+            className="text-foreground hover:text-accent inline-flex w-fit items-center gap-1.5 text-sm font-medium transition-colors"
+          >
+            {product.ctaLabel}
+            <span aria-hidden="true">→</span>
+          </a>
+        ) : null}
       </div>
 
       <DashboardMockup productName={product.name} snapshot={snapshot} />

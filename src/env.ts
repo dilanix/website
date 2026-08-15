@@ -19,13 +19,15 @@ const serverSchema = z.object({
 });
 
 const clientSchema = z.object({
-  // Example: NEXT_PUBLIC_SITE_URL: z.url(),
+  NEXT_PUBLIC_API_URL: z.url().default("https://api.dilanix.org"),
 });
 
 // Next.js inlines `NEXT_PUBLIC_*` vars at build time, so each one must be
 // referenced explicitly via `process.env.NEXT_PUBLIC_*` — a dynamic lookup
 // would not be replaced by the bundler.
-const clientEnv = clientSchema.parse({});
+const clientEnv = clientSchema.parse({
+  NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+});
 
 const serverEnv = serverSchema.parse(process.env);
 

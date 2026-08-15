@@ -6,15 +6,15 @@ const columns = [
   {
     title: "Company",
     links: [
-      { label: "About", href: "#company" },
-      { label: "Contact", href: "#" },
-      { label: "Blog", href: "#" },
+      { label: "About", href: "/company" },
+      { label: "Contact", href: "/contact" },
+      { label: "Blog", href: "/blog" },
       { label: "Careers", href: "#" },
     ],
   },
   {
     title: "Products",
-    links: [{ label: "CostOps", href: "#products" }],
+    links: [{ label: "CostOps", href: "/products/costops" }],
   },
   {
     title: "Resources",

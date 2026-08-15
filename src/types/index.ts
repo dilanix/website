@@ -95,6 +95,7 @@ export interface SiteSettings {
   domain: string;
   description: string;
   url: string;
+  email: string;
   social: SiteSocialLinks;
   nav: NavLink[];
 }

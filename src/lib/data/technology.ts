@@ -28,7 +28,7 @@ const categories: TechnologyCategory[] = [
   },
 ];
 
-/** Stand-in for `GET /api/technology-categories`. */
+// TODO: replace with `fetch(`${env.NEXT_PUBLIC_API_URL}/technology-categories`)` once the backend ships.
 export async function getTechnologyCategories(): Promise<TechnologyCategory[]> {
   return categories;
 }

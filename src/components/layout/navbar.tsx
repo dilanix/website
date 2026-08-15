@@ -34,13 +34,13 @@ export function Navbar({ links }: { links: NavLink[] }) {
         </nav>
 
         <div className="hidden items-center gap-5 md:flex">
-          <a
-            href="#"
+          <Link
+            href="/sign-in"
             className="text-muted-foreground hover:text-foreground text-sm transition-colors"
           >
             Sign in
-          </a>
-          <Button href="#products" className="px-4 py-2 text-sm">
+          </Link>
+          <Button href="/products" className="px-4 py-2 text-sm">
             Explore products
           </Button>
           <ThemeToggle />
@@ -73,15 +73,15 @@ export function Navbar({ links }: { links: NavLink[] }) {
                 {link.label}
               </a>
             ))}
-            <a
-              href="#"
+            <Link
+              href="/sign-in"
               onClick={() => setOpen(false)}
               className="text-muted-foreground hover:text-foreground hover:bg-foreground/5 rounded-md px-2 py-2.5 text-sm transition-colors"
             >
               Sign in
-            </a>
+            </Link>
             <Button
-              href="#products"
+              href="/products"
               onClick={() => setOpen(false)}
               className="mt-2"
             >

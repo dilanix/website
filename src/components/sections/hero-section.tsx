@@ -16,10 +16,10 @@ export function HeroSection() {
           product design.
         </p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <Button href="#products" variant="primary">
+          <Button href="/products" variant="primary">
             Explore products
           </Button>
-          <Button href="#company" variant="secondary">
+          <Button href="/company" variant="secondary">
             About Dilanix
           </Button>
         </div>

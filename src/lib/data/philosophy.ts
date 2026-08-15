@@ -27,7 +27,7 @@ const principles: PhilosophyPrinciple[] = [
   },
 ];
 
-/** Stand-in for `GET /api/philosophy-principles`. */
+// TODO: replace with `fetch(`${env.NEXT_PUBLIC_API_URL}/philosophy-principles`)` once the backend ships.
 export async function getPhilosophyPrinciples(): Promise<
   PhilosophyPrinciple[]
 > {

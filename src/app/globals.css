@@ -9,7 +9,8 @@
   --background: #fafafa;
   --foreground: #0b0c0e;
   --muted-foreground: #6b6b72;
-  --accent: #3968d6;
+  --accent: #2f6e68;
+  --accent-foreground: #f5fbfa;
   --success: #047857;
   --card-strong: #ffffff;
   --grid-dot: rgba(11, 12, 14, 0.14);
@@ -19,7 +20,8 @@
   --background: #08090a;
   --foreground: #f5f5f2;
   --muted-foreground: #96969e;
-  --accent: #4c8dff;
+  --accent: #6fa39d;
+  --accent-foreground: #10201e;
   --success: #34d399;
   --card-strong: #0b0c0e;
   --grid-dot: rgba(255, 255, 255, 0.14);
@@ -30,6 +32,7 @@
   --color-foreground: var(--foreground);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-success: var(--success);
   --color-card-strong: var(--card-strong);
   --font-sans: var(--font-geist-sans);

@@ -21,7 +21,7 @@ export function FinalCtaSection() {
                 Explore Dilanix products and the problems we&apos;re working to
                 solve.
               </p>
-              <Button href="#products" variant="primary" className="mt-2">
+              <Button href="/products" variant="primary" className="mt-2">
                 Explore products
               </Button>
             </div>
