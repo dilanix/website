@@ -5,6 +5,8 @@ import { ContactForm } from "@/components/contact/contact-form";
 
 export const metadata: Metadata = {
   title: "Contact",
+  description: "Get in touch with Dilanix.",
+  alternates: { canonical: "/contact" },
 };
 
 export default async function ContactPage() {

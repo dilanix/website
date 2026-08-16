@@ -12,27 +12,35 @@ const icons: Record<PhilosophyIcon, typeof Target> = {
 
 export function PhilosophySection({
   principles,
+  title = "Why Dilanix",
 }: {
   principles: PhilosophyPrinciple[];
+  title?: string;
 }) {
   return (
-    <section className="border-foreground/5 border-t py-24 sm:py-32">
-      <Container>
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
+    <section className="border-foreground/5 border-t py-20 sm:py-24">
+      <Container className="max-w-3xl">
+        <h2 className="text-muted-foreground mb-10 text-xs font-medium tracking-widest uppercase">
+          {title}
+        </h2>
+        <div className="divide-foreground/10 divide-y">
           {principles.map((principle, index) => {
             const Icon = icons[principle.icon];
             return (
               <Reveal key={principle.title} delayMs={index * 80}>
-                <div className="flex flex-col gap-4">
-                  <span className="text-accent bg-foreground/5 flex h-9 w-9 items-center justify-center rounded-md">
-                    <Icon size={18} />
-                  </span>
-                  <h3 className="text-foreground text-base font-medium">
-                    {principle.title}
-                  </h3>
-                  <p className="text-muted-foreground text-sm">
-                    {principle.description}
-                  </p>
+                <div className="flex flex-col gap-2 py-8 first:pt-0 last:pb-0 sm:flex-row sm:items-baseline sm:gap-8">
+                  <div className="text-accent flex shrink-0 items-center gap-2 sm:w-28">
+                    <Icon size={15} />
+                    <span className="font-mono text-xs">0{index + 1}</span>
+                  </div>
+                  <div>
+                    <h3 className="text-foreground text-base font-medium">
+                      {principle.title}
+                    </h3>
+                    <p className="text-muted-foreground mt-1.5 max-w-md text-sm">
+                      {principle.description}
+                    </p>
+                  </div>
                 </div>
               </Reveal>
             );

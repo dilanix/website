@@ -17,25 +17,43 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const defaultTitle = `${siteConfig.name} — Software for problems worth solving`;
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
   title: {
-    default: `${siteConfig.name} — Software for problems worth solving.`,
+    default: defaultTitle,
     template: `%s | ${siteConfig.name}`,
   },
   description: siteConfig.description,
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
     type: "website",
     url: siteConfig.url,
     siteName: siteConfig.name,
-    title: `${siteConfig.name} — Software for problems worth solving.`,
+    title: defaultTitle,
     description: siteConfig.description,
   },
   twitter: {
     card: "summary_large_image",
-    title: `${siteConfig.name} — Software for problems worth solving.`,
+    title: defaultTitle,
     description: siteConfig.description,
   },
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
+
+// Only factual, verifiable fields — nothing invented (no address, founders, socials, etc).
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: siteConfig.name,
+  url: siteConfig.url,
+  description: siteConfig.description,
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
@@ -48,8 +66,14 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(organizationJsonLd),
+          }}
+        />
         <ThemeProvider>
-          <Navbar links={settings.nav} />
+          <Navbar links={settings.nav} calendlyUrl={settings.calendlyUrl} />
           <main className="flex flex-1 flex-col">{children}</main>
           <Footer settings={settings} />
         </ThemeProvider>

@@ -18,25 +18,33 @@ const icons: Record<TechnologyIcon, typeof Cloud> = {
 
 export function TechnologySection({
   categories,
+  title = "Technology",
 }: {
   categories: TechnologyCategory[];
+  title?: string;
 }) {
   return (
-    <section className="border-foreground/5 border-t">
-      <Container className="px-0 lg:px-0">
-        <div className="bg-foreground/5 grid grid-cols-1 gap-px overflow-hidden sm:grid-cols-2 lg:grid-cols-5">
-          {categories.map((category) => {
+    <section className="border-foreground/5 border-t py-20 sm:py-24">
+      <Container>
+        <h2 className="text-muted-foreground mb-10 text-xs font-medium tracking-widest uppercase">
+          {title}
+        </h2>
+        <div className="divide-foreground/10 flex flex-col divide-y sm:flex-row sm:divide-x sm:divide-y-0">
+          {categories.map((category, index) => {
             const Icon = icons[category.icon];
             return (
               <div
                 key={category.label}
-                className="bg-background flex flex-col gap-3 p-8"
+                className="flex flex-1 flex-col gap-2 py-6 first:pt-0 sm:px-6 sm:py-0 sm:first:pl-0 sm:last:pr-0"
               >
-                <Icon size={18} className="text-muted-foreground" />
+                <div className="text-muted-foreground flex items-center gap-2">
+                  <Icon size={14} />
+                  <span className="font-mono text-xs">0{index + 1}</span>
+                </div>
                 <h3 className="text-foreground text-sm font-medium">
                   {category.label}
                 </h3>
-                <p className="text-muted-foreground text-sm">
+                <p className="text-muted-foreground text-xs leading-relaxed">
                   {category.description}
                 </p>
               </div>

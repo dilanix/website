@@ -19,7 +19,13 @@ export async function generateMetadata({
 }: PageProps<"/products/[slug]">): Promise<Metadata> {
   const { slug } = await params;
   const product = await getProductBySlug(slug);
-  return { title: product?.name ?? "Product" };
+  if (!product) return { title: "Product" };
+
+  return {
+    title: product.shortName ?? product.name,
+    description: product.description,
+    alternates: { canonical: `/products/${product.slug}` },
+  };
 }
 
 export default async function ProductPage({
@@ -50,6 +56,7 @@ export default async function ProductPage({
             product={product}
             snapshot={snapshot}
             showCta={false}
+            headingLevel="h1"
           />
         </div>
       </Container>

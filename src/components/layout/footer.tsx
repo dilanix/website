@@ -9,7 +9,7 @@ const columns = [
       { label: "About", href: "/company" },
       { label: "Contact", href: "/contact" },
       { label: "Blog", href: "/blog" },
-      { label: "Careers", href: "#" },
+      { label: "Careers", href: "/careers" },
     ],
   },
   {
@@ -19,16 +19,16 @@ const columns = [
   {
     title: "Resources",
     links: [
-      { label: "Security", href: "#" },
-      { label: "Status", href: "#" },
-      { label: "Documentation", href: "#" },
+      { label: "Security", href: "/security" },
+      { label: "Status", href: "/status" },
+      { label: "Documentation", href: "/docs" },
     ],
   },
   {
     title: "Legal",
     links: [
-      { label: "Privacy", href: "#" },
-      { label: "Terms", href: "#" },
+      { label: "Privacy", href: "/privacy" },
+      { label: "Terms", href: "/terms" },
     ],
   },
 ];
@@ -44,30 +44,32 @@ export function Footer({ settings }: { settings: SiteSettings }) {
           <p className="text-muted-foreground max-w-xs text-sm">
             {settings.description}
           </p>
-          <div className="mt-2 flex items-center gap-4">
-            {settings.social.linkedin ? (
-              <a
-                href={settings.social.linkedin}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Dilanix on LinkedIn"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <LinkedinIcon className="h-5 w-5" />
-              </a>
-            ) : null}
-            {settings.social.github ? (
-              <a
-                href={settings.social.github}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Dilanix on GitHub"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <GithubIcon className="h-5 w-5" />
-              </a>
-            ) : null}
-          </div>
+          {settings.social.linkedin || settings.social.github ? (
+            <div className="mt-2 flex items-center gap-4">
+              {settings.social.linkedin ? (
+                <a
+                  href={settings.social.linkedin}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Dilanix on LinkedIn"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <LinkedinIcon className="h-5 w-5" />
+                </a>
+              ) : null}
+              {settings.social.github ? (
+                <a
+                  href={settings.social.github}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Dilanix on GitHub"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <GithubIcon className="h-5 w-5" />
+                </a>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         {columns.map((column) => (

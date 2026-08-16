@@ -9,6 +9,9 @@ import { EcosystemSection } from "@/components/sections/ecosystem-section";
 
 export const metadata: Metadata = {
   title: "Products",
+  description:
+    "The Dilanix product ecosystem, starting with CostOps — our cloud and AI cost intelligence platform.",
+  alternates: { canonical: "/products" },
 };
 
 export default async function ProductsPage() {
@@ -40,6 +43,7 @@ export default async function ProductsPage() {
             <FeaturedProductCard
               product={featuredProduct}
               snapshot={snapshot}
+              headingLevel="h2"
             />
           </div>
         </Container>

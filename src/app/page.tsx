@@ -5,6 +5,7 @@ import {
 import { getPhilosophyPrinciples } from "@/lib/data/philosophy";
 import { getTechnologyCategories } from "@/lib/data/technology";
 import { getCompanyPage } from "@/lib/data/company";
+import { getSiteSettings } from "@/lib/data/site";
 import { HeroSection } from "@/components/sections/hero-section";
 import { ProductsSection } from "@/components/sections/products-section";
 import { EcosystemSection } from "@/components/sections/ecosystem-section";
@@ -19,12 +20,14 @@ export default async function Home() {
     throw new Error("Expected a featured product to be configured.");
   }
 
-  const [snapshot, principles, categories, company] = await Promise.all([
-    getProductDashboardSnapshot(featuredProduct.slug),
-    getPhilosophyPrinciples(),
-    getTechnologyCategories(),
-    getCompanyPage(),
-  ]);
+  const [snapshot, principles, categories, company, settings] =
+    await Promise.all([
+      getProductDashboardSnapshot(featuredProduct.slug),
+      getPhilosophyPrinciples(),
+      getTechnologyCategories(),
+      getCompanyPage(),
+      getSiteSettings(),
+    ]);
 
   if (!snapshot) {
     throw new Error(
@@ -34,7 +37,7 @@ export default async function Home() {
 
   return (
     <>
-      <HeroSection />
+      <HeroSection calendlyUrl={settings.calendlyUrl} />
       <ProductsSection product={featuredProduct} snapshot={snapshot} />
       <EcosystemSection product={featuredProduct} />
       <PhilosophySection principles={principles} />

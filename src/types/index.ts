@@ -15,7 +15,10 @@ export interface ProductCapability {
 
 export interface Product {
   slug: string;
+  /** Full brand name, e.g. "Dilanix CostOps" — used where the Dilanix relationship should read clearly. */
   name: string;
+  /** Compact name for dense UI, e.g. "CostOps". Falls back to `name` if omitted. */
+  shortName?: string;
   /** Short marker shown above the name, e.g. "FEATURED PRODUCT". */
   eyebrow?: string;
   /** One-line promise shown as the card's headline. */
@@ -76,6 +79,7 @@ export interface BlogPost {
   title: string;
   excerpt: string;
   publishedAt: string;
+  status: "draft" | "published";
 }
 
 export interface CompanyPage {
@@ -96,6 +100,7 @@ export interface SiteSettings {
   description: string;
   url: string;
   email: string;
+  calendlyUrl: string;
   social: SiteSocialLinks;
   nav: NavLink[];
 }

@@ -2,7 +2,7 @@ import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
 import { HeroBackground } from "@/components/sections/hero-background";
 
-export function HeroSection() {
+export function HeroSection({ calendlyUrl }: { calendlyUrl: string }) {
   return (
     <section className="relative">
       <HeroBackground />
@@ -11,13 +11,18 @@ export function HeroSection() {
           Software for problems worth solving.
         </h1>
         <p className="text-muted-foreground max-w-lg text-lg text-balance">
-          Dilanix builds intelligent software for engineering teams and modern
-          businesses — combining AI, infrastructure, automation, and thoughtful
-          product design.
+          Dilanix builds software for engineering teams and modern businesses —
+          combining AI, cloud infrastructure, automation, and thoughtful product
+          design.
         </p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <Button href="/products" variant="primary">
-            Explore products
+          <Button
+            href={calendlyUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="primary"
+          >
+            Book a demo
           </Button>
           <Button href="/company" variant="secondary">
             About Dilanix

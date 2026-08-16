@@ -48,7 +48,10 @@ export function EcosystemSection({ product }: { product: Product }) {
                     In development
                   </span>
                 </div>
-                <div className="border-foreground/15 h-9 w-9 rounded-md border border-dashed" />
+                {/* Abstract slot index — a placeholder for a future product, not a name. */}
+                <span className="text-muted-foreground/30 font-mono text-3xl">
+                  0{index + 2}
+                </span>
               </div>
             </Reveal>
           ))}

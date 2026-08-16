@@ -8,7 +8,7 @@ export const siteConfig = {
   domain: "dilanix.org",
   url: "https://dilanix.org",
   description:
-    "Dilanix builds intelligent software for engineering teams and modern businesses — combining AI, infrastructure, automation, and thoughtful product design.",
+    "Dilanix builds software products across AI, cloud infrastructure, automation, data, and engineering productivity.",
 } as const;
 
 export type SiteConfig = typeof siteConfig;

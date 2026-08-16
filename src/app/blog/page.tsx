@@ -4,6 +4,8 @@ import { Container } from "@/components/ui/container";
 
 export const metadata: Metadata = {
   title: "Blog",
+  description: "Engineering notes and updates from Dilanix.",
+  alternates: { canonical: "/blog" },
 };
 
 export default async function BlogPage() {
@@ -24,7 +26,8 @@ export default async function BlogPage() {
         {posts.length === 0 ? (
           <div className="border-foreground/10 mt-16 rounded-xl border border-dashed p-12 text-center">
             <p className="text-muted-foreground text-sm">
-              No posts yet. Check back soon.
+              Ideas, engineering notes, and updates from Dilanix will appear
+              here.
             </p>
           </div>
         ) : (

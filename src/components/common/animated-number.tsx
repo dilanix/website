@@ -46,12 +46,20 @@ export function AnimatedNumber({
   }, [inView, reducedMotion, value]);
 
   const shown = reducedMotion && inView ? value : display;
+  const formatted = `${prefix}${value.toLocaleString("en-US")}${suffix}`;
 
   return (
     <span ref={ref} className={className}>
-      {prefix}
-      {shown.toLocaleString("en-US")}
-      {suffix}
+      {/* Decorative count-up, hidden from the accessibility tree so it never
+          reads as "$0" or an intermediate value to assistive tech. */}
+      <span aria-hidden="true">
+        {prefix}
+        {shown.toLocaleString("en-US")}
+        {suffix}
+      </span>
+      {/* The real, final value — present in server-rendered markup and read
+          by screen readers, independent of whether the animation has run. */}
+      <span className="sr-only">{formatted}</span>
     </span>
   );
 }

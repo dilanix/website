@@ -4,6 +4,8 @@ import { SignInForm } from "@/components/auth/sign-in-form";
 
 export const metadata: Metadata = {
   title: "Sign in",
+  alternates: { canonical: "/sign-in" },
+  robots: { index: false, follow: true },
 };
 
 export default function SignInPage() {
@@ -23,7 +25,7 @@ export default function SignInPage() {
 
         <p className="text-muted-foreground mt-8 text-sm">
           Don&apos;t have access yet?{" "}
-          <a href="#" className="text-foreground hover:text-accent">
+          <a href="/contact" className="text-foreground hover:text-accent">
             Contact us
           </a>
         </p>

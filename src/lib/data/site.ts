@@ -7,10 +7,10 @@ const settings: SiteSettings = {
   description: siteConfig.description,
   url: siteConfig.url,
   email: "hello@dilanix.org",
-  social: {
-    linkedin: "https://www.linkedin.com/company/dilanix",
-    github: "https://github.com/dilanix",
-  },
+  calendlyUrl: "https://calendly.com/koxlikyan1995/15min",
+  // No verified LinkedIn/GitHub URLs exist yet — add them here once real
+  // profiles are live rather than inventing placeholders.
+  social: {},
   nav: [
     { label: "Products", href: "/products" },
     { label: "Company", href: "/company" },

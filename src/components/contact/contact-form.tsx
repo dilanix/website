@@ -43,6 +43,24 @@ export function ContactForm({ email }: { email: SiteSettings["email"] }) {
         required
         disabled={status === "submitting"}
       />
+      <TextField
+        id="company"
+        name="company"
+        type="text"
+        label="Company"
+        autoComplete="organization"
+        placeholder="Acme Inc."
+        disabled={status === "submitting"}
+      />
+      <TextField
+        id="subject"
+        name="subject"
+        type="text"
+        label="Subject"
+        placeholder="What's this about?"
+        required
+        disabled={status === "submitting"}
+      />
       <TextareaField
         id="message"
         name="message"

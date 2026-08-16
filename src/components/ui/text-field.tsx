@@ -25,7 +25,7 @@ export function TextField({
       <input
         id={id}
         className={cn(
-          "border-foreground/15 text-foreground placeholder:text-muted-foreground/50 focus:border-accent w-full rounded-lg border bg-transparent px-4 py-3 text-sm transition-colors outline-none disabled:opacity-50",
+          "border-foreground/15 text-foreground placeholder:text-muted-foreground/50 focus-visible:border-accent focus-visible:ring-accent/30 w-full rounded-lg border bg-transparent px-4 py-3 text-sm transition-colors outline-none focus-visible:ring-2 disabled:opacity-50",
           className,
         )}
         {...props}

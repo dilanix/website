@@ -3,7 +3,8 @@ import type { Product, ProductDashboardSnapshot } from "@/types";
 const products: Product[] = [
   {
     slug: "costops",
-    name: "CostOps",
+    name: "Dilanix CostOps",
+    shortName: "CostOps",
     eyebrow: "Featured product",
     headline: "Understand what your cloud and AI infrastructure really costs.",
     description:
