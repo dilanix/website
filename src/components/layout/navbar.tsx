@@ -23,6 +23,7 @@ export function Navbar({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
   const [scrolled, setScrolled] = useState(
     () => typeof window !== "undefined" && window.scrollY > 8,
   );
@@ -32,6 +33,24 @@ export function Navbar({
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // The session cookie is httpOnly, so it can't be read from client JS —
+  // ask the server instead. Re-checked on every navigation so sign-in /
+  // sign-out are reflected without a full page reload.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/session", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : { authenticated: false }))
+      .then((data: { authenticated?: boolean }) => {
+        if (!cancelled) setAuthenticated(Boolean(data.authenticated));
+      })
+      .catch(() => {
+        if (!cancelled) setAuthenticated(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   useEffect(() => {
     if (!open) return;
@@ -87,20 +106,31 @@ export function Navbar({
         </nav>
 
         <div className="hidden items-center gap-4 md:flex">
-          <Link
-            href="/sign-in"
-            className="text-muted-foreground hover:text-foreground text-sm transition-colors"
-          >
-            Sign in
-          </Link>
-          <Button
-            href={calendlyUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-4 py-2 text-sm"
-          >
-            Book a demo
-          </Button>
+          {authenticated ? (
+            <Link
+              href="/dashboard"
+              className="text-muted-foreground hover:text-foreground text-sm transition-colors"
+            >
+              Dashboard
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/sign-in"
+                className="text-muted-foreground hover:text-foreground text-sm transition-colors"
+              >
+                Sign in
+              </Link>
+              <Button
+                href={calendlyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 text-sm"
+              >
+                Book a demo
+              </Button>
+            </>
+          )}
           <ThemeToggle />
         </div>
 
@@ -145,22 +175,34 @@ export function Navbar({
             })}
 
             <div className="border-foreground/10 mt-3 flex flex-col gap-3 border-t pt-4">
-              <Link
-                href="/sign-in"
-                onClick={() => setOpen(false)}
-                className="text-muted-foreground hover:text-foreground px-3 text-sm transition-colors"
-              >
-                Sign in
-              </Link>
-              <Button
-                href={calendlyUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setOpen(false)}
-                className="justify-center"
-              >
-                Book a demo
-              </Button>
+              {authenticated ? (
+                <Link
+                  href="/dashboard"
+                  onClick={() => setOpen(false)}
+                  className="text-muted-foreground hover:text-foreground px-3 text-sm transition-colors"
+                >
+                  Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/sign-in"
+                    onClick={() => setOpen(false)}
+                    className="text-muted-foreground hover:text-foreground px-3 text-sm transition-colors"
+                  >
+                    Sign in
+                  </Link>
+                  <Button
+                    href={calendlyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setOpen(false)}
+                    className="justify-center"
+                  >
+                    Book a demo
+                  </Button>
+                </>
+              )}
             </div>
           </Container>
         </div>

@@ -8,7 +8,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: true },
 };
 
-export default function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: PageProps<"/sign-in">) {
+  const { "password-changed": passwordChanged } = await searchParams;
+
   return (
     <section className="flex flex-1 items-center py-20">
       <Container className="max-w-xl">
@@ -18,6 +22,12 @@ export default function SignInPage() {
             Sign in to your Dilanix account.
           </p>
         </div>
+
+        {passwordChanged ? (
+          <p className="text-success mt-6 text-sm">
+            Password updated — sign in with your new password.
+          </p>
+        ) : null}
 
         <div className="mt-10">
           <SignInForm />

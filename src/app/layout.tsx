@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { siteConfig } from "@/config/site";
 import { getSiteSettings } from "@/lib/data/site";
-import { Navbar } from "@/components/layout/navbar";
-import { Footer } from "@/components/layout/footer";
+import { SiteChrome } from "@/components/layout/site-chrome";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -73,9 +72,13 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           }}
         />
         <ThemeProvider>
-          <Navbar links={settings.nav} calendlyUrl={settings.calendlyUrl} />
-          <main className="flex flex-1 flex-col">{children}</main>
-          <Footer settings={settings} />
+          <SiteChrome
+            links={settings.nav}
+            calendlyUrl={settings.calendlyUrl}
+            settings={settings}
+          >
+            {children}
+          </SiteChrome>
         </ThemeProvider>
       </body>
     </html>

@@ -29,6 +29,13 @@ export interface Product {
   capabilities: ProductCapability[];
   ctaLabel: string;
   ctaHref: string;
+  /**
+   * Base URL of this product's own backend microservice — each product is a
+   * fully separate service, not a path on the shared `api.dilanix.org`.
+   * Undefined until that product's backend exists, in which case its
+   * dashboard falls back to mock data instead of failing.
+   */
+  apiBaseUrl?: string;
 }
 
 export interface CostBreakdownItem {
@@ -55,6 +62,43 @@ export interface ProductDashboardSnapshot {
   spendTrend: number[];
   breakdown: CostBreakdownItem[];
   recommendation: DashboardRecommendation;
+}
+
+export interface DashboardOverview {
+  monthlySpendUsd: number;
+  potentialSavingsUsd: number;
+  /** 0–100. */
+  optimizationScore: number;
+  activeAlerts: number;
+  /** Trailing daily spend, oldest first — drives the sparkline. */
+  spendTrend: number[];
+  breakdown: CostBreakdownItem[];
+  recommendations: DashboardRecommendation[];
+  activity: { id: string; message: string; timestamp: string }[];
+}
+
+export interface UsageRow {
+  id: string;
+  service: string;
+  provider: string;
+  monthlySpendUsd: number;
+  /** Percent change vs. the prior period — positive means spend went up. */
+  trendPct: number;
+}
+
+export interface Invoice {
+  id: string;
+  date: string;
+  amountUsd: number;
+  status: "paid" | "pending" | "failed";
+}
+
+export interface BillingPlan {
+  name: string;
+  priceUsd: number;
+  interval: "month" | "year";
+  renewsOn: string;
+  seats: number;
 }
 
 export type PhilosophyIcon = "target" | "wrench" | "sparkles" | "gauge";

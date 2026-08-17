@@ -1,3 +1,4 @@
+import { env } from "@/env";
 import type { Product, ProductDashboardSnapshot } from "@/types";
 
 const products: Product[] = [
@@ -21,6 +22,9 @@ const products: Product[] = [
     ],
     ctaLabel: "Explore CostOps",
     ctaHref: "/products/costops",
+    // Unset until CostOps' own microservice ships — its dashboard uses mock
+    // data from `src/lib/data/dashboard.ts` until then.
+    apiBaseUrl: env.NEXT_PUBLIC_COSTOPS_API_URL,
   },
 ];
 

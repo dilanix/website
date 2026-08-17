@@ -1,26 +1,21 @@
 "use client";
 
-import { useState, type SubmitEvent } from "react";
+import { useActionState } from "react";
 import { TextField } from "@/components/ui/text-field";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { signInAction, type SignInState } from "@/app/sign-in/actions";
 
-type Status = "idle" | "submitting" | "unavailable";
+const initialState: SignInState = {};
 
 export function SignInForm() {
-  const [status, setStatus] = useState<Status>("idle");
-
-  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setStatus("submitting");
-
-    // TODO: replace with `fetch(`${env.NEXT_PUBLIC_API_URL}/auth/sign-in`, { method: "POST", ... })` once the backend ships.
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    setStatus("unavailable");
-  }
+  const [state, formAction, isPending] = useActionState(
+    signInAction,
+    initialState,
+  );
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+    <form action={formAction} className="flex flex-col gap-6">
       <TextField
         id="email"
         name="email"
@@ -29,7 +24,7 @@ export function SignInForm() {
         autoComplete="email"
         placeholder="you@company.com"
         required
-        disabled={status === "submitting"}
+        disabled={isPending}
       />
       <TextField
         id="password"
@@ -39,7 +34,7 @@ export function SignInForm() {
         autoComplete="current-password"
         placeholder="••••••••"
         required
-        disabled={status === "submitting"}
+        disabled={isPending}
         labelAction={
           <a
             href="#"
@@ -50,22 +45,31 @@ export function SignInForm() {
         }
       />
 
+      <label className="text-muted-foreground flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          name="remember_me"
+          value="1"
+          disabled={isPending}
+          className="border-foreground/25 accent-accent h-4 w-4 rounded"
+        />
+        Remember me
+      </label>
+
       <button
         type="submit"
-        disabled={status === "submitting"}
+        disabled={isPending}
         className={cn(buttonVariants("primary"), "mt-1 self-end")}
       >
-        {status === "submitting" ? "Signing in…" : "Sign in"}
+        {isPending ? "Signing in…" : "Sign in"}
       </button>
 
       <p
         role="status"
         aria-live="polite"
-        className="text-muted-foreground min-h-4 text-sm"
+        className="min-h-4 text-sm text-red-600 dark:text-red-400"
       >
-        {status === "unavailable"
-          ? "Sign-in isn't connected yet — check back soon."
-          : null}
+        {state.error}
       </p>
     </form>
   );

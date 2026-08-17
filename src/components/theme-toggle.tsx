@@ -1,13 +1,20 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
-  // `resolvedTheme` is undefined on the server and on the first client
-  // render (matching the "light" default), so this needs no mount gate.
-  const isDark = resolvedTheme === "dark";
+  // `resolvedTheme` can already be resolved (from localStorage or
+  // prefers-color-scheme) by the time this first renders on the client —
+  // e.g. after a client-side navigation — which would mismatch the
+  // server's always-light render. Gate on mount so both the server render
+  // and the client's first render agree, then swap in the real value.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const isDark = mounted && resolvedTheme === "dark";
 
   return (
     <button
