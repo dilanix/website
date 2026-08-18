@@ -6,6 +6,8 @@ import { useCostOps } from "../costops-context";
 import { formatCurrency } from "../utils";
 import { getCostDateRange, isValidCostDateRange } from "../date-ranges";
 import type { CostDatePreset, CostDateRange } from "../types";
+import { COST_RANGE_OPTIONS } from "../config";
+import { DateRangeFields, SegmentedControl } from "./filter-controls";
 export function CostsView() {
   const api = useCostOps();
   const [integrationId, setIntegrationId] = useState("");
@@ -87,49 +89,27 @@ export function CostsView() {
         <>
           <div className="border-foreground/10 rounded-xl border p-4">
             <div className="flex flex-wrap items-end gap-2">
-              {(
-                [
-                  ["last_7_days", "7D"],
-                  ["last_30_days", "30D"],
-                  ["last_90_days", "90D"],
-                  ["current_month", "This month"],
-                  ["last_month", "Last month"],
-                ] as const
-              ).map(([preset, label]) => (
-                <button
-                  key={preset}
-                  type="button"
-                  disabled={loading}
-                  onClick={() => selectPreset(preset)}
-                  className={`h-9 rounded-md border px-3 text-xs font-medium disabled:opacity-50 ${activePreset === preset ? "border-accent bg-accent/10 text-accent" : "border-foreground/10 hover:border-accent/50"}`}
-                >
-                  {label}
-                </button>
-              ))}
-              <label className="text-muted-foreground ml-auto text-[11px]">
-                From
-                <input
-                  type="date"
-                  value={range.startDate}
-                  onChange={(event) => {
+              <SegmentedControl
+                label="Cost table range"
+                value={activePreset}
+                options={COST_RANGE_OPTIONS}
+                disabled={loading}
+                onChange={selectPreset}
+              />
+              <div className="ml-auto flex items-end gap-2">
+                <DateRangeFields
+                  startDate={range.startDate}
+                  endDate={range.endDate}
+                  onStartDateChange={(startDate) => {
                     setActivePreset("custom");
-                    setRange({ ...range, startDate: event.target.value });
+                    setRange({ ...range, startDate });
                   }}
-                  className="border-foreground/10 bg-background text-foreground mt-1 block h-9 rounded-md border px-2 text-xs"
-                />
-              </label>
-              <label className="text-muted-foreground text-[11px]">
-                To
-                <input
-                  type="date"
-                  value={range.endDate}
-                  onChange={(event) => {
+                  onEndDateChange={(endDate) => {
                     setActivePreset("custom");
-                    setRange({ ...range, endDate: event.target.value });
+                    setRange({ ...range, endDate });
                   }}
-                  className="border-foreground/10 bg-background text-foreground mt-1 block h-9 rounded-md border px-2 text-xs"
                 />
-              </label>
+              </div>
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

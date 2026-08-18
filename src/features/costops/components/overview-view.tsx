@@ -17,20 +17,13 @@ import type {
   CostSeriesGroupBy,
   OverviewPeriod,
 } from "../types";
-
-const overviewPeriods: { value: OverviewPeriod; label: string }[] = [
-  { value: "last_7_days", label: "7D" },
-  { value: "last_30_days", label: "30D" },
-  { value: "last_90_days", label: "90D" },
-  { value: "current_month", label: "This month" },
-];
-
-const comparisonLabels: Record<OverviewPeriod, string> = {
-  current_month: "vs. last month",
-  last_7_days: "vs. previous 7 days",
-  last_30_days: "vs. previous 30 days",
-  last_90_days: "vs. previous 90 days",
-};
+import {
+  COST_GROUP_OPTIONS,
+  OVERVIEW_PERIOD_METADATA,
+  OVERVIEW_PERIOD_OPTIONS,
+  TREND_RANGE_OPTIONS,
+} from "../config";
+import { DateRangeFields, SegmentedControl } from "./filter-controls";
 
 export function OverviewView() {
   const api = useCostOps();
@@ -234,22 +227,13 @@ export function OverviewView() {
       <Section
         title="Spend summary"
         action={
-          <div
-            className="border-foreground/10 bg-foreground/[0.02] inline-flex rounded-lg border p-1"
-            aria-label="Overview period"
-          >
-            {overviewPeriods.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                disabled={overviewLoading}
-                onClick={() => selectOverviewPeriod(option.value)}
-                className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${overviewPeriod === option.value ? "bg-card-strong text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            label="Overview period"
+            value={overviewPeriod}
+            options={OVERVIEW_PERIOD_OPTIONS}
+            disabled={overviewLoading}
+            onChange={selectOverviewPeriod}
+          />
         }
       >
         <dl
@@ -258,18 +242,12 @@ export function OverviewView() {
           <Metric
             label="Total spend"
             value={formatCurrency(data.currentTotal)}
-            detail={
-              overviewPeriod === "current_month"
-                ? "Current month"
-                : overviewPeriods.find(
-                    (option) => option.value === overviewPeriod,
-                  )?.label
-            }
+            detail={OVERVIEW_PERIOD_METADATA[overviewPeriod].currentLabel}
           />
           <Metric
             label="Previous period"
             value={formatCurrency(data.previousTotal)}
-            detail={comparisonLabels[overviewPeriod]}
+            detail={OVERVIEW_PERIOD_METADATA[overviewPeriod].comparisonLabel}
           />
           <Metric
             label="Change"
@@ -287,22 +265,16 @@ export function OverviewView() {
       <Section
         title="Spend over time"
         action={
-          <div className="border-foreground/10 bg-foreground/[0.02] inline-flex rounded-lg border p-1">
-            {(["day", "week", "month"] as CostSeriesGroupBy[]).map((option) => (
-              <button
-                key={option}
-                type="button"
-                disabled={seriesLoading}
-                onClick={() => {
-                  setGroupBy(option);
-                  void loadSeries(range, option);
-                }}
-                className={`rounded-md px-2.5 py-1.5 text-xs font-medium capitalize disabled:opacity-50 ${groupBy === option ? "bg-card-strong text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            label="Cost trend grouping"
+            value={groupBy}
+            options={COST_GROUP_OPTIONS}
+            disabled={seriesLoading}
+            onChange={(value) => {
+              setGroupBy(value);
+              void loadSeries(range, value);
+            }}
+          />
         }
       >
         <div className="border-foreground/10 rounded-xl border p-5">
@@ -312,38 +284,24 @@ export function OverviewView() {
                 Range
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {(
-                  [
-                    ["last_7_days", "7D"],
-                    ["last_30_days", "30D"],
-                    ["last_90_days", "90D"],
-                  ] as const
-                ).map(([preset, label]) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    disabled={seriesLoading}
-                    onClick={() => selectTrendPreset(preset)}
-                    className={`rounded-md border px-2.5 py-1.5 text-xs disabled:opacity-50 ${trendPreset === preset ? "border-accent bg-accent/10 text-accent" : "border-foreground/10 hover:border-accent/50"}`}
-                  >
-                    {label}
-                  </button>
-                ))}
+                <SegmentedControl
+                  label="Cost trend range"
+                  value={trendPreset}
+                  options={TREND_RANGE_OPTIONS}
+                  disabled={seriesLoading}
+                  onChange={selectTrendPreset}
+                />
               </div>
             </div>
             <div className="flex flex-wrap items-end gap-2">
-              <DateInput
-                label="From"
-                value={range.startDate}
-                onChange={(startDate) => {
+              <DateRangeFields
+                startDate={range.startDate}
+                endDate={range.endDate}
+                onStartDateChange={(startDate) => {
                   setTrendPreset("custom");
                   setRange({ ...range, startDate });
                 }}
-              />
-              <DateInput
-                label="To"
-                value={range.endDate}
-                onChange={(endDate) => {
+                onEndDateChange={(endDate) => {
                   setTrendPreset("custom");
                   setRange({ ...range, endDate });
                 }}
@@ -404,28 +362,5 @@ export function OverviewView() {
         </Section>
       ) : null}
     </div>
-  );
-}
-
-function DateInput({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange(value: string): void;
-}) {
-  return (
-    <label className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-      <span className="mb-1.5 block">{label}</span>
-      <input
-        type="date"
-        aria-label={label}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="border-foreground/10 bg-background text-foreground block h-9 rounded-md border px-2 text-xs font-normal tracking-normal normal-case"
-      />
-    </label>
   );
 }
