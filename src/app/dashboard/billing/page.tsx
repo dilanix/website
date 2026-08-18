@@ -1,108 +1,96 @@
 import type { Metadata } from "next";
-import { getBillingPlan, getInvoices } from "@/lib/data/dashboard";
-import { Badge } from "@/components/ui/badge";
-
+import { CreditCard } from "lucide-react";
+import { getBilling } from "@/lib/data/dashboard-mocks";
+import {
+  Metric,
+  PageHeader,
+  Section,
+  StatusBadge,
+} from "@/components/dashboard/primitives";
 export const metadata: Metadata = {
   title: "Billing",
   robots: { index: false, follow: false },
 };
-
-const statusTone = {
-  paid: "success",
-  pending: "accent",
-  failed: "neutral",
-} as const;
-
 export default async function BillingPage() {
-  const [plan, invoices] = await Promise.all([getBillingPlan(), getInvoices()]);
-
+  const billing = await getBilling();
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Plan, payment method, and invoice history.
-        </p>
-      </div>
-
-      <div className="border-foreground/10 rounded-xl border p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="flex flex-col gap-9">
+      <PageHeader
+        title="Billing"
+        description="Manage your Dilanix plan, usage, and billing history."
+      />
+      <Section title="Current plan">
+        <div className="border-foreground/10 grid gap-6 rounded-xl border p-5 sm:grid-cols-[1fr_auto]">
           <div>
-            <p className="text-muted-foreground text-xs">Current plan</p>
-            <p className="text-foreground mt-1 text-xl font-semibold">
-              {plan.name} — ${plan.priceUsd}/{plan.interval}
-            </p>
-            <p className="text-muted-foreground mt-1 text-sm">
-              {plan.seats} seats · renews{" "}
-              {new Date(plan.renewsOn).toLocaleDateString("en-US", {
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              })}
+            <p className="text-xl font-semibold">{billing.plan.name}</p>
+            <p className="text-muted-foreground mt-1 font-mono text-sm">
+              {billing.plan.price}
             </p>
           </div>
-          <Badge tone="neutral">Plan management isn&apos;t connected yet</Badge>
+          <div className="sm:text-right">
+            <StatusBadge status="success">{billing.plan.status}</StatusBadge>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Next billing date · {billing.plan.nextDate}
+            </p>
+          </div>
         </div>
-      </div>
-
-      <div className="border-foreground/10 rounded-xl border p-5">
-        <p className="text-muted-foreground text-xs">Payment method</p>
-        <p className="text-foreground mt-1 text-sm">Visa •••• 4242</p>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Updating payment details isn&apos;t connected yet.
-        </p>
-      </div>
-
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight">Invoices</h2>
-        <div className="border-foreground/10 mt-4 overflow-x-auto rounded-xl border">
-          <table className="w-full min-w-[420px] text-left text-sm">
+      </Section>
+      <Section title="Usage this month">
+        <dl className="grid grid-cols-1 gap-y-5 sm:grid-cols-3">
+          {billing.usage.map((item) => (
+            <Metric key={item.label} label={item.label} value={item.value} />
+          ))}
+        </dl>
+      </Section>
+      <Section title="Payment method">
+        <div className="border-foreground/10 flex items-center gap-4 rounded-xl border p-5">
+          <span className="bg-foreground/5 flex h-10 w-10 items-center justify-center rounded-lg">
+            <CreditCard size={18} />
+          </span>
+          <div>
+            <p className="text-sm font-medium">{billing.payment.name}</p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              {billing.payment.expiry}
+            </p>
+          </div>
+        </div>
+      </Section>
+      <Section title="Invoices">
+        <div className="border-foreground/10 overflow-x-auto rounded-xl border">
+          <table className="w-full min-w-[500px] text-sm">
             <thead>
               <tr className="border-foreground/10 border-b">
-                <th className="text-muted-foreground px-4 py-3 font-medium">
-                  Invoice
-                </th>
-                <th className="text-muted-foreground px-4 py-3 font-medium">
-                  Date
-                </th>
-                <th className="text-muted-foreground px-4 py-3 text-right font-medium">
-                  Amount
-                </th>
-                <th className="text-muted-foreground px-4 py-3 text-right font-medium">
-                  Status
-                </th>
+                {["Invoice", "Date", "Amount", "Status"].map((h) => (
+                  <th
+                    key={h}
+                    scope="col"
+                    className="text-muted-foreground px-4 py-3 text-left font-medium"
+                  >
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {invoices.map((invoice) => (
+              {billing.invoices.map((invoice) => (
                 <tr
                   key={invoice.id}
-                  className="border-foreground/5 border-b last:border-0"
+                  className="border-foreground/7 border-b last:border-0"
                 >
-                  <td className="text-foreground px-4 py-3 font-mono text-xs">
-                    {invoice.id}
-                  </td>
+                  <td className="px-4 py-3 font-mono text-xs">{invoice.id}</td>
                   <td className="text-muted-foreground px-4 py-3">
-                    {new Date(invoice.date).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {invoice.date}
                   </td>
-                  <td className="text-foreground px-4 py-3 text-right font-mono">
-                    ${invoice.amountUsd.toLocaleString("en-US")}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Badge tone={statusTone[invoice.status]}>
-                      {invoice.status}
-                    </Badge>
+                  <td className="px-4 py-3 font-mono">{invoice.amount}</td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status="success">{invoice.status}</StatusBadge>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </Section>
     </div>
   );
 }

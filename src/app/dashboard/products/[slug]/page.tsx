@@ -56,7 +56,9 @@ export default async function ProductOverviewPage({
         />
         <StatCard
           label="Optimization score"
-          value={<AnimatedNumber value={overview.optimizationScore} suffix="/100" />}
+          value={
+            <AnimatedNumber value={overview.optimizationScore} suffix="/100" />
+          }
         />
         <StatCard
           label="Active alerts"
@@ -97,7 +99,9 @@ export default async function ProductOverviewPage({
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold tracking-tight">Recommendations</h2>
+        <h2 className="text-lg font-semibold tracking-tight">
+          Recommendations
+        </h2>
         <div className="mt-4 flex flex-col gap-3">
           {overview.recommendations.map((rec) => (
             <div
@@ -138,7 +142,9 @@ export default async function ProductOverviewPage({
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold tracking-tight">Recent activity</h2>
+        <h2 className="text-lg font-semibold tracking-tight">
+          Recent activity
+        </h2>
         <ul className="border-foreground/10 mt-4 divide-y rounded-xl border">
           {overview.activity.map((entry) => (
             <li

@@ -59,7 +59,10 @@ export default async function ProductUsagePage({
             const trendUp = row.trendPct > 0;
             const trendFlat = row.trendPct === 0;
             return (
-              <tr key={row.id} className="border-foreground/5 border-b last:border-0">
+              <tr
+                key={row.id}
+                className="border-foreground/5 border-b last:border-0"
+              >
                 <td className="text-foreground px-4 py-3">{row.service}</td>
                 <td className="text-muted-foreground px-4 py-3">
                   {row.provider}

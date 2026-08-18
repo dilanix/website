@@ -14,10 +14,7 @@ export function StatCard({
 }) {
   return (
     <div
-      className={cn(
-        "border-foreground/10 rounded-xl border p-5",
-        className,
-      )}
+      className={cn("border-foreground/10 rounded-xl border p-5", className)}
     >
       <p className="text-muted-foreground text-xs">{label}</p>
       <p

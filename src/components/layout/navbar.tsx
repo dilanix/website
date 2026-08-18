@@ -24,12 +24,13 @@ export function Navbar({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
-  const [scrolled, setScrolled] = useState(
-    () => typeof window !== "undefined" && window.scrollY > 8,
-  );
+  // Keep the server render and the client's first render identical. The
+  // actual scroll position is synchronized immediately after hydration.
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);

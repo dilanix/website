@@ -5,26 +5,28 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutGrid,
+  KeyRound,
   CreditCard,
   Settings,
   LogOut,
   Menu,
   X,
+  Boxes,
+  ChevronsUpDown,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { signOutAction } from "@/app/dashboard/actions";
+import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
 
 const navItems = [
-  { label: "Products", href: "/dashboard", icon: LayoutGrid },
+  { label: "Products", href: "/dashboard/products", icon: LayoutGrid },
+  { label: "API Keys", href: "/dashboard/api-keys", icon: KeyRound },
   { label: "Billing", href: "/dashboard/billing", icon: CreditCard },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
 ] as const;
 
 function isActiveItem(pathname: string, href: string) {
-  if (href === "/dashboard") {
-    return pathname === "/dashboard" || pathname.startsWith("/dashboard/products");
-  }
   return pathname.startsWith(href);
 }
 
@@ -34,16 +36,20 @@ function initials(firstName: string, lastName: string) {
 
 export function DashboardShell({
   user,
+  organization,
+  products,
   children,
 }: {
   user: { firstName: string; lastName: string; email: string };
+  organization: { id: string; name: string } | null;
+  products: DashboardProduct[];
   children: ReactNode;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
   const nav = (
-    <nav className="flex flex-col gap-1">
+    <nav aria-label="Dashboard navigation" className="flex flex-col gap-1">
       {navItems.map((item) => {
         const active = isActiveItem(pathname, item.href);
         const Icon = item.icon;
@@ -65,19 +71,66 @@ export function DashboardShell({
           </Link>
         );
       })}
+      <div className="border-foreground/10 my-4 border-t" />
+      {products
+        .filter((product) => product.status === "active")
+        .map((product) => (
+          <div key={product.id} className="mb-3">
+            <div className="text-muted-foreground mb-1 flex items-center gap-2 px-3 text-[10px] font-semibold tracking-[0.16em] uppercase">
+              <Boxes size={12} /> {product.name}
+            </div>
+            {product.navigation.map((item) => {
+              const active =
+                item.href === `/dashboard/${product.slug}`
+                  ? pathname === item.href
+                  : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "ml-3 flex items-center rounded-lg border-l px-4 py-2 text-sm transition-colors",
+                    active
+                      ? "border-accent bg-accent/8 text-foreground"
+                      : "border-foreground/10 text-muted-foreground hover:border-foreground/25 hover:text-foreground",
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
     </nav>
   );
 
   return (
     <div className="flex flex-1">
-      <aside className="border-foreground/10 hidden w-60 shrink-0 flex-col border-r px-4 py-6 md:flex">
+      <aside className="border-foreground/10 bg-card-strong/30 hidden w-60 shrink-0 flex-col border-r px-4 py-5 md:flex">
         <Link
           href="/dashboard"
           className="text-foreground px-3 text-sm font-semibold tracking-[0.25em]"
         >
           DILANIX
         </Link>
-        <div className="mt-8">{nav}</div>
+        <button
+          type="button"
+          aria-label="Switch organization"
+          className="border-foreground/10 hover:bg-foreground/5 mt-6 flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-colors"
+        >
+          <span>
+            <span className="text-muted-foreground block text-[10px] tracking-wider uppercase">
+              Organization
+            </span>
+            <span className="mt-0.5 block truncate text-sm font-medium">
+              {organization?.name ?? "No organization"}
+            </span>
+          </span>
+          <ChevronsUpDown className="text-muted-foreground" size={14} />
+        </button>
+        <div className="mt-5">{nav}</div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">

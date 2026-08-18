@@ -1,19 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
+function subscribe() {
+  return () => {};
+}
+
+/**
+ * `false` during SSR and the client's first render, `true` right after
+ * hydration — React re-renders automatically once hydration completes, no
+ * effect-driven `setState` needed. `resolvedTheme` can already be resolved
+ * (from localStorage or prefers-color-scheme) by the time this first runs
+ * on the client — e.g. after a client-side navigation — which would
+ * otherwise mismatch the server's always-light render.
+ */
+function useHasMounted() {
+  return useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false,
+  );
+}
+
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
-  // `resolvedTheme` can already be resolved (from localStorage or
-  // prefers-color-scheme) by the time this first renders on the client —
-  // e.g. after a client-side navigation — which would mismatch the
-  // server's always-light render. Gate on mount so both the server render
-  // and the client's first render agree, then swap in the real value.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
+  const mounted = useHasMounted();
   const isDark = mounted && resolvedTheme === "dark";
 
   return (

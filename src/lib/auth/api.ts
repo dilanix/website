@@ -23,6 +23,13 @@ export interface MeResponse {
   is_verified: boolean;
   is_superuser: boolean;
   must_change_password: boolean;
+  organizations: OrganizationMembership[];
+}
+
+export interface OrganizationMembership {
+  organization_id: string;
+  organization_name: string;
+  role: string;
 }
 
 export class AuthApiError extends Error {
@@ -158,7 +165,10 @@ export async function logoutAll(accessToken: string): Promise<void> {
 
 export async function getMe(accessToken: string): Promise<MeResponse> {
   const response = await fetch(`${env.NEXT_PUBLIC_API_URL}/v1/auth/me`, {
-    headers: { Accept: "application/json", Authorization: `Bearer ${accessToken}` },
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
     cache: "no-store",
   });
 

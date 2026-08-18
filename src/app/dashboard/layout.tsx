@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getMe, AuthApiError } from "@/lib/auth/api";
 import { getAccessToken } from "@/lib/auth/session";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { listOrganizationProducts } from "@/lib/core/api";
+import { toDashboardProduct } from "@/lib/dashboard/products";
 
 export default async function DashboardLayout({
   children,
@@ -21,6 +23,16 @@ export default async function DashboardLayout({
     throw error;
   }
 
+  const organization = me.organizations[0];
+  const products = organization
+    ? (
+        await listOrganizationProducts(
+          organization.organization_id,
+          accessToken,
+        )
+      ).map(toDashboardProduct)
+    : [];
+
   return (
     <DashboardShell
       user={{
@@ -28,6 +40,15 @@ export default async function DashboardLayout({
         lastName: me.last_name,
         email: me.email,
       }}
+      organization={
+        organization
+          ? {
+              id: organization.organization_id,
+              name: organization.organization_name,
+            }
+          : null
+      }
+      products={products}
     >
       {children}
     </DashboardShell>
