@@ -114,33 +114,47 @@ export function IntegrationsView() {
           Available integrations
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {COSTOPS_PROVIDERS.map((provider) => (
-            <article
-              key={provider.id}
-              className="border-foreground/10 flex min-h-44 flex-col rounded-xl border p-5"
-            >
-              <div className="flex justify-between">
-                <span className="bg-foreground/5 flex h-9 min-w-9 items-center justify-center rounded-lg font-mono text-xs font-semibold">
-                  {provider.shortName}
-                </span>
-                {provider.status === "coming_soon" ? (
-                  <StatusBadge>Coming soon</StatusBadge>
+          {COSTOPS_PROVIDERS.map((provider) => {
+            const content = (
+              <>
+                <div className="flex justify-between">
+                  <span className="bg-foreground/5 flex h-9 min-w-9 items-center justify-center rounded-lg font-mono text-xs font-semibold">
+                    {provider.shortName}
+                  </span>
+                  {provider.status === "coming_soon" ? (
+                    <StatusBadge>Coming soon</StatusBadge>
+                  ) : null}
+                </div>
+                <h3 className="mt-4 text-sm font-medium">{provider.name}</h3>
+                <p className="text-muted-foreground mt-1 text-sm leading-5">
+                  {provider.description}
+                </p>
+                {provider.status === "available" ? (
+                  <span className="text-accent mt-auto pt-4 text-sm font-medium">
+                    Connect AWS →
+                  </span>
                 ) : null}
-              </div>
-              <h3 className="mt-4 text-sm font-medium">{provider.name}</h3>
-              <p className="text-muted-foreground mt-1 text-sm leading-5">
-                {provider.description}
-              </p>
-              {provider.status === "available" ? (
-                <button
-                  onClick={() => setWizard("new")}
-                  className="text-accent mt-auto self-start pt-4 text-sm font-medium"
-                >
-                  Connect
-                </button>
-              ) : null}
-            </article>
-          ))}
+              </>
+            );
+            return provider.status === "available" ? (
+              <button
+                type="button"
+                key={provider.id}
+                onClick={() => setWizard("new")}
+                className="border-foreground/10 hover:border-accent/50 focus-visible:outline-accent flex min-h-44 flex-col rounded-xl border p-5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+                aria-label={`Connect ${provider.name}`}
+              >
+                {content}
+              </button>
+            ) : (
+              <article
+                key={provider.id}
+                className="border-foreground/10 flex min-h-44 flex-col rounded-xl border p-5 opacity-70"
+              >
+                {content}
+              </article>
+            );
+          })}
         </div>
       </section>
       {wizard ? (
