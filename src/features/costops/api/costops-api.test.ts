@@ -10,6 +10,15 @@ describe("CostOps API mapping", () => {
 
   it("maps an empty organization without inventing financial data", async () => {
     request
+      .mockResolvedValueOnce([
+        {
+          slug: "aws",
+          name: "Amazon Web Services",
+          description: "AWS billing data",
+          logo_url: null,
+          is_available: true,
+        },
+      ])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce({
@@ -24,6 +33,15 @@ describe("CostOps API mapping", () => {
       });
     const snapshot = await getSnapshot("org-1", "token");
     expect(snapshot.integrations).toEqual([]);
+    expect(snapshot.providers).toEqual([
+      {
+        slug: "aws",
+        name: "Amazon Web Services",
+        description: "AWS billing data",
+        logoUrl: null,
+        isAvailable: true,
+      },
+    ]);
     expect(snapshot.costs).toEqual([]);
     expect(snapshot.overview.currentTotal).toEqual({
       amount: "0.000000",

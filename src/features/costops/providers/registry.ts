@@ -1,36 +1,19 @@
-import type { CostOpsProvider } from "../types";
-export type ProviderDefinition = {
-  id: string;
-  name: string;
-  shortName: string;
-  description: string;
-  status: "available" | "coming_soon";
-  provider?: CostOpsProvider;
-};
-export const COSTOPS_PROVIDERS: ProviderDefinition[] = [
-  {
-    id: "aws",
-    provider: "aws",
-    name: "Amazon Web Services",
-    shortName: "AWS",
-    description: "Analyze AWS billing and usage data with read-only access.",
-    status: "available",
-  },
-  {
-    id: "gcp",
-    name: "Google Cloud",
-    shortName: "GCP",
-    description: "Connect Google Cloud billing exports.",
-    status: "coming_soon",
-  },
-  {
-    id: "azure",
-    name: "Microsoft Azure",
-    shortName: "AZ",
-    description: "Connect Azure cost management data.",
-    status: "coming_soon",
-  },
-];
-export function getProvider(id: string) {
-  return COSTOPS_PROVIDERS.find((provider) => provider.id === id);
+import type { CostOpsProviderCatalogItem } from "../types";
+
+/** UI metadata is backend-owned; this module only supplies presentation helpers. */
+export function getProvider(
+  providers: CostOpsProviderCatalogItem[],
+  slug: string,
+) {
+  return providers.find((provider) => provider.slug === slug);
+}
+
+export function getProviderShortName(provider: CostOpsProviderCatalogItem) {
+  if (provider.slug.toLowerCase() === "aws") return "AWS";
+  return provider.name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase();
 }

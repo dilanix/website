@@ -21,6 +21,7 @@ type ContextValue = {
   snapshot: CostOpsSnapshot;
   integrations: CostOpsIntegration[];
   activeSyncs: Record<string, SyncRun>;
+  providers: CostOpsSnapshot["providers"];
   createIntegration(name: string): Promise<CostOpsIntegration>;
   loadIntegration(id: string): Promise<CostOpsIntegration>;
   verifyIntegration(id: string, roleArn: string): Promise<CostOpsIntegration>;
@@ -109,6 +110,7 @@ export function CostOpsProvider({
         organizationId,
         snapshot,
         integrations: snapshot.integrations,
+        providers: snapshot.providers,
         activeSyncs,
         createIntegration,
         loadIntegration,

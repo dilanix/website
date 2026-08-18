@@ -13,6 +13,7 @@ import {
   REMEMBER_ME_COOKIE,
   MUST_CHANGE_PASSWORD_COOKIE,
 } from "./constants";
+import { authCookieOptions } from "./cookie-options";
 
 export {
   ACCESS_TOKEN_COOKIE,
@@ -31,35 +32,35 @@ export interface SessionTokens {
   refresh_expires_in: number;
 }
 
-function cookieOptions(rememberMe: boolean, refreshExpiresIn?: number) {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    // Unchecked "remember me" = a session cookie, cleared when the browser
-    // closes. Checked = persists as long as the refresh token is valid.
-    ...(rememberMe && refreshExpiresIn ? { maxAge: refreshExpiresIn } : {}),
-  };
-}
-
 export async function createSession(
   tokens: SessionTokens,
   rememberMe: boolean,
   mustChangePassword: boolean,
 ) {
   const cookieStore = await cookies();
-  const options = cookieOptions(rememberMe, tokens.refresh_expires_in);
+  const accessOptions = authCookieOptions(rememberMe, tokens.expires_in);
+  const refreshOptions = authCookieOptions(
+    rememberMe,
+    tokens.refresh_expires_in,
+  );
   const expiresAt = Date.now() + tokens.expires_in * 1000;
 
-  cookieStore.set(ACCESS_TOKEN_COOKIE, tokens.access_token, options);
-  cookieStore.set(ACCESS_TOKEN_EXPIRES_AT_COOKIE, String(expiresAt), options);
-  cookieStore.set(REFRESH_TOKEN_COOKIE, tokens.refresh_token, options);
-  cookieStore.set(REMEMBER_ME_COOKIE, rememberMe ? "1" : "0", options);
+  cookieStore.set(ACCESS_TOKEN_COOKIE, tokens.access_token, accessOptions);
+  cookieStore.set(
+    ACCESS_TOKEN_EXPIRES_AT_COOKIE,
+    String(expiresAt),
+    accessOptions,
+  );
+  cookieStore.set(REFRESH_TOKEN_COOKIE, tokens.refresh_token, refreshOptions);
+  cookieStore.set(
+    REMEMBER_ME_COOKIE,
+    rememberMe ? "1" : "0",
+    refreshOptions,
+  );
   cookieStore.set(
     MUST_CHANGE_PASSWORD_COOKIE,
     mustChangePassword ? "1" : "0",
-    options,
+    refreshOptions,
   );
 }
 

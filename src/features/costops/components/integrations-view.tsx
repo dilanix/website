@@ -3,7 +3,10 @@ import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { PageHeader, StatusBadge } from "@/components/dashboard/primitives";
 import { useCostOps } from "../costops-context";
-import { COSTOPS_PROVIDERS, getProvider } from "../providers/registry";
+import {
+  getProvider,
+  getProviderShortName,
+} from "../providers/registry";
 import { formatDateTime, formatRelativeTime } from "../utils";
 import { AwsConnectWizard } from "../providers/aws/aws-connect-wizard";
 import type { CostOpsIntegration } from "../types";
@@ -26,7 +29,7 @@ export function IntegrationsView() {
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {api.integrations.map((item) => {
-              const provider = getProvider(item.provider);
+              const provider = getProvider(api.providers, item.provider);
               const syncing = api.activeSyncs[item.id]?.status === "running";
               return (
                 <article
@@ -35,7 +38,7 @@ export function IntegrationsView() {
                 >
                   <div className="flex justify-between gap-3">
                     <span className="bg-foreground/5 flex h-10 min-w-10 items-center justify-center rounded-lg font-mono text-xs font-semibold">
-                      {provider?.shortName}
+                      {provider ? getProviderShortName(provider) : "—"}
                     </span>
                     <StatusBadge
                       status={
@@ -114,33 +117,35 @@ export function IntegrationsView() {
           Available integrations
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {COSTOPS_PROVIDERS.map((provider) => {
+          {api.providers.map((provider) => {
             const content = (
               <>
                 <div className="flex justify-between">
                   <span className="bg-foreground/5 flex h-9 min-w-9 items-center justify-center rounded-lg font-mono text-xs font-semibold">
-                    {provider.shortName}
+                    {getProviderShortName(provider)}
                   </span>
-                  {provider.status === "coming_soon" ? (
+                  {!provider.isAvailable ? (
                     <StatusBadge>Coming soon</StatusBadge>
                   ) : null}
                 </div>
                 <h3 className="mt-4 text-sm font-medium">{provider.name}</h3>
                 <p className="text-muted-foreground mt-1 text-sm leading-5">
-                  {provider.description}
+                  {provider.description ?? "Provider integration for CostOps."}
                 </p>
-                {provider.status === "available" ? (
+                {provider.isAvailable ? (
                   <span className="text-accent mt-auto pt-4 text-sm font-medium">
-                    Connect AWS →
+                    Connect {provider.name} →
                   </span>
                 ) : null}
               </>
             );
-            return provider.status === "available" ? (
+            return provider.isAvailable ? (
               <button
                 type="button"
-                key={provider.id}
-                onClick={() => setWizard("new")}
+                key={provider.slug}
+                onClick={() => {
+                  if (provider.slug === "aws") setWizard("new");
+                }}
                 className="border-foreground/10 hover:border-accent/50 focus-visible:outline-accent flex min-h-44 flex-col rounded-xl border p-5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
                 aria-label={`Connect ${provider.name}`}
               >
@@ -148,7 +153,7 @@ export function IntegrationsView() {
               </button>
             ) : (
               <article
-                key={provider.id}
+                key={provider.slug}
                 className="border-foreground/10 flex min-h-44 flex-col rounded-xl border p-5 opacity-70"
               >
                 {content}
@@ -181,7 +186,8 @@ export function IntegrationsView() {
                     {[
                       [
                         "Provider",
-                        getProvider(item.provider)?.name ?? item.provider,
+                        getProvider(api.providers, item.provider)?.name ??
+                          item.provider,
                       ],
                       ["AWS account", item.externalAccountId ?? "Not verified"],
                       ["Role ARN", item.roleArn ?? "Not configured"],

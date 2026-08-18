@@ -3,10 +3,19 @@ import type {
   CloudAccount,
   CostOpsIntegration,
   CostOpsOverview,
+  CostOpsProviderCatalogItem,
   CostOpsSnapshot,
   CostRecord,
   SyncRun,
 } from "../types";
+
+type ProviderCatalogDto = {
+  slug: string;
+  name: string;
+  description: string | null;
+  logo_url: string | null;
+  is_available: boolean;
+};
 
 type IntegrationDto = {
   id: string;
@@ -73,6 +82,15 @@ type CostDto = {
 
 const base = (organizationId: string) =>
   `/v1/organizations/${organizationId}/costops`;
+const providerCatalogItem = (
+  dto: ProviderCatalogDto,
+): CostOpsProviderCatalogItem => ({
+  slug: dto.slug,
+  name: dto.name,
+  description: dto.description,
+  logoUrl: dto.logo_url,
+  isAvailable: dto.is_available,
+});
 const account = (dto: AccountDto): CloudAccount => ({
   id: dto.id,
   externalAccountId: dto.external_account_id,
@@ -137,6 +155,17 @@ export async function listIntegrations(organizationId: string, token: string) {
     `${base(organizationId)}/integrations`,
     token,
   );
+}
+export async function listAvailableIntegrations(
+  organizationId: string,
+  token: string,
+) {
+  return (
+    await coreRequest<ProviderCatalogDto[]>(
+      `${base(organizationId)}/available-integrations`,
+      token,
+    )
+  ).map(providerCatalogItem);
 }
 export async function getIntegration(
   organizationId: string,
@@ -295,7 +324,10 @@ export async function getSnapshot(
   organizationId: string,
   token: string,
 ): Promise<CostOpsSnapshot> {
-  const dtos = await listIntegrations(organizationId, token);
+  const [providers, dtos] = await Promise.all([
+    listAvailableIntegrations(organizationId, token),
+    listIntegrations(organizationId, token),
+  ]);
   const detailed = await Promise.all(
     dtos.map(async (dto) =>
       integration(
@@ -325,6 +357,7 @@ export async function getSnapshot(
   const costs = costDtos.map((value) => cost(value, names));
   const currency = costs[0]?.currency ?? null;
   return {
+    providers,
     integrations: detailed,
     syncRuns,
     costs,

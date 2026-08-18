@@ -2,6 +2,14 @@ export type CostOpsProvider = "aws";
 export type IntegrationStatus = "pending" | "connected" | "error" | "disabled";
 export type SyncStatus = "pending" | "running" | "succeeded" | "failed";
 
+export interface CostOpsProviderCatalogItem {
+  slug: string;
+  name: string;
+  description: string | null;
+  logoUrl: string | null;
+  isAvailable: boolean;
+}
+
 export interface CloudAccount {
   id: string;
   externalAccountId: string;
@@ -59,6 +67,7 @@ export interface CostOpsOverview {
   lastSyncedAt: string | null;
 }
 export interface CostOpsSnapshot {
+  providers: CostOpsProviderCatalogItem[];
   integrations: CostOpsIntegration[];
   overview: CostOpsOverview;
   costs: CostRecord[];
