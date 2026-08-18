@@ -18,9 +18,10 @@ export interface CloudAccount {
 }
 export interface IntegrationSetup {
   cloudformationSupported: boolean;
-  dilanixAwsAccountId: string | null;
-  principal: string | null;
-  cloudformationTemplate: string | null;
+  cloudformationUrl: string | null;
+  externalId: string | null;
+  roleName: string | null;
+  stackName: string | null;
 }
 export interface CostOpsIntegration {
   id: string;
@@ -36,7 +37,6 @@ export interface CostOpsIntegration {
   errorCode: string | null;
   errorMessage: string | null;
   accounts: CloudAccount[];
-  externalId: string | null;
   setup?: IntegrationSetup;
 }
 export interface SyncRun {

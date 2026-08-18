@@ -24,7 +24,10 @@ type ContextValue = {
   providers: CostOpsSnapshot["providers"];
   createIntegration(name: string): Promise<CostOpsIntegration>;
   loadIntegration(id: string): Promise<CostOpsIntegration>;
-  verifyIntegration(id: string, roleArn: string): Promise<CostOpsIntegration>;
+  verifyIntegration(
+    id: string,
+    awsAccountId: string,
+  ): Promise<CostOpsIntegration>;
   syncNow(id: string): Promise<void>;
   disableIntegration(id: string): Promise<void>;
   queryCosts(
@@ -35,6 +38,15 @@ type ContextValue = {
   costs: CostOpsSnapshot["costs"];
 };
 const Context = createContext<ContextValue | null>(null);
+
+export class CostOpsClientError extends Error {
+  constructor(
+    message: string,
+    public readonly status?: number,
+  ) {
+    super(message);
+  }
+}
 export function CostOpsProvider({
   organizationId,
   initialSnapshot,
@@ -67,17 +79,23 @@ export function CostOpsProvider({
   async function createIntegration(name: string) {
     const result = await createIntegrationAction(name);
     if (result.error || !result.data)
-      throw new Error(result.error ?? "Unable to create integration.");
+      throw new CostOpsClientError(
+        result.error ?? "Unable to create integration.",
+        result.status,
+      );
     setSnapshot((value) => ({
       ...value,
       integrations: [...value.integrations, result.data!],
     }));
     return result.data;
   }
-  async function verifyIntegration(id: string, roleArn: string) {
-    const result = await verifyIntegrationAction(id, roleArn);
+  async function verifyIntegration(id: string, awsAccountId: string) {
+    const result = await verifyIntegrationAction(id, awsAccountId);
     if (result.error || !result.data)
-      throw new Error(result.error ?? "Unable to verify integration.");
+      throw new CostOpsClientError(
+        result.error ?? "Unable to verify integration.",
+        result.status,
+      );
     await refresh();
     return result.data;
   }

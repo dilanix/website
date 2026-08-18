@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { coreRequest } from "@/lib/core/api";
-import { getSnapshot, queryCosts } from "./costops-api";
+import {
+  createIntegration,
+  getSnapshot,
+  queryCosts,
+  verifyIntegration,
+} from "./costops-api";
 
 vi.mock("@/lib/core/api", () => ({ coreRequest: vi.fn() }));
 const request = vi.mocked(coreRequest);
@@ -72,6 +77,71 @@ describe("CostOps API mapping", () => {
     expect(request).toHaveBeenCalledWith(
       expect.stringContaining("service_name=Amazon+EC2"),
       "token",
+    );
+  });
+
+  it("maps the one-click CloudFormation setup returned by Core", async () => {
+    request.mockResolvedValue({
+      id: "int-1",
+      provider: "aws",
+      name: "Production",
+      status: "pending",
+      external_account_id: null,
+      external_account_name: null,
+      role_arn: null,
+      last_synced_at: null,
+      last_sync_status: null,
+      last_error_code: null,
+      last_error_message: null,
+      created_at: "2026-08-18T12:00:00Z",
+      setup: {
+        cloudformation_supported: true,
+        cloudformation_url: "https://console.aws.amazon.com/cloudformation",
+        external_id: "dilanix-secret",
+        role_name: "DilanixCostOpsRole",
+        stack_name: "DilanixCostOps",
+      },
+    });
+
+    const integration = await createIntegration("org-1", "Production", "token");
+
+    expect(integration.setup).toEqual({
+      cloudformationSupported: true,
+      cloudformationUrl: "https://console.aws.amazon.com/cloudformation",
+      externalId: "dilanix-secret",
+      roleName: "DilanixCostOpsRole",
+      stackName: "DilanixCostOps",
+    });
+  });
+
+  it("verifies with only the 12-digit AWS account ID", async () => {
+    request
+      .mockResolvedValueOnce({
+        id: "int-1",
+        provider: "aws",
+        name: "Production",
+        status: "connected",
+        external_account_id: "123456789012",
+        external_account_name: null,
+        role_arn: "arn:aws:iam::123456789012:role/DilanixCostOpsRole",
+        last_synced_at: null,
+        last_sync_status: "pending",
+        last_error_code: null,
+        last_error_message: null,
+        created_at: "2026-08-18T12:00:00Z",
+      })
+      .mockResolvedValueOnce([]);
+
+    await verifyIntegration("org-1", "int-1", "123456789012", "token");
+
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      "/v1/organizations/org-1/costops/integrations/int-1/verify",
+      "token",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ aws_account_id: "123456789012" }),
+      }),
     );
   });
 });

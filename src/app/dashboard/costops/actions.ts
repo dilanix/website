@@ -3,7 +3,7 @@ import { getAccessToken } from "@/lib/auth/session";
 import { getMe } from "@/lib/auth/api";
 import { CoreApiError } from "@/lib/core/api";
 import * as api from "@/features/costops/api/costops-api";
-type Result<T> = { data?: T; error?: string };
+type Result<T> = { data?: T; error?: string; status?: number };
 async function context() {
   const token = await getAccessToken();
   if (!token) throw new Error("Your session has expired.");
@@ -23,7 +23,10 @@ async function execute<T>(
     const { token, organizationId } = await context();
     return { data: await fn(organizationId, token) };
   } catch (error) {
-    return { error: message(error) };
+    return {
+      error: message(error),
+      status: error instanceof CoreApiError ? error.status : undefined,
+    };
   }
 }
 export const refreshCostOpsAction = async () =>
@@ -36,9 +39,12 @@ export const createIntegrationAction = async (name: string) =>
   execute((organizationId, token) =>
     api.createIntegration(organizationId, name, token),
   );
-export const verifyIntegrationAction = async (id: string, roleArn: string) =>
+export const verifyIntegrationAction = async (
+  id: string,
+  awsAccountId: string,
+) =>
   execute((organizationId, token) =>
-    api.verifyIntegration(organizationId, id, roleArn, token),
+    api.verifyIntegration(organizationId, id, awsAccountId, token),
   );
 export const triggerSyncAction = async (id: string) =>
   execute((organizationId, token) =>

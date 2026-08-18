@@ -3,25 +3,52 @@ import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { PageHeader, StatusBadge } from "@/components/dashboard/primitives";
 import { useCostOps } from "../costops-context";
-import {
-  getProvider,
-  getProviderShortName,
-} from "../providers/registry";
+import { getProvider, getProviderShortName } from "../providers/registry";
 import { formatDateTime, formatRelativeTime } from "../utils";
 import { AwsConnectWizard } from "../providers/aws/aws-connect-wizard";
 import type { CostOpsIntegration } from "../types";
+
+function safeIntegrationError(item: CostOpsIntegration) {
+  if (item.errorCode === "AccountIdMismatchError") {
+    return "The account ID did not match the AWS account that owns the role.";
+  }
+  if (item.errorCode === "ProviderUnavailableError") {
+    return "AWS was temporarily unavailable during verification.";
+  }
+  return "Dilanix could not assume the AWS role. Check that the CloudFormation stack finished creating.";
+}
 
 export function IntegrationsView() {
   const api = useCostOps();
   const [wizard, setWizard] = useState<CostOpsIntegration | "new" | null>(null);
   const [pageError, setPageError] = useState("");
+  const [pageNotice, setPageNotice] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+
+  async function openWizard(item: CostOpsIntegration) {
+    setPageError("");
+    try {
+      setWizard(await api.loadIntegration(item.id));
+    } catch (error) {
+      setPageError(
+        error instanceof Error ? error.message : "Unable to load integration.",
+      );
+    }
+  }
   return (
     <div className="flex flex-col gap-9">
       <PageHeader
         title="Integrations"
         description="Connect cloud and AI providers to CostOps."
       />
+      {pageNotice ? (
+        <div
+          role="status"
+          className="border-foreground/10 bg-foreground/[0.025] rounded-lg border px-4 py-3 text-sm"
+        >
+          {pageNotice}
+        </div>
+      ) : null}
       {api.integrations.length ? (
         <section>
           <h2 className="text-muted-foreground mb-3 text-xs font-semibold tracking-wider uppercase">
@@ -30,7 +57,7 @@ export function IntegrationsView() {
           <div className="grid gap-4 sm:grid-cols-2">
             {api.integrations.map((item) => {
               const provider = getProvider(api.providers, item.provider);
-              const syncing = api.activeSyncs[item.id]?.status === "running";
+              const syncing = Boolean(api.activeSyncs[item.id]);
               return (
                 <article
                   key={item.id}
@@ -71,31 +98,36 @@ export function IntegrationsView() {
                       ? "Sync in progress"
                       : `Last sync ${formatRelativeTime(item.lastSyncedAt)}`}
                   </p>
+                  {item.status === "error" ? (
+                    <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
+                      {safeIntegrationError(item)}
+                      {item.errorCode ? ` (${item.errorCode})` : ""}
+                    </p>
+                  ) : null}
+                  {item.status === "disabled" ? (
+                    <p className="text-muted-foreground mt-3 text-xs leading-5">
+                      The AWS CloudFormation stack and IAM role still exist in
+                      your AWS account.
+                    </p>
+                  ) : null}
                   <div className="mt-auto flex gap-2 pt-5">
-                    {item.status === "pending" || item.status === "error" ? (
+                    {item.status !== "connected" ? (
                       <button
-                        onClick={async () => {
-                          setPageError("");
-                          try {
-                            setWizard(await api.loadIntegration(item.id));
-                          } catch (error) {
-                            setPageError(
-                              error instanceof Error
-                                ? error.message
-                                : "Unable to load integration.",
-                            );
-                          }
-                        }}
-                        className="border-foreground/15 rounded-lg border px-3 py-2 text-xs font-medium"
+                        type="button"
+                        onClick={() => openWizard(item)}
+                        className="border-foreground/15 hover:border-accent/50 rounded-lg border px-3 py-2 text-xs font-medium"
                       >
                         {item.status === "error"
-                          ? "Fix connection"
-                          : "Continue setup"}
+                          ? "Retry verification"
+                          : item.status === "disabled"
+                            ? "Reconnect"
+                            : "Continue setup"}
                       </button>
                     ) : (
                       <button
+                        type="button"
                         onClick={() => setSelected(item.id)}
-                        className="border-foreground/15 rounded-lg border px-3 py-2 text-xs font-medium"
+                        className="border-foreground/15 hover:border-accent/50 rounded-lg border px-3 py-2 text-xs font-medium"
                       >
                         Manage
                       </button>
@@ -207,43 +239,63 @@ export function IntegrationsView() {
                   <div className="mt-6 flex justify-end gap-2">
                     {item.status === "connected" ? (
                       <button
+                        type="button"
                         onClick={() => setSelected(null)}
-                        className="border-foreground/15 rounded-lg border px-3 py-2 text-sm"
+                        className="border-foreground/15 hover:border-foreground/30 rounded-lg border px-3 py-2 text-sm"
                       >
                         Close
                       </button>
                     ) : null}
-                    <button
-                      disabled={api.activeSyncs[item.id]?.status === "running"}
-                      onClick={async () => {
-                        setPageError("");
-                        try {
-                          await api.syncNow(item.id);
-                        } catch (error) {
-                          setPageError(
-                            error instanceof Error
-                              ? error.message
-                              : "Unable to start sync.",
-                          );
-                        }
-                      }}
-                      className="bg-accent text-accent-foreground rounded-lg px-3 py-2 text-sm disabled:opacity-50"
-                    >
-                      Sync now
-                    </button>
+                    {item.status === "connected" ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setPageError("");
+                            try {
+                              await api.syncNow(item.id);
+                            } catch (error) {
+                              setPageError(
+                                error instanceof Error
+                                  ? error.message
+                                  : "Unable to start sync.",
+                              );
+                            }
+                          }}
+                          className="bg-accent text-accent-foreground rounded-lg px-3 py-2 text-sm"
+                        >
+                          {api.activeSyncs[item.id] ? "Syncing…" : "Sync now"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setSelected(null);
+                            await openWizard(item);
+                          }}
+                          className="border-foreground/15 hover:border-foreground/30 rounded-lg border px-3 py-2 text-sm"
+                        >
+                          Reverify
+                        </button>
+                      </>
+                    ) : null}
                     {item.status !== "disabled" ? (
                       <button
+                        type="button"
                         onClick={async () => {
                           if (
                             !window.confirm(
-                              `Disable ${item.name}? CostOps will stop syncing new cost data.`,
+                              `Disable ${item.name}? CostOps will stop syncing new data, but the CloudFormation stack and IAM role will remain in your AWS account.`,
                             )
                           )
                             return;
                           setPageError("");
                           try {
+                            const details = await api.loadIntegration(item.id);
                             await api.disableIntegration(item.id);
                             setSelected(null);
+                            setPageNotice(
+                              `${item.name} was disabled in Dilanix. To fully revoke access, delete the ${details.setup?.stackName ?? "DilanixCostOps"} stack from AWS CloudFormation.`,
+                            );
                           } catch (error) {
                             setPageError(
                               error instanceof Error

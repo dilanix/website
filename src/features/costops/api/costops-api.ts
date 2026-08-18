@@ -24,7 +24,6 @@ type IntegrationDto = {
   status: "pending" | "connected" | "error" | "disabled";
   external_account_id: string | null;
   external_account_name: string | null;
-  external_id: string | null;
   role_arn: string | null;
   last_synced_at: string | null;
   last_sync_status: "pending" | "running" | "succeeded" | "failed" | null;
@@ -35,9 +34,10 @@ type IntegrationDto = {
 };
 type SetupDto = {
   cloudformation_supported: boolean;
-  dilanix_aws_account_id: string | null;
-  dilanix_aws_principal_arn: string | null;
-  cloudformation_template: string | null;
+  cloudformation_url: string | null;
+  external_id: string | null;
+  role_name: string | null;
+  stack_name: string | null;
 };
 type AccountDto = {
   id: string;
@@ -118,7 +118,6 @@ function integration(
     status: dto.status,
     externalAccountId: dto.external_account_id,
     roleArn: dto.role_arn,
-    externalId: dto.external_id,
     createdAt: dto.created_at,
     lastSyncedAt: dto.last_synced_at,
     lastSyncStatus: dto.last_sync_status,
@@ -128,9 +127,10 @@ function integration(
     setup: dto.setup
       ? {
           cloudformationSupported: dto.setup.cloudformation_supported,
-          dilanixAwsAccountId: dto.setup.dilanix_aws_account_id,
-          principal: dto.setup.dilanix_aws_principal_arn,
-          cloudformationTemplate: dto.setup.cloudformation_template,
+          cloudformationUrl: dto.setup.cloudformation_url,
+          externalId: dto.setup.external_id,
+          roleName: dto.setup.role_name,
+          stackName: dto.setup.stack_name,
         }
       : undefined,
   };
@@ -198,7 +198,7 @@ export async function createIntegration(
 export async function verifyIntegration(
   organizationId: string,
   id: string,
-  roleArn: string,
+  awsAccountId: string,
   token: string,
 ) {
   const dto = await coreRequest<IntegrationDto>(
@@ -207,7 +207,7 @@ export async function verifyIntegration(
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role_arn: roleArn }),
+      body: JSON.stringify({ aws_account_id: awsAccountId }),
     },
   );
   return integration(
