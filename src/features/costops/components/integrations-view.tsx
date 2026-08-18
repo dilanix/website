@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 import { PageHeader, StatusBadge } from "@/components/dashboard/primitives";
 import { useCostOps } from "../costops-context";
 import { getProvider, getProviderShortName } from "../providers/registry";
@@ -24,6 +24,11 @@ export function IntegrationsView() {
   const [pageError, setPageError] = useState("");
   const [pageNotice, setPageNotice] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CostOpsIntegration | null>(
+    null,
+  );
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   async function openWizard(item: CostOpsIntegration) {
     setPageError("");
@@ -110,7 +115,7 @@ export function IntegrationsView() {
                       your AWS account.
                     </p>
                   ) : null}
-                  <div className="mt-auto flex gap-2 pt-5">
+                  <div className="mt-auto flex flex-wrap gap-2 pt-5">
                     {item.status !== "connected" ? (
                       <button
                         type="button"
@@ -132,6 +137,17 @@ export function IntegrationsView() {
                         Manage
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeleteError("");
+                        setDeleteTarget(item);
+                      }}
+                      className="text-muted-foreground inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium hover:bg-red-500/10 hover:text-red-500"
+                    >
+                      <Trash2 size={13} aria-hidden="true" />
+                      Delete
+                    </button>
                   </div>
                 </article>
               );
@@ -250,6 +266,7 @@ export function IntegrationsView() {
                       <>
                         <button
                           type="button"
+                          disabled={api.syncStarting.has(item.id)}
                           onClick={async () => {
                             setPageError("");
                             try {
@@ -262,9 +279,16 @@ export function IntegrationsView() {
                               );
                             }
                           }}
-                          className="bg-accent text-accent-foreground rounded-lg px-3 py-2 text-sm"
+                          className="bg-accent text-accent-foreground inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm disabled:opacity-50"
                         >
-                          {api.activeSyncs[item.id] ? "Syncing…" : "Sync now"}
+                          {api.syncStarting.has(item.id) ? (
+                            <>
+                              <RefreshCw size={13} className="animate-spin" />
+                              Starting sync…
+                            </>
+                          ) : (
+                            "Sync now"
+                          )}
                         </button>
                         <button
                           type="button"
@@ -315,6 +339,89 @@ export function IntegrationsView() {
             );
           })()
         : null}
+      {deleteTarget ? (
+        <div className="bg-background/80 fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-integration-title"
+            aria-describedby="delete-integration-description"
+            className="bg-background border-foreground/15 w-full max-w-lg rounded-xl border p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-500">
+                <Trash2 size={18} aria-hidden="true" />
+              </span>
+              <div>
+                <h2 id="delete-integration-title" className="font-semibold">
+                  Delete {deleteTarget.name}?
+                </h2>
+                <p
+                  id="delete-integration-description"
+                  className="text-muted-foreground mt-2 text-sm leading-6"
+                >
+                  This permanently removes the integration from Dilanix. It
+                  won&apos;t delete anything in AWS — if you created a
+                  CloudFormation stack, remove it yourself in the AWS Console if
+                  you no longer need it.
+                </p>
+              </div>
+            </div>
+            {deleteError ? (
+              <p
+                role="alert"
+                className="mt-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400"
+              >
+                {deleteError}
+              </p>
+            ) : null}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={deleteBusy}
+                onClick={() => setDeleteTarget(null)}
+                className="border-foreground/15 hover:border-foreground/30 rounded-lg border px-4 py-2 text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteBusy}
+                onClick={async () => {
+                  setDeleteBusy(true);
+                  setDeleteError("");
+                  try {
+                    await api.deleteIntegration(deleteTarget.id);
+                    if (selected === deleteTarget.id) setSelected(null);
+                    setPageNotice(
+                      `${deleteTarget.name} was removed from Dilanix. Any AWS CloudFormation stack or IAM role still exists in AWS and must be removed there separately.`,
+                    );
+                    setDeleteTarget(null);
+                  } catch (error) {
+                    setDeleteError(
+                      error instanceof Error
+                        ? error.message
+                        : "Unable to delete integration.",
+                    );
+                  } finally {
+                    setDeleteBusy(false);
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50"
+              >
+                {deleteBusy ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    Deleting…
+                  </>
+                ) : (
+                  "Delete integration"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

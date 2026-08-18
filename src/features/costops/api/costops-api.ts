@@ -5,9 +5,13 @@ import type {
   CostOpsOverview,
   CostOpsProviderCatalogItem,
   CostOpsSnapshot,
+  CostSeriesGroupBy,
+  CostSeriesPoint,
   CostRecord,
+  OverviewPeriod,
   SyncRun,
 } from "../types";
+import { getCostDateRange } from "../date-ranges";
 
 type ProviderCatalogDto = {
   slug: string;
@@ -79,6 +83,7 @@ type CostDto = {
   amount: string;
   currency: string;
 };
+type CostSeriesDto = { period: string; amount: string };
 
 const base = (organizationId: string) =>
   `/v1/organizations/${organizationId}/costops`;
@@ -230,6 +235,15 @@ export async function disableIntegration(
     organizationId,
   );
 }
+export async function deleteIntegration(
+  organizationId: string,
+  id: string,
+  token: string,
+) {
+  await coreRequest<void>(`${base(organizationId)}/integrations/${id}`, token, {
+    method: "DELETE",
+  });
+}
 export async function listCloudAccounts(
   organizationId: string,
   id: string,
@@ -272,9 +286,10 @@ export async function getOverview(
   organizationId: string,
   token: string,
   currency: string | null,
+  period: OverviewPeriod = "current_month",
 ): Promise<CostOpsOverview> {
   const dto = await coreRequest<OverviewDto>(
-    `${base(organizationId)}/overview`,
+    `${base(organizationId)}/overview?period=${period}`,
     token,
   );
   const money = (amount: string) => ({ amount, currency });
@@ -295,6 +310,30 @@ export async function getOverview(
     integrationCount: dto.connected_integrations,
     lastSyncedAt: dto.last_synced_at,
   };
+}
+export async function queryCostSeries(
+  organizationId: string,
+  token: string,
+  query: {
+    start_date?: string;
+    end_date?: string;
+    group_by: CostSeriesGroupBy;
+    integration_id?: string;
+    cloud_account_id?: string;
+    service_name?: string;
+    region?: string;
+  },
+  currency: string | null,
+): Promise<CostSeriesPoint[]> {
+  const params = new URLSearchParams();
+  Object.entries(query).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  const values = await coreRequest<CostSeriesDto[]>(
+    `${base(organizationId)}/costs/series?${params}`,
+    token,
+  );
+  return values.map((value) => ({ ...value, currency }));
 }
 export async function listCosts(
   organizationId: string,
@@ -324,6 +363,7 @@ export async function getSnapshot(
   organizationId: string,
   token: string,
 ): Promise<CostOpsSnapshot> {
+  const defaultCostRange = getCostDateRange("last_30_days");
   const [providers, dtos] = await Promise.all([
     listAvailableIntegrations(organizationId, token),
     listIntegrations(organizationId, token),
@@ -348,7 +388,11 @@ export async function getSnapshot(
       ),
     ),
   );
-  const costDtos = await listCosts(organizationId, token);
+  const initialCostQuery = {
+    start_date: defaultCostRange.startDate,
+    end_date: defaultCostRange.endDate,
+  };
+  const costDtos = await listCosts(organizationId, token, initialCostQuery);
   const names = new Map(
     detailed.flatMap((item) =>
       item.accounts.map((a) => [a.id, a.name] as const),
@@ -361,6 +405,13 @@ export async function getSnapshot(
     integrations: detailed,
     syncRuns,
     costs,
+    costSeries: await queryCostSeries(
+      organizationId,
+      token,
+      { ...initialCostQuery, group_by: "day" },
+      currency,
+    ),
+    defaultCostRange,
     overview: await getOverview(organizationId, token, currency),
   };
 }

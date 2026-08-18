@@ -4,12 +4,18 @@ import Link from "next/link";
 import { PageHeader, EmptyState } from "@/components/dashboard/primitives";
 import { useCostOps } from "../costops-context";
 import { formatCurrency } from "../utils";
+import { getCostDateRange, isValidCostDateRange } from "../date-ranges";
+import type { CostDatePreset, CostDateRange } from "../types";
 export function CostsView() {
   const api = useCostOps();
   const [integrationId, setIntegrationId] = useState("");
   const [accountId, setAccountId] = useState("");
   const [service, setService] = useState("");
   const [region, setRegion] = useState("");
+  const [range, setRange] = useState(api.snapshot.defaultCostRange);
+  const [activePreset, setActivePreset] = useState<CostDatePreset | "custom">(
+    "last_30_days",
+  );
   const connected = api.integrations.filter(
     (item) => item.status === "connected",
   );
@@ -21,15 +27,17 @@ export function CostsView() {
   const regions = [
     ...new Set(api.costs.map((row) => row.region).filter(Boolean)),
   ];
-  async function applyFilters() {
+  async function applyFilters(nextRange: CostDateRange = range) {
+    if (!isValidCostDateRange(nextRange)) {
+      setError("Choose a valid start and end date.");
+      return;
+    }
     setLoading(true);
     setError("");
-    const end = new Date();
-    const start = new Date(end.getTime() - 30 * 86400000);
     try {
       const values = await api.queryCosts({
-        start_date: start.toISOString().slice(0, 10),
-        end_date: end.toISOString().slice(0, 10),
+        start_date: nextRange.startDate,
+        end_date: nextRange.endDate,
         integration_id: integrationId || undefined,
         cloud_account_id: accountId || undefined,
         service_name: service || undefined,
@@ -49,6 +57,12 @@ export function CostsView() {
     } finally {
       setLoading(false);
     }
+  }
+  function selectPreset(preset: CostDatePreset) {
+    const nextRange = getCostDateRange(preset);
+    setActivePreset(preset);
+    setRange(nextRange);
+    void applyFilters(nextRange);
   }
   return (
     <div className="flex flex-col gap-8">
@@ -71,13 +85,54 @@ export function CostsView() {
         />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-            <label className="text-muted-foreground text-xs">
-              Date range
-              <select className="border-foreground/10 bg-background text-foreground mt-1 h-10 w-full rounded-lg border px-3 text-sm">
-                <option>Last 30 days</option>
-              </select>
-            </label>
+          <div className="border-foreground/10 rounded-xl border p-4">
+            <div className="flex flex-wrap items-end gap-2">
+              {(
+                [
+                  ["last_7_days", "7D"],
+                  ["last_30_days", "30D"],
+                  ["last_90_days", "90D"],
+                  ["current_month", "This month"],
+                  ["last_month", "Last month"],
+                ] as const
+              ).map(([preset, label]) => (
+                <button
+                  key={preset}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => selectPreset(preset)}
+                  className={`h-9 rounded-md border px-3 text-xs font-medium disabled:opacity-50 ${activePreset === preset ? "border-accent bg-accent/10 text-accent" : "border-foreground/10 hover:border-accent/50"}`}
+                >
+                  {label}
+                </button>
+              ))}
+              <label className="text-muted-foreground ml-auto text-[11px]">
+                From
+                <input
+                  type="date"
+                  value={range.startDate}
+                  onChange={(event) => {
+                    setActivePreset("custom");
+                    setRange({ ...range, startDate: event.target.value });
+                  }}
+                  className="border-foreground/10 bg-background text-foreground mt-1 block h-9 rounded-md border px-2 text-xs"
+                />
+              </label>
+              <label className="text-muted-foreground text-[11px]">
+                To
+                <input
+                  type="date"
+                  value={range.endDate}
+                  onChange={(event) => {
+                    setActivePreset("custom");
+                    setRange({ ...range, endDate: event.target.value });
+                  }}
+                  className="border-foreground/10 bg-background text-foreground mt-1 block h-9 rounded-md border px-2 text-xs"
+                />
+              </label>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <Filter
               label="Integration"
               value={integrationId}
@@ -110,7 +165,8 @@ export function CostsView() {
               all="All regions"
             />
             <button
-              onClick={applyFilters}
+              type="button"
+              onClick={() => applyFilters()}
               disabled={loading}
               className="bg-accent text-accent-foreground mt-auto h-10 rounded-lg px-4 text-sm font-medium disabled:opacity-50"
             >

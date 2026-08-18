@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { coreRequest } from "@/lib/core/api";
 import {
   createIntegration,
+  deleteIntegration,
+  getOverview,
   getSnapshot,
+  queryCostSeries,
   queryCosts,
   verifyIntegration,
 } from "./costops-api";
@@ -24,6 +27,7 @@ describe("CostOps API mapping", () => {
           is_available: true,
         },
       ])
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce({
@@ -48,6 +52,13 @@ describe("CostOps API mapping", () => {
       },
     ]);
     expect(snapshot.costs).toEqual([]);
+    expect(snapshot.costSeries).toEqual([]);
+    expect(request).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /\/costs\?start_date=\d{4}-\d{2}-\d{2}&end_date=\d{4}-\d{2}-\d{2}$/,
+      ),
+      "token",
+    );
     expect(snapshot.overview.currentTotal).toEqual({
       amount: "0.000000",
       currency: null,
@@ -142,6 +153,61 @@ describe("CostOps API mapping", () => {
         method: "POST",
         body: JSON.stringify({ aws_account_id: "123456789012" }),
       }),
+    );
+  });
+
+  it("passes overview periods and preserves cost-series decimal strings", async () => {
+    request
+      .mockResolvedValueOnce({
+        current_period_total: "10.000000",
+        previous_period_total: "8.000000",
+        change_percentage: "25.000000",
+        connected_integrations: 1,
+        total_integrations: 1,
+        last_synced_at: null,
+        top_services: [],
+        daily_spend: [],
+      })
+      .mockResolvedValueOnce([{ period: "2026-08-01", amount: "12.340000" }]);
+
+    await getOverview("org-1", "token", "USD", "last_7_days");
+    const series = await queryCostSeries(
+      "org-1",
+      "token",
+      {
+        start_date: "2026-08-01",
+        end_date: "2026-08-19",
+        group_by: "week",
+      },
+      "USD",
+    );
+
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      "/v1/organizations/org-1/costops/overview?period=last_7_days",
+      "token",
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("group_by=week"),
+      "token",
+    );
+    expect(series[0]).toEqual({
+      period: "2026-08-01",
+      amount: "12.340000",
+      currency: "USD",
+    });
+  });
+
+  it("deletes an integration without a request body", async () => {
+    request.mockResolvedValue(undefined);
+
+    await deleteIntegration("org-1", "int-1", "token");
+
+    expect(request).toHaveBeenCalledWith(
+      "/v1/organizations/org-1/costops/integrations/int-1",
+      "token",
+      { method: "DELETE" },
     );
   });
 });

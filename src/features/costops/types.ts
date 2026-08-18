@@ -1,6 +1,20 @@
 export type CostOpsProvider = "aws";
 export type IntegrationStatus = "pending" | "connected" | "error" | "disabled";
 export type SyncStatus = "pending" | "running" | "succeeded" | "failed";
+export type OverviewPeriod =
+  "current_month" | "last_7_days" | "last_30_days" | "last_90_days";
+export type CostSeriesGroupBy = "day" | "week" | "month";
+export type CostDatePreset =
+  | "last_7_days"
+  | "last_30_days"
+  | "last_90_days"
+  | "current_month"
+  | "last_month";
+
+export interface CostDateRange {
+  startDate: string;
+  endDate: string;
+}
 
 export interface CostOpsProviderCatalogItem {
   slug: string;
@@ -71,7 +85,12 @@ export interface CostOpsSnapshot {
   integrations: CostOpsIntegration[];
   overview: CostOpsOverview;
   costs: CostRecord[];
+  costSeries: CostSeriesPoint[];
+  defaultCostRange: CostDateRange;
   syncRuns: Record<string, SyncRun[]>;
+}
+export interface CostSeriesPoint extends MoneyValue {
+  period: string;
 }
 export interface CostRecord extends MoneyValue {
   id: string;

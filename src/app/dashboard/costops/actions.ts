@@ -3,6 +3,10 @@ import { getAccessToken } from "@/lib/auth/session";
 import { getMe } from "@/lib/auth/api";
 import { CoreApiError } from "@/lib/core/api";
 import * as api from "@/features/costops/api/costops-api";
+import type {
+  CostSeriesGroupBy,
+  OverviewPeriod,
+} from "@/features/costops/types";
 type Result<T> = { data?: T; error?: string; status?: number };
 async function context() {
   const token = await getAccessToken();
@@ -54,9 +58,35 @@ export const disableIntegrationAction = async (id: string) =>
   execute((organizationId, token) =>
     api.disableIntegration(organizationId, id, token),
   );
+export const deleteIntegrationAction = async (id: string) =>
+  execute((organizationId, token) =>
+    api.deleteIntegration(organizationId, id, token),
+  );
 export const queryCostsAction = async (
   query: Record<string, string | undefined>,
 ) =>
   execute((organizationId, token) =>
     api.queryCosts(organizationId, token, query),
+  );
+export const queryCostSeriesAction = async (
+  query: {
+    start_date?: string;
+    end_date?: string;
+    group_by: CostSeriesGroupBy;
+    integration_id?: string;
+    cloud_account_id?: string;
+    service_name?: string;
+    region?: string;
+  },
+  currency: string | null,
+) =>
+  execute((organizationId, token) =>
+    api.queryCostSeries(organizationId, token, query, currency),
+  );
+export const queryOverviewAction = async (
+  period: OverviewPeriod,
+  currency: string | null,
+) =>
+  execute((organizationId, token) =>
+    api.getOverview(organizationId, token, currency, period),
   );

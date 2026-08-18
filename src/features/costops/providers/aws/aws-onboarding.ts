@@ -12,7 +12,7 @@ export function awsVerificationErrorMessage(
     return "This integration no longer exists. Close this window and connect AWS again.";
   }
   if (status === 409) {
-    return "This integration has been disconnected. Reconnect is not currently available.";
+    return "This integration has been disconnected. Reconnect to continue.";
   }
   if (status === 502) {
     return "AWS is temporarily unavailable — please try again in a moment.";
