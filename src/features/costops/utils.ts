@@ -11,6 +11,15 @@ export function formatCurrency(value: MoneyValue) {
     maximumFractionDigits: 2,
   }).format(Number.isFinite(amount) ? amount : 0);
 }
+export function formatPercentage(value: string | null) {
+  if (value === null) return "—";
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "—";
+  return `${new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+  }).format(amount)}%`;
+}
 export function formatDateTime(value: string | null) {
   return value
     ? new Intl.DateTimeFormat(undefined, {

@@ -27,10 +27,12 @@ export function PageHeader({
 export function Metric({
   label,
   value,
+  detail,
   tone = "default",
 }: {
   label: string;
   value: ReactNode;
+  detail?: ReactNode;
   tone?: "default" | "positive";
 }) {
   return (
@@ -44,6 +46,11 @@ export function Metric({
       >
         {value}
       </dd>
+      {detail ? (
+        <p className="text-muted-foreground mt-1.5 text-[11px] leading-4">
+          {detail}
+        </p>
+      ) : null}
     </div>
   );
 }

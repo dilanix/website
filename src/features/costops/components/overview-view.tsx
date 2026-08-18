@@ -10,7 +10,7 @@ import {
   Skeleton,
 } from "@/components/dashboard/primitives";
 import { useCostOps } from "../costops-context";
-import { formatCurrency, formatRelativeTime } from "../utils";
+import { formatCurrency, formatPercentage, formatRelativeTime } from "../utils";
 import { getCostDateRange, isValidCostDateRange } from "../date-ranges";
 import type {
   CostDatePreset,
@@ -210,25 +210,14 @@ export function OverviewView() {
         title="CostOps"
         description="Cloud and AI infrastructure cost visibility and optimization."
         action={
-          <div className="text-right">
-            <div className="border-foreground/10 inline-flex rounded-lg border p-1">
-              {overviewPeriods.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  disabled={overviewLoading}
-                  onClick={() => selectOverviewPeriod(option.value)}
-                  className={`rounded-md px-2.5 py-1.5 text-xs font-medium disabled:opacity-50 ${overviewPeriod === option.value ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-muted-foreground mt-2 text-xs">
-              Updated {formatRelativeTime(data.lastSyncedAt)}
-              {syncing ? " · Refreshing data…" : ""}
-            </p>
-          </div>
+          <p className="text-muted-foreground flex items-center gap-2 text-xs sm:pt-2">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${syncing ? "bg-accent animate-pulse" : "bg-success"}`}
+            />
+            {syncing
+              ? "Refreshing cost data…"
+              : `Updated ${formatRelativeTime(data.lastSyncedAt)}`}
+          </p>
         }
       />
       {filterError ? (
@@ -242,40 +231,105 @@ export function OverviewView() {
           description="Your integration synchronized successfully, but no cost data was returned for this date range."
         />
       ) : null}
-      <dl className="grid grid-cols-2 gap-y-6 lg:grid-cols-4">
-        <Metric label="Total spend" value={formatCurrency(data.currentTotal)} />
-        <Metric
-          label={comparisonLabels[overviewPeriod]}
-          value={formatCurrency(data.previousTotal)}
-        />
-        <Metric
-          label="Change"
-          value={data.changePercent ? `${data.changePercent}%` : "—"}
-          tone={data.changePercent?.startsWith("-") ? "positive" : "default"}
-        />
-        <Metric label="Connected integrations" value={data.integrationCount} />
-      </dl>
-      <Section title="Spend over time">
+      <Section
+        title="Spend summary"
+        action={
+          <div
+            className="border-foreground/10 bg-foreground/[0.02] inline-flex rounded-lg border p-1"
+            aria-label="Overview period"
+          >
+            {overviewPeriods.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                disabled={overviewLoading}
+                onClick={() => selectOverviewPeriod(option.value)}
+                className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${overviewPeriod === option.value ? "bg-card-strong text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        <dl
+          className={`border-foreground/10 grid grid-cols-2 gap-y-6 rounded-xl border px-5 py-6 transition-opacity lg:grid-cols-4 ${overviewLoading ? "opacity-50" : ""}`}
+        >
+          <Metric
+            label="Total spend"
+            value={formatCurrency(data.currentTotal)}
+            detail={
+              overviewPeriod === "current_month"
+                ? "Current month"
+                : overviewPeriods.find(
+                    (option) => option.value === overviewPeriod,
+                  )?.label
+            }
+          />
+          <Metric
+            label="Previous period"
+            value={formatCurrency(data.previousTotal)}
+            detail={comparisonLabels[overviewPeriod]}
+          />
+          <Metric
+            label="Change"
+            value={formatPercentage(data.changePercent)}
+            detail="Period over period"
+            tone={data.changePercent?.startsWith("-") ? "positive" : "default"}
+          />
+          <Metric
+            label="Connected integrations"
+            value={data.integrationCount}
+            detail="Active cost sources"
+          />
+        </dl>
+      </Section>
+      <Section
+        title="Spend over time"
+        action={
+          <div className="border-foreground/10 bg-foreground/[0.02] inline-flex rounded-lg border p-1">
+            {(["day", "week", "month"] as CostSeriesGroupBy[]).map((option) => (
+              <button
+                key={option}
+                type="button"
+                disabled={seriesLoading}
+                onClick={() => {
+                  setGroupBy(option);
+                  void loadSeries(range, option);
+                }}
+                className={`rounded-md px-2.5 py-1.5 text-xs font-medium capitalize disabled:opacity-50 ${groupBy === option ? "bg-card-strong text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        }
+      >
         <div className="border-foreground/10 rounded-xl border p-5">
-          <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-            <div className="flex flex-wrap gap-1.5">
-              {(
-                [
-                  ["last_7_days", "7D"],
-                  ["last_30_days", "30D"],
-                  ["last_90_days", "90D"],
-                ] as const
-              ).map(([preset, label]) => (
-                <button
-                  key={preset}
-                  type="button"
-                  disabled={seriesLoading}
-                  onClick={() => selectTrendPreset(preset)}
-                  className={`rounded-md border px-2.5 py-1.5 text-xs disabled:opacity-50 ${trendPreset === preset ? "border-accent bg-accent/10 text-accent" : "border-foreground/10 hover:border-accent/50"}`}
-                >
-                  {label}
-                </button>
-              ))}
+          <div className="border-foreground/10 mb-6 flex flex-wrap items-end justify-between gap-4 border-b pb-5">
+            <div>
+              <p className="text-muted-foreground mb-2 text-[10px] font-semibold tracking-wider uppercase">
+                Range
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    ["last_7_days", "7D"],
+                    ["last_30_days", "30D"],
+                    ["last_90_days", "90D"],
+                  ] as const
+                ).map(([preset, label]) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    disabled={seriesLoading}
+                    onClick={() => selectTrendPreset(preset)}
+                    className={`rounded-md border px-2.5 py-1.5 text-xs disabled:opacity-50 ${trendPreset === preset ? "border-accent bg-accent/10 text-accent" : "border-foreground/10 hover:border-accent/50"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="flex flex-wrap items-end gap-2">
               <DateInput
@@ -294,20 +348,6 @@ export function OverviewView() {
                   setRange({ ...range, endDate });
                 }}
               />
-              <select
-                aria-label="Group cost trend by"
-                value={groupBy}
-                onChange={(event) => {
-                  const next = event.target.value as CostSeriesGroupBy;
-                  setGroupBy(next);
-                  void loadSeries(range, next);
-                }}
-                className="border-foreground/10 bg-background h-9 rounded-md border px-2 text-xs"
-              >
-                <option value="day">Day</option>
-                <option value="week">Week</option>
-                <option value="month">Month</option>
-              </select>
               <button
                 type="button"
                 disabled={seriesLoading}
@@ -377,14 +417,14 @@ function DateInput({
   onChange(value: string): void;
 }) {
   return (
-    <label className="text-muted-foreground text-[11px]">
-      <span className="sr-only">{label}</span>
+    <label className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+      <span className="mb-1.5 block">{label}</span>
       <input
         type="date"
         aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="border-foreground/10 bg-background text-foreground h-9 rounded-md border px-2 text-xs"
+        className="border-foreground/10 bg-background text-foreground block h-9 rounded-md border px-2 text-xs font-normal tracking-normal normal-case"
       />
     </label>
   );
