@@ -9,7 +9,7 @@ export class CoreApiError extends Error {
   }
 }
 
-async function request<T>(
+export async function coreRequest<T>(
   path: string,
   accessToken: string,
   init?: RequestInit,
@@ -82,13 +82,13 @@ export function listOrganizationProducts(
   organizationId: string,
   token: string,
 ) {
-  return request<CoreProduct[]>(
+  return coreRequest<CoreProduct[]>(
     `/v1/organizations/${organizationId}/products`,
     token,
   );
 }
 export function listApiKeys(organizationId: string, token: string) {
-  return request<CoreApiKey[]>(
+  return coreRequest<CoreApiKey[]>(
     `/v1/organizations/${organizationId}/api-keys`,
     token,
   );
@@ -98,7 +98,7 @@ export function createApiKey(
   token: string,
   input: CreateApiKeyInput,
 ) {
-  return request<CreatedApiKey>(
+  return coreRequest<CreatedApiKey>(
     `/v1/organizations/${organizationId}/api-keys`,
     token,
     {
@@ -113,7 +113,7 @@ export function revokeApiKey(
   apiKeyId: string,
   token: string,
 ) {
-  return request<CoreApiKey>(
+  return coreRequest<CoreApiKey>(
     `/v1/organizations/${organizationId}/api-keys/${apiKeyId}/revoke`,
     token,
     { method: "POST" },
