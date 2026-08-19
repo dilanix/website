@@ -7,6 +7,7 @@ import type {
   CostSeriesGroupBy,
   OverviewPeriod,
 } from "@/features/costops/types";
+import type { ResourceQuery } from "@/features/costops/resources/types";
 type Result<T> = { data?: T; error?: string; status?: number };
 async function context() {
   const token = await getAccessToken();
@@ -54,6 +55,13 @@ export const triggerSyncAction = async (id: string) =>
   execute((organizationId, token) =>
     api.triggerSync(organizationId, id, token),
   );
+export const updateSyncSettingsAction = async (
+  id: string,
+  autoSyncIntervalMinutes: 60 | 360 | 720 | 1440 | null,
+) =>
+  execute((organizationId, token) =>
+    api.updateSyncSettings(organizationId, id, autoSyncIntervalMinutes, token),
+  );
 export const disableIntegrationAction = async (id: string) =>
   execute((organizationId, token) =>
     api.disableIntegration(organizationId, id, token),
@@ -89,4 +97,16 @@ export const queryOverviewAction = async (
 ) =>
   execute((organizationId, token) =>
     api.getOverview(organizationId, token, currency, period),
+  );
+export const queryResourcesAction = async (query: ResourceQuery) =>
+  execute((organizationId, token) =>
+    api.listResources(organizationId, token, query),
+  );
+export const resourceFilterOptionsAction = async () =>
+  execute((organizationId, token) =>
+    api.getResourceFilterOptions(organizationId, token),
+  );
+export const getResourceAction = async (resourceId: string) =>
+  execute((organizationId, token) =>
+    api.getResource(organizationId, resourceId, token),
   );

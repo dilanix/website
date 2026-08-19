@@ -28,10 +28,14 @@ export function formatDateTime(value: string | null) {
       }).format(new Date(value))
     : "Never";
 }
-export function formatRelativeTime(value: string | null) {
+export function formatRelativeTime(value: string | null, now = Date.now()) {
   if (!value) return "Never";
-  const minutes = Math.round((new Date(value).getTime() - Date.now()) / 60000);
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-  if (Math.abs(minutes) < 60) return formatter.format(minutes, "minute");
-  return formatter.format(Math.round(minutes / 60), "hour");
+  const minutes = Math.round((new Date(value).getTime() - now) / 60000);
+  if (Math.abs(minutes) < 1) return "Just now";
+  if (Math.abs(minutes) < 60)
+    return minutes < 0 ? `${Math.abs(minutes)} min ago` : `in ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  return hours < 0
+    ? `${Math.abs(hours)} hour${hours === -1 ? "" : "s"} ago`
+    : `in ${hours} hour${hours === 1 ? "" : "s"}`;
 }

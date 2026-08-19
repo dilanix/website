@@ -4,7 +4,9 @@ import {
   createIntegration,
   deleteIntegration,
   getOverview,
+  getResourceFilterOptions,
   getSnapshot,
+  listResources,
   queryCostSeries,
   queryCosts,
   verifyIntegration,
@@ -208,6 +210,95 @@ describe("CostOps API mapping", () => {
       "/v1/organizations/org-1/costops/integrations/int-1",
       "token",
       { method: "DELETE" },
+    );
+  });
+
+  it("serializes server-side resource filters, sorting, and pagination", async () => {
+    request.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 2,
+      page_size: 25,
+      pages: 0,
+      summary: {
+        total_resources: 0,
+        compute_resources: 0,
+        storage_resources: 0,
+        resources_with_recommendations: 0,
+      },
+    });
+    await listResources("org-1", "token", {
+      search: "prod api",
+      provider: "aws",
+      resourceType: "compute_instance",
+      region: "us-east-1",
+      state: "running",
+      integrationId: "int-1",
+      page: 2,
+      pageSize: 25,
+      sort: "-last_seen_at",
+    });
+    expect(request).toHaveBeenCalledWith(
+      "/v1/organizations/org-1/costops/resources?search=prod+api&provider=aws&resource_type=compute_instance&region=us-east-1&state=running&integration_id=int-1&page=2&page_size=25&sort=-last_seen_at",
+      "token",
+    );
+  });
+
+  it("maps normalized resource data and dynamic filter options", async () => {
+    request
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: "r1",
+            integration_id: "int-1",
+            provider: "aws",
+            resource_type: "future_service",
+            external_id: "external-1",
+            name: null,
+            region: "global",
+            availability_zone: null,
+            state: null,
+            resource_class: null,
+            configuration: { nested: { enabled: true } },
+            tags: { Team: "Platform" },
+            first_seen_at: "2026-08-01T00:00:00Z",
+            last_seen_at: "2026-08-20T00:00:00Z",
+            created_at: "2026-08-01T00:00:00Z",
+            updated_at: "2026-08-20T00:00:00Z",
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 25,
+        pages: 1,
+        summary: {
+          total_resources: 1,
+          compute_resources: 0,
+          storage_resources: 0,
+          resources_with_recommendations: 0,
+        },
+      })
+      .mockResolvedValueOnce({
+        providers: [{ value: "aws", label: "AWS", count: 1 }],
+        resource_types: [
+          { value: "future_service", label: "Future service", count: 1 },
+        ],
+        regions: [{ value: "global", label: "Global", count: 1 }],
+        states: [],
+      });
+    const page = await listResources("org-1", "token");
+    const options = await getResourceFilterOptions("org-1", "token");
+    expect(page.items[0]).toMatchObject({
+      integrationId: "int-1",
+      resourceType: "future_service",
+      region: "global",
+      tags: { Team: "Platform" },
+    });
+    expect(options.resourceTypes[0]?.value).toBe("future_service");
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      "/v1/organizations/org-1/costops/resources/filter-options",
+      "token",
     );
   });
 });

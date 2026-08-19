@@ -10,7 +10,7 @@ import {
   Skeleton,
 } from "@/components/dashboard/primitives";
 import { useCostOps } from "../costops-context";
-import { formatCurrency, formatPercentage, formatRelativeTime } from "../utils";
+import { formatCurrency, formatPercentage } from "../utils";
 import { getCostDateRange, isValidCostDateRange } from "../date-ranges";
 import type {
   CostDatePreset,
@@ -24,6 +24,7 @@ import {
   TREND_RANGE_OPTIONS,
 } from "../config";
 import { DateRangeFields, SegmentedControl } from "./filter-controls";
+import { CostOpsSyncControls } from "./costops-sync-controls";
 
 export function OverviewView() {
   const api = useCostOps();
@@ -94,7 +95,11 @@ export function OverviewView() {
   if (!api.overview.lastSyncedAt && syncing)
     return (
       <div className="space-y-8">
-        <PageHeader title="CostOps" description="Importing AWS cost data" />
+        <PageHeader
+          title="CostOps"
+          description="Importing AWS cost data"
+          action={<CostOpsSyncControls />}
+        />
         <div className="border-foreground/10 rounded-xl border p-5">
           <p className="flex items-center gap-2 text-sm font-medium">
             <RefreshCw size={15} className="animate-spin" />
@@ -116,34 +121,18 @@ export function OverviewView() {
         <PageHeader
           title="CostOps"
           description="Cloud and AI infrastructure cost visibility and optimization."
+          action={<CostOpsSyncControls />}
         />
         <EmptyState
           title="Cost sync failed"
           description="The AWS connection is active, but billing data could not be imported."
           actions={
-            <>
-              <button
-                type="button"
-                disabled={api.syncStarting.has(failed.id)}
-                onClick={() => api.syncNow(failed.id)}
-                className="bg-accent text-accent-foreground inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm disabled:opacity-50"
-              >
-                {api.syncStarting.has(failed.id) ? (
-                  <>
-                    <RefreshCw size={14} className="animate-spin" />
-                    Starting sync…
-                  </>
-                ) : (
-                  "Retry sync"
-                )}
-              </button>
-              <Link
-                href="/dashboard/costops/integrations"
-                className="border-foreground/15 rounded-lg border px-4 py-2 text-sm"
-              >
-                Manage integration
-              </Link>
-            </>
+            <Link
+              href="/dashboard/costops/integrations"
+              className="border-foreground/15 rounded-lg border px-4 py-2 text-sm"
+            >
+              Manage integration
+            </Link>
           }
         />
       </div>
@@ -187,6 +176,26 @@ export function OverviewView() {
     }
   }
 
+  async function refreshOverviewData() {
+    setFilterError("");
+    try {
+      const [nextOverview, nextSeries] = await Promise.all([
+        api.queryOverview(overviewPeriod),
+        api.queryCostSeries({
+          start_date: range.startDate,
+          end_date: range.endDate,
+          group_by: groupBy,
+        }),
+      ]);
+      setOverview(nextOverview);
+      setSeries(nextSeries);
+    } catch {
+      setFilterError(
+        "Sync completed, but the latest overview could not be loaded.",
+      );
+    }
+  }
+
   function selectTrendPreset(preset: CostDatePreset) {
     const nextRange = getCostDateRange(preset);
     setTrendPreset(preset);
@@ -202,16 +211,7 @@ export function OverviewView() {
       <PageHeader
         title="CostOps"
         description="Cloud and AI infrastructure cost visibility and optimization."
-        action={
-          <p className="text-muted-foreground flex items-center gap-2 text-xs sm:pt-2">
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${syncing ? "bg-accent animate-pulse" : "bg-success"}`}
-            />
-            {syncing
-              ? "Refreshing cost data…"
-              : `Updated ${formatRelativeTime(data.lastSyncedAt)}`}
-          </p>
-        }
+        action={<CostOpsSyncControls onSyncCompleted={refreshOverviewData} />}
       />
       {filterError ? (
         <p role="alert" className="-mt-6 text-sm text-red-500">

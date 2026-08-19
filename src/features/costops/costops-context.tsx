@@ -17,6 +17,7 @@ import {
   queryOverviewAction,
   refreshCostOpsAction,
   triggerSyncAction,
+  updateSyncSettingsAction,
   verifyIntegrationAction,
 } from "@/app/dashboard/costops/actions";
 import type {
@@ -41,6 +42,10 @@ type ContextValue = {
     awsAccountId: string,
   ): Promise<CostOpsIntegration>;
   syncNow(id: string): Promise<void>;
+  updateSyncSettings(
+    id: string,
+    intervalMinutes: 60 | 360 | 720 | 1440 | null,
+  ): Promise<void>;
   disableIntegration(id: string): Promise<void>;
   deleteIntegration(id: string): Promise<void>;
   queryCosts(
@@ -141,6 +146,20 @@ export function CostOpsProvider({
     if (result.error) throw new Error(result.error);
     await refresh();
   }
+  async function updateSyncSettings(
+    id: string,
+    intervalMinutes: 60 | 360 | 720 | 1440 | null,
+  ) {
+    const result = await updateSyncSettingsAction(id, intervalMinutes);
+    if (result.error || !result.data)
+      throw new Error(result.error ?? "Unable to update auto-sync.");
+    setSnapshot((value) => ({
+      ...value,
+      integrations: value.integrations.map((item) =>
+        item.id === id ? { ...result.data!, accounts: item.accounts } : item,
+      ),
+    }));
+  }
   async function disableIntegration(id: string) {
     const result = await disableIntegrationAction(id);
     if (result.error) throw new Error(result.error);
@@ -202,6 +221,7 @@ export function CostOpsProvider({
         loadIntegration,
         verifyIntegration,
         syncNow,
+        updateSyncSettings,
         disableIntegration,
         deleteIntegration,
         queryCosts,

@@ -12,6 +12,12 @@ import type {
   SyncRun,
 } from "../types";
 import { getCostDateRange } from "../date-ranges";
+import type {
+  CloudResource,
+  CloudResourceFilterOptions,
+  CloudResourcePage,
+  ResourceQuery,
+} from "../resources/types";
 
 type ProviderCatalogDto = {
   slug: string;
@@ -31,6 +37,8 @@ type IntegrationDto = {
   role_arn: string | null;
   last_synced_at: string | null;
   last_sync_status: "pending" | "running" | "succeeded" | "failed" | null;
+  auto_sync_interval_minutes: 60 | 360 | 720 | 1440 | null;
+  next_sync_at: string | null;
   last_error_code: string | null;
   last_error_message: string | null;
   created_at: string;
@@ -84,6 +92,44 @@ type CostDto = {
   currency: string;
 };
 type CostSeriesDto = { period: string; amount: string };
+type ResourceDto = {
+  id: string;
+  integration_id: string;
+  provider: string;
+  resource_type: string;
+  external_id: string;
+  name: string | null;
+  region: string;
+  availability_zone: string | null;
+  state: string | null;
+  resource_class: string | null;
+  configuration: Record<string, unknown>;
+  tags: Record<string, string>;
+  first_seen_at: string;
+  last_seen_at: string;
+  created_at: string;
+  updated_at: string;
+};
+type ResourcePageDto = {
+  items: ResourceDto[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+  summary: {
+    total_resources: number;
+    compute_resources: number;
+    storage_resources: number;
+    resources_with_recommendations: number;
+  };
+};
+type FilterOptionDto = { value: string; label: string; count: number };
+type ResourceFilterOptionsDto = {
+  providers: FilterOptionDto[];
+  resource_types: FilterOptionDto[];
+  regions: FilterOptionDto[];
+  states: FilterOptionDto[];
+};
 
 const base = (organizationId: string) =>
   `/v1/organizations/${organizationId}/costops`;
@@ -126,6 +172,8 @@ function integration(
     createdAt: dto.created_at,
     lastSyncedAt: dto.last_synced_at,
     lastSyncStatus: dto.last_sync_status,
+    autoSyncIntervalMinutes: dto.auto_sync_interval_minutes,
+    nextSyncAt: dto.next_sync_at,
     errorCode: dto.last_error_code,
     errorMessage: dto.last_error_message,
     accounts,
@@ -153,6 +201,24 @@ const cost = (
   region: dto.region,
   amount: dto.amount,
   currency: dto.currency,
+});
+export const mapCloudResource = (dto: ResourceDto): CloudResource => ({
+  id: dto.id,
+  integrationId: dto.integration_id,
+  provider: dto.provider,
+  resourceType: dto.resource_type,
+  externalId: dto.external_id,
+  name: dto.name,
+  region: dto.region,
+  availabilityZone: dto.availability_zone,
+  state: dto.state,
+  resourceClass: dto.resource_class,
+  configuration: dto.configuration,
+  tags: dto.tags,
+  firstSeenAt: dto.first_seen_at,
+  lastSeenAt: dto.last_seen_at,
+  createdAt: dto.created_at,
+  updatedAt: dto.updated_at,
 });
 
 export async function listIntegrations(organizationId: string, token: string) {
@@ -282,6 +348,28 @@ export async function triggerSync(
   );
   return { ...value, integrationId: id };
 }
+
+export async function updateSyncSettings(
+  organizationId: string,
+  id: string,
+  autoSyncIntervalMinutes: 60 | 360 | 720 | 1440 | null,
+  token: string,
+) {
+  return integration(
+    await coreRequest<IntegrationDto>(
+      `${base(organizationId)}/integrations/${id}/sync-settings`,
+      token,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          auto_sync_interval_minutes: autoSyncIntervalMinutes,
+        }),
+      },
+    ),
+    organizationId,
+  );
+}
 export async function getOverview(
   organizationId: string,
   token: string,
@@ -357,6 +445,71 @@ export async function queryCosts(
 ) {
   return (await listCosts(organizationId, token, query)).map((value) =>
     cost(value, new Map()),
+  );
+}
+export async function listResources(
+  organizationId: string,
+  token: string,
+  query: ResourceQuery = {},
+): Promise<CloudResourcePage> {
+  const params = new URLSearchParams();
+  const values: Record<string, string | number | undefined> = {
+    search: query.search,
+    provider: query.provider,
+    resource_type: query.resourceType,
+    region: query.region,
+    state: query.state,
+    integration_id: query.integrationId,
+    page: query.page,
+    page_size: query.pageSize,
+    sort: query.sort,
+  };
+  Object.entries(values).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") params.set(key, String(value));
+  });
+  const dto = await coreRequest<ResourcePageDto>(
+    `${base(organizationId)}/resources${params.size ? `?${params}` : ""}`,
+    token,
+  );
+  return {
+    items: dto.items.map(mapCloudResource),
+    total: dto.total,
+    page: dto.page,
+    pageSize: dto.page_size,
+    pages: dto.pages,
+    summary: {
+      totalResources: dto.summary.total_resources,
+      computeResources: dto.summary.compute_resources,
+      storageResources: dto.summary.storage_resources,
+      resourcesWithRecommendations: dto.summary.resources_with_recommendations,
+    },
+  };
+}
+export async function getResourceFilterOptions(
+  organizationId: string,
+  token: string,
+): Promise<CloudResourceFilterOptions> {
+  const dto = await coreRequest<ResourceFilterOptionsDto>(
+    `${base(organizationId)}/resources/filter-options`,
+    token,
+  );
+  return {
+    providers: dto.providers,
+    resourceTypes: dto.resource_types,
+    regions: dto.regions,
+    states: dto.states,
+  };
+}
+export async function getResource(
+  organizationId: string,
+  resourceId: string,
+  token: string,
+) {
+  return mapCloudResource(
+    await coreRequest<ResourceDto>(
+      `${base(organizationId)}/resources/${resourceId}`,
+      token,
+    ),
   );
 }
 export async function getSnapshot(

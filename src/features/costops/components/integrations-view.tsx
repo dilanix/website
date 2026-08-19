@@ -7,6 +7,7 @@ import { getProvider, getProviderShortName } from "../providers/registry";
 import { formatDateTime, formatRelativeTime } from "../utils";
 import { AwsConnectWizard } from "../providers/aws/aws-connect-wizard";
 import type { CostOpsIntegration } from "../types";
+import { CostOpsAutoSyncSelect } from "./costops-auto-sync-select";
 
 function safeIntegrationError(item: CostOpsIntegration) {
   if (item.errorCode === "AccountIdMismatchError") {
@@ -29,6 +30,7 @@ export function IntegrationsView() {
   );
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [syncSettingsBusy, setSyncSettingsBusy] = useState(false);
 
   async function openWizard(item: CostOpsIntegration) {
     setPageError("");
@@ -242,6 +244,13 @@ export function IntegrationsView() {
                       ["Created", formatDateTime(item.createdAt)],
                       ["Last sync", formatDateTime(item.lastSyncedAt)],
                       ["Sync status", item.lastSyncStatus ?? "Never"],
+                      [
+                        "Auto-sync",
+                        item.autoSyncIntervalMinutes
+                          ? `Every ${item.autoSyncIntervalMinutes / 60} hour${item.autoSyncIntervalMinutes === 60 ? "" : "s"}`
+                          : "Off",
+                      ],
+                      ["Next sync", formatDateTime(item.nextSyncAt)],
                     ].map(([label, value]) => (
                       <div
                         key={label}
@@ -252,6 +261,28 @@ export function IntegrationsView() {
                       </div>
                     ))}
                   </dl>
+                  {item.status === "connected" ? (
+                    <div className="border-foreground/10 mt-5 border-t pt-5">
+                      <label className="text-muted-foreground mb-1.5 block text-xs">
+                        Auto-sync schedule
+                      </label>
+                      <CostOpsAutoSyncSelect
+                        value={item.autoSyncIntervalMinutes}
+                        disabled={syncSettingsBusy}
+                        onChange={async (interval) => {
+                          setSyncSettingsBusy(true);
+                          setPageError("");
+                          try {
+                            await api.updateSyncSettings(item.id, interval);
+                          } catch {
+                            setPageError("Unable to update auto-sync settings.");
+                          } finally {
+                            setSyncSettingsBusy(false);
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : null}
                   <div className="mt-6 flex justify-end gap-2">
                     {item.status === "connected" ? (
                       <button

@@ -48,6 +48,8 @@ export interface CostOpsIntegration {
   createdAt: string;
   lastSyncedAt: string | null;
   lastSyncStatus: SyncStatus | null;
+  autoSyncIntervalMinutes: 60 | 360 | 720 | 1440 | null;
+  nextSyncAt: string | null;
   errorCode: string | null;
   errorMessage: string | null;
   accounts: CloudAccount[];

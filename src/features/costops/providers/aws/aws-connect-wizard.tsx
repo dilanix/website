@@ -200,11 +200,14 @@ export function AwsConnectWizard({
             <div className="bg-foreground/[0.025] border-foreground/10 rounded-xl border p-5">
               <ShieldCheck className="text-accent" size={22} />
               <p className="mt-4 text-sm leading-6">
-                CostOps uses a read-only cross-account IAM role secured with an
-                External ID to analyze AWS billing data.
+                CostOps uses cross-account sts:AssumeRole with ExternalId
+                protection. The CloudFormation stack attaches AWS-managed
+                ReadOnlyAccess for broad infrastructure inventory and future
+                optimization analysis; the role does not grant write access.
               </p>
               <p className="text-muted-foreground mt-2 text-sm">
-                No AWS access keys or secret access keys are required.
+                You never provide AWS access keys. Dilanix does not download S3
+                objects, fetch Lambda source code, or collect secret values.
               </p>
             </div>
             <label

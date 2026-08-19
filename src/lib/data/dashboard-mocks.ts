@@ -23,6 +23,7 @@ export const dashboardProducts: DashboardProduct[] = [
     navigation: [
       { label: "Overview", href: "/dashboard/costops" },
       { label: "Costs", href: "/dashboard/costops/costs" },
+      { label: "Resources", href: "/dashboard/costops/resources" },
       { label: "Recommendations", href: "/dashboard/costops/recommendations" },
       { label: "Integrations", href: "/dashboard/costops/integrations" },
     ],

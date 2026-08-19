@@ -8,6 +8,7 @@ import { getCostDateRange, isValidCostDateRange } from "../date-ranges";
 import type { CostDatePreset, CostDateRange } from "../types";
 import { COST_RANGE_OPTIONS } from "../config";
 import { DateRangeFields, SegmentedControl } from "./filter-controls";
+import { CostOpsSyncControls } from "./costops-sync-controls";
 export function CostsView() {
   const api = useCostOps();
   const [integrationId, setIntegrationId] = useState("");
@@ -71,6 +72,12 @@ export function CostsView() {
       <PageHeader
         title="Costs"
         description="Analyze provider spending by account, service, and region."
+        action={
+          <CostOpsSyncControls
+            integrationId={integrationId || undefined}
+            onSyncCompleted={() => applyFilters()}
+          />
+        }
       />
       {!api.integrations.length ? (
         <EmptyState

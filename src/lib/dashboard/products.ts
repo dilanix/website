@@ -6,6 +6,7 @@ const productNavigation: Record<string, { label: string; suffix: string }[]> = {
   costops: [
     { label: "Overview", suffix: "" },
     { label: "Costs", suffix: "/costs" },
+    { label: "Resources", suffix: "/resources" },
     { label: "Recommendations", suffix: "/recommendations" },
     { label: "Integrations", suffix: "/integrations" },
   ],
