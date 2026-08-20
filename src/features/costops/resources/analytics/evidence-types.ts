@@ -18,11 +18,11 @@ export interface AnalysisSignal {
   key: string;
   severity: "info" | "warning";
   metric_keys: string[];
-  field: "average" | "p95" | "minimum" | "maximum" | "total" | "trend_percent";
-  aggregation: "minimum" | "maximum" | "any";
-  operator: "lt" | "le" | "gt" | "ge" | "eq";
-  threshold: number;
-  observed: Record<string, number>;
+  field?: "average" | "p95" | "minimum" | "maximum" | "total" | "trend_percent";
+  aggregation?: "minimum" | "maximum" | "any";
+  operator?: "lt" | "le" | "gt" | "ge" | "eq";
+  threshold?: number;
+  observed?: Record<string, number>;
 }
 
 export interface ResourceEvidenceHistory {

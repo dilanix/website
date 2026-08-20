@@ -189,18 +189,24 @@ export function ResourceEvidencePanel({
   );
 }
 
-const operatorLabels: Record<
-  ResourceEvidence["signals"][number]["operator"],
-  string
-> = {
+const operatorLabels = {
   lt: "<",
   le: "≤",
   gt: ">",
   ge: "≥",
   eq: "=",
-};
+} as const;
 
 function signalReason(signal: ResourceEvidence["signals"][number]) {
+  if (
+    !signal.field ||
+    !signal.operator ||
+    signal.threshold === undefined ||
+    !signal.aggregation ||
+    !signal.observed
+  ) {
+    return `Detected from ${signal.metric_keys.join(", ")} using an earlier evidence schema.`;
+  }
   const observed = Object.entries(signal.observed)
     .map(([key, value]) => `${key}: ${value}`)
     .join(", ");

@@ -67,4 +67,23 @@ describe("ResourceEvidencePanel", () => {
       screen.getByText(/No evidence snapshot is available yet/),
     ).toBeInTheDocument();
   });
+
+  it("renders historical signals that do not contain rule details", () => {
+    const historical: ResourceEvidence = {
+      ...evidence,
+      signals: [
+        {
+          key: "low_utilization",
+          severity: "info",
+          metric_keys: ["cpu.utilization"],
+        },
+      ],
+    };
+    render(
+      <ResourceEvidencePanel evidence={historical} history={[historical]} />,
+    );
+    expect(
+      screen.getByText(/using an earlier evidence schema/),
+    ).toBeInTheDocument();
+  });
 });
