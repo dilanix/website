@@ -6,8 +6,10 @@ import { humanize } from "../presentation";
 
 export function ResourceEvidencePanel({
   evidence,
+  history,
 }: {
   evidence: ResourceEvidence | null;
+  history: ResourceEvidence[];
 }) {
   if (!evidence)
     return (
@@ -39,7 +41,8 @@ export function ResourceEvidencePanel({
         inputs for future validation and recommendations, not recommendations
         themselves.
       </p>
-      <dl className="border-foreground/10 grid overflow-hidden rounded-xl border sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="border-foreground/10 grid overflow-hidden rounded-xl border sm:grid-cols-2 lg:grid-cols-5">
+        <EvidenceStat label="Policy version" value={evidence.schemaVersion} />
         <EvidenceStat
           label="Quality score"
           value={`${evidence.quality.score}%`}
@@ -102,7 +105,14 @@ export function ResourceEvidencePanel({
                   key={`${signal.key}-${signal.metric_keys.join("-")}`}
                   className="flex items-start justify-between gap-3"
                 >
-                  <span>{humanize(signal.key)}</span>
+                  <span>
+                    <span className="block font-medium">
+                      {humanize(signal.key)}
+                    </span>
+                    <span className="text-muted-foreground mt-1 block leading-5">
+                      {signalReason(signal)}
+                    </span>
+                  </span>
                   <StatusBadge
                     status={
                       signal.severity === "warning" ? "warning" : "neutral"
@@ -128,8 +138,73 @@ export function ResourceEvidencePanel({
           </div>
         </article>
       </div>
+      <div className="border-foreground/10 mt-4 overflow-hidden rounded-xl border">
+        <div className="border-foreground/10 border-b px-4 py-3">
+          <h3 className="text-sm font-medium">Evidence history</h3>
+          <p className="text-muted-foreground mt-1 text-xs">
+            Previous idempotent analysis snapshots and the policy version used.
+          </p>
+        </div>
+        {history.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-2xl text-left text-xs">
+              <thead className="text-muted-foreground bg-foreground/[0.025]">
+                <tr>
+                  <th className="px-4 py-2 font-medium">Window end</th>
+                  <th className="px-4 py-2 font-medium">Policy</th>
+                  <th className="px-4 py-2 font-medium">Quality</th>
+                  <th className="px-4 py-2 font-medium">Metric coverage</th>
+                  <th className="px-4 py-2 font-medium">Signals</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((snapshot) => (
+                  <tr
+                    key={snapshot.id}
+                    className="border-foreground/7 border-t"
+                  >
+                    <td className="px-4 py-3">
+                      {formatDateTime(snapshot.windowEnd)}
+                    </td>
+                    <td className="px-4 py-3 font-mono">
+                      {snapshot.schemaVersion}
+                    </td>
+                    <td className="px-4 py-3">{snapshot.quality.score}%</td>
+                    <td className="px-4 py-3">
+                      {snapshot.quality.metric_coverage_percent}%
+                    </td>
+                    <td className="px-4 py-3">{snapshot.signals.length}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-muted-foreground px-4 py-6 text-sm">
+            No historical snapshots yet.
+          </p>
+        )}
+      </div>
     </Section>
   );
+}
+
+const operatorLabels: Record<
+  ResourceEvidence["signals"][number]["operator"],
+  string
+> = {
+  lt: "<",
+  le: "≤",
+  gt: ">",
+  ge: "≥",
+  eq: "=",
+};
+
+function signalReason(signal: ResourceEvidence["signals"][number]) {
+  const observed = Object.entries(signal.observed)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(", ");
+  return `${humanize(signal.field)} ${operatorLabels[signal.operator]} ${signal.threshold}; observed ${observed}. Rule aggregation: ${signal.aggregation}.`;
 }
 
 function EvidenceStat({ label, value }: { label: string; value: string }) {

@@ -127,6 +127,9 @@ describe("CostOpsSyncControls", () => {
         heartbeatAt: "2026-08-19T20:00:00Z",
         errorCode: null,
         errorMessage: null,
+        warningCount: 0,
+        warnings: [],
+        summary: {},
       },
     };
     view.rerender(<CostOpsSyncControls onSyncCompleted={onSyncCompleted} />);

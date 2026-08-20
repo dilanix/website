@@ -67,6 +67,14 @@ export interface SyncRun {
   heartbeatAt: string | null;
   errorCode: string | null;
   errorMessage: string | null;
+  warningCount: number;
+  warnings: {
+    stage?: string;
+    code?: string;
+    message?: string;
+    count?: number;
+  }[];
+  summary: Record<string, unknown>;
 }
 export interface MoneyValue {
   amount: string;

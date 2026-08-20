@@ -33,6 +33,11 @@ const evidence: ResourceEvidence = {
       key: "low_utilization",
       severity: "info",
       metric_keys: ["cpu.utilization"],
+      field: "average",
+      aggregation: "maximum",
+      operator: "lt",
+      threshold: 20,
+      observed: { "cpu.utilization": 12.5 },
     },
   ],
   quality: {
@@ -48,16 +53,16 @@ const evidence: ResourceEvidence = {
 
 describe("ResourceEvidencePanel", () => {
   it("renders quality, normalized facts, signals, and missing metrics", () => {
-    render(<ResourceEvidencePanel evidence={evidence} />);
+    render(<ResourceEvidencePanel evidence={evidence} history={[evidence]} />);
     expect(screen.getByText("Analysis Evidence")).toBeInTheDocument();
-    expect(screen.getByText("65%")).toBeInTheDocument();
+    expect(screen.getAllByText("65%")).toHaveLength(2);
     expect(screen.getByText("Avg 12.5%")).toBeInTheDocument();
     expect(screen.getByText("Low Utilization")).toBeInTheDocument();
     expect(screen.getByText("memory.utilization")).toBeInTheDocument();
   });
 
   it("shows the pre-analysis state without inventing facts", () => {
-    render(<ResourceEvidencePanel evidence={null} />);
+    render(<ResourceEvidencePanel evidence={null} history={[]} />);
     expect(
       screen.getByText(/No evidence snapshot is available yet/),
     ).toBeInTheDocument();

@@ -24,10 +24,12 @@ export function ResourceDetailView({
   resource,
   initialAnalytics,
   initialEvidence,
+  initialEvidenceHistory,
 }: {
   resource: CloudResource;
   initialAnalytics: ResourceAnalytics | null;
   initialEvidence: ResourceEvidence | null;
+  initialEvidenceHistory: ResourceEvidence[];
 }) {
   const { integrations } = useCostOps();
   const integration = integrations.find(
@@ -110,7 +112,10 @@ export function ResourceDetailView({
         </Section>
       ) : null}
       {metricDefinition ? (
-        <ResourceEvidencePanel evidence={initialEvidence} />
+        <ResourceEvidencePanel
+          evidence={initialEvidence}
+          history={initialEvidenceHistory}
+        />
       ) : null}
       <Section title="Tags">
         {Object.keys(resource.tags).length ? (

@@ -25,7 +25,14 @@ import type {
   ResourceAnalytics,
   TimeRange,
 } from "../resources/analytics/types";
-import type { ResourceEvidence } from "../resources/analytics/evidence-types";
+import type {
+  ResourceEvidence,
+  ResourceEvidenceHistory,
+} from "../resources/analytics/evidence-types";
+import type {
+  AnalysisPolicy,
+  AnalysisPolicyDefinition,
+} from "../policies/types";
 
 type ProviderCatalogDto = {
   slug: string;
@@ -80,6 +87,9 @@ type SyncDto = {
   heartbeat_at: string | null;
   error_code: string | null;
   error_message: string | null;
+  warning_count: number;
+  warnings: SyncRun["warnings"];
+  summary: Record<string, unknown>;
   created_at: string;
 };
 type OverviewDto = {
@@ -186,6 +196,30 @@ type ResourceAnalyticsDto = {
     observed_metric_keys: string[];
   };
 };
+type ResourceEvidenceDto = {
+  id: string;
+  analysis_type: string;
+  schema_version: string;
+  window_start: string;
+  window_end: string;
+  updated_at: string;
+  evidence: {
+    resource_type: string;
+    metrics: ResourceEvidence["metrics"];
+    signals: ResourceEvidence["signals"];
+  };
+  quality: ResourceEvidence["quality"];
+};
+type AnalysisPolicyDto = {
+  id: string;
+  analysis_type: string;
+  resource_type: string;
+  version: string;
+  definition: AnalysisPolicyDefinition;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
 
 const base = (organizationId: string) =>
   `/v1/organizations/${organizationId}/costops`;
@@ -216,6 +250,9 @@ const run = (dto: SyncDto): SyncRun => ({
   heartbeatAt: dto.heartbeat_at,
   errorCode: dto.error_code,
   errorMessage: dto.error_message,
+  warningCount: dto.warning_count,
+  warnings: dto.warnings,
+  summary: dto.summary,
 });
 function integration(
   dto: IntegrationDto,
@@ -652,34 +689,102 @@ export async function getResourceEvidence(
   resourceId: string,
   token: string,
 ): Promise<ResourceEvidence | null> {
+  const dto = await coreRequest<ResourceEvidenceDto | null>(
+    `${base(organizationId)}/resources/${resourceId}/evidence`,
+    token,
+  );
+  return dto ? mapEvidence(dto) : null;
+}
+
+const mapEvidence = (dto: ResourceEvidenceDto): ResourceEvidence => ({
+  id: dto.id,
+  analysisType: dto.analysis_type,
+  schemaVersion: dto.schema_version,
+  windowStart: dto.window_start,
+  windowEnd: dto.window_end,
+  updatedAt: dto.updated_at,
+  resourceType: dto.evidence.resource_type,
+  metrics: dto.evidence.metrics,
+  signals: dto.evidence.signals,
+  quality: dto.quality,
+});
+
+export async function getResourceEvidenceHistory(
+  organizationId: string,
+  resourceId: string,
+  token: string,
+): Promise<ResourceEvidenceHistory> {
   const dto = await coreRequest<{
-    id: string;
-    analysis_type: string;
-    schema_version: string;
-    window_start: string;
-    window_end: string;
-    updated_at: string;
-    evidence: {
-      resource_type: string;
-      metrics: ResourceEvidence["metrics"];
-      signals: ResourceEvidence["signals"];
-    };
-    quality: ResourceEvidence["quality"];
-  } | null>(`${base(organizationId)}/resources/${resourceId}/evidence`, token);
-  return dto
-    ? {
-        id: dto.id,
-        analysisType: dto.analysis_type,
-        schemaVersion: dto.schema_version,
-        windowStart: dto.window_start,
-        windowEnd: dto.window_end,
-        updatedAt: dto.updated_at,
-        resourceType: dto.evidence.resource_type,
-        metrics: dto.evidence.metrics,
-        signals: dto.evidence.signals,
-        quality: dto.quality,
-      }
-    : null;
+    items: ResourceEvidenceDto[];
+    total: number;
+    page: number;
+    page_size: number;
+    pages: number;
+  }>(`${base(organizationId)}/resources/${resourceId}/evidence/history`, token);
+  return {
+    items: dto.items.map(mapEvidence),
+    total: dto.total,
+    page: dto.page,
+    pageSize: dto.page_size,
+    pages: dto.pages,
+  };
+}
+
+const mapPolicy = (dto: AnalysisPolicyDto): AnalysisPolicy => ({
+  id: dto.id,
+  analysisType: dto.analysis_type,
+  resourceType: dto.resource_type,
+  version: dto.version,
+  definition: dto.definition,
+  isActive: dto.is_active,
+  createdAt: dto.created_at,
+  updatedAt: dto.updated_at,
+});
+
+export async function listAnalysisPolicies(token: string) {
+  return (
+    await coreRequest<AnalysisPolicyDto[]>(
+      "/v1/costops/analysis-policies",
+      token,
+    )
+  ).map(mapPolicy);
+}
+
+export async function createAnalysisPolicy(
+  token: string,
+  input: {
+    resourceType: string;
+    version: string;
+    definition: AnalysisPolicyDefinition;
+    activate: boolean;
+  },
+) {
+  return mapPolicy(
+    await coreRequest<AnalysisPolicyDto>(
+      "/v1/costops/analysis-policies",
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resource_type: input.resourceType,
+          version: input.version,
+          definition: input.definition,
+          activate: input.activate,
+        }),
+      },
+    ),
+  );
+}
+
+export async function activateAnalysisPolicy(token: string, policyId: string) {
+  return mapPolicy(
+    await coreRequest<AnalysisPolicyDto>(
+      `/v1/costops/analysis-policies/${policyId}/activate`,
+      token,
+      { method: "POST" },
+    ),
+  );
 }
 export async function getSnapshot(
   organizationId: string,

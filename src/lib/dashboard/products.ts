@@ -12,7 +12,10 @@ const productNavigation: Record<string, { label: string; suffix: string }[]> = {
   ],
 };
 
-export function toDashboardProduct(product: CoreProduct): DashboardProduct {
+export function toDashboardProduct(
+  product: CoreProduct,
+  options?: { isSuperuser?: boolean },
+): DashboardProduct {
   const base = `/dashboard/${product.slug}`;
   return {
     id: product.id,
@@ -24,9 +27,15 @@ export function toDashboardProduct(product: CoreProduct): DashboardProduct {
     href: base as Route,
     navigation: (
       productNavigation[product.slug] ?? [{ label: "Overview", suffix: "" }]
-    ).map((item) => ({
-      label: item.label,
-      href: `${base}${item.suffix}` as Route,
-    })),
+    )
+      .concat(
+        product.slug === "costops" && options?.isSuperuser
+          ? [{ label: "Policies", suffix: "/policies" }]
+          : [],
+      )
+      .map((item) => ({
+        label: item.label,
+        href: `${base}${item.suffix}` as Route,
+      })),
   };
 }

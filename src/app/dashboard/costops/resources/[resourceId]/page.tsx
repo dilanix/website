@@ -5,6 +5,7 @@ import {
   getResourceAction,
   getResourceAnalyticsAction,
   getResourceEvidenceAction,
+  getResourceEvidenceHistoryAction,
 } from "../../actions";
 import { resourceDisplayName } from "@/features/costops/resources/presentation";
 
@@ -26,11 +27,13 @@ export default async function ResourceDetailPage({
   params,
 }: PageProps<"/dashboard/costops/resources/[resourceId]">) {
   const { resourceId } = await params;
-  const [result, analyticsResult, evidenceResult] = await Promise.all([
-    getResourceAction(resourceId),
-    getResourceAnalyticsAction(resourceId, "24h"),
-    getResourceEvidenceAction(resourceId),
-  ]);
+  const [result, analyticsResult, evidenceResult, evidenceHistoryResult] =
+    await Promise.all([
+      getResourceAction(resourceId),
+      getResourceAnalyticsAction(resourceId, "24h"),
+      getResourceEvidenceAction(resourceId),
+      getResourceEvidenceHistoryAction(resourceId),
+    ]);
   if (result.status === 404) notFound();
   if (!result.data) throw new Error("Unable to load resource details.");
   return (
@@ -38,6 +41,7 @@ export default async function ResourceDetailPage({
       resource={result.data}
       initialAnalytics={analyticsResult.data ?? null}
       initialEvidence={evidenceResult.data ?? null}
+      initialEvidenceHistory={evidenceHistoryResult.data?.items ?? []}
     />
   );
 }

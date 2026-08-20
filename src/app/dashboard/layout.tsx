@@ -30,7 +30,9 @@ export default async function DashboardLayout({
           organization.organization_id,
           accessToken,
         )
-      ).map(toDashboardProduct)
+      ).map((product) =>
+        toDashboardProduct(product, { isSuperuser: me.is_superuser }),
+      )
     : [];
 
   return (

@@ -9,6 +9,7 @@ import type {
 } from "@/features/costops/types";
 import type { ResourceQuery } from "@/features/costops/resources/types";
 import type { TimeRange } from "@/features/costops/resources/analytics/types";
+import type { AnalysisPolicyDefinition } from "@/features/costops/policies/types";
 type Result<T> = { data?: T; error?: string; status?: number };
 async function context() {
   const token = await getAccessToken();
@@ -121,4 +122,21 @@ export const getResourceAnalyticsAction = async (
 export const getResourceEvidenceAction = async (resourceId: string) =>
   execute((organizationId, token) =>
     api.getResourceEvidence(organizationId, resourceId, token),
+  );
+export const getResourceEvidenceHistoryAction = async (resourceId: string) =>
+  execute((organizationId, token) =>
+    api.getResourceEvidenceHistory(organizationId, resourceId, token),
+  );
+export const listAnalysisPoliciesAction = async () =>
+  execute((_organizationId, token) => api.listAnalysisPolicies(token));
+export const createAnalysisPolicyAction = async (input: {
+  resourceType: string;
+  version: string;
+  definition: AnalysisPolicyDefinition;
+  activate: boolean;
+}) =>
+  execute((_organizationId, token) => api.createAnalysisPolicy(token, input));
+export const activateAnalysisPolicyAction = async (policyId: string) =>
+  execute((_organizationId, token) =>
+    api.activateAnalysisPolicy(token, policyId),
   );

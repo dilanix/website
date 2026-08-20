@@ -24,7 +24,7 @@ export default async function ProductsPage() {
   const organization = me.organizations[0];
   const products = organization
     ? (await listOrganizationProducts(organization.organization_id, token)).map(
-        toDashboardProduct,
+        (product) => toDashboardProduct(product),
       )
     : [];
   return (

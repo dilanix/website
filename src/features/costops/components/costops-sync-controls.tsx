@@ -43,6 +43,9 @@ export function CostOpsSyncControls({
         : (connected[0]?.id ?? "");
   const integration = connected.find((item) => item.id === resolvedId);
   const activeSync = integration ? api.activeSyncs[integration.id] : undefined;
+  const latestRun = integration
+    ? api.snapshot?.syncRuns[integration.id]?.[0]
+    : undefined;
   const syncing = Boolean(
     integration &&
     (requesting ||
@@ -146,6 +149,7 @@ export function CostOpsSyncControls({
         failed={failed}
         lastSyncedAt={integration.lastSyncedAt}
         now={now}
+        latestRun={latestRun}
       />
       <button
         type="button"
@@ -184,12 +188,14 @@ function SyncStatus({
   failed,
   lastSyncedAt,
   now,
+  latestRun,
 }: {
   syncing: boolean;
   activeSync?: import("../types").SyncRun;
   failed: boolean;
   lastSyncedAt: string | null;
   now: number;
+  latestRun?: import("../types").SyncRun;
 }) {
   if (syncing) {
     const current = activeSync?.progressCurrent ?? 0;
@@ -219,6 +225,20 @@ function SyncStatus({
     return (
       <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 text-xs font-medium text-amber-600 dark:text-amber-300">
         <AlertTriangle size={12} aria-hidden="true" /> Sync failed
+      </span>
+    );
+  if (latestRun?.status === "succeeded" && latestRun.warningCount > 0)
+    return (
+      <span
+        className="inline-flex h-9 items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 text-xs font-medium text-amber-600 dark:text-amber-300"
+        title={latestRun.warnings
+          .map((warning) => warning.message)
+          .filter(Boolean)
+          .join("\n")}
+      >
+        <AlertTriangle size={12} aria-hidden="true" /> Synced with{" "}
+        {latestRun.warningCount} warning
+        {latestRun.warningCount === 1 ? "" : "s"}
       </span>
     );
   return (
