@@ -57,6 +57,15 @@ export const triggerSyncAction = async (id: string) =>
   execute((organizationId, token) =>
     api.triggerSync(organizationId, id, token),
   );
+export const getSyncHealthAction = async (query: {
+  integrationId?: string;
+  status?: string;
+  warningsOnly?: boolean;
+  page?: number;
+}) =>
+  execute((organizationId, token) =>
+    api.getSyncHealth(organizationId, token, query),
+  );
 export const updateSyncSettingsAction = async (
   id: string,
   autoSyncIntervalMinutes: 60 | 360 | 720 | 1440 | null,

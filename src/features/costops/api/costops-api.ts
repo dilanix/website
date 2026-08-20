@@ -75,6 +75,7 @@ type AccountDto = {
 };
 type SyncDto = {
   id: string;
+  integration_id: string;
   sync_type: "initial" | "costs" | "full";
   status: "pending" | "running" | "succeeded" | "failed";
   started_at: string | null;
@@ -240,7 +241,7 @@ const account = (dto: AccountDto): CloudAccount => ({
 });
 const run = (dto: SyncDto): SyncRun => ({
   id: dto.id,
-  integrationId: "",
+  integrationId: dto.integration_id ?? "",
   status: dto.status,
   recordsProcessed: dto.records_processed,
   stage: dto.stage,
@@ -254,6 +255,104 @@ const run = (dto: SyncDto): SyncRun => ({
   warnings: dto.warnings,
   summary: dto.summary,
 });
+export type SyncHealth = {
+  summary: {
+    totalRuns: number;
+    succeededRuns: number;
+    failedRuns: number;
+    runsWithWarnings: number;
+    activeRuns: number;
+    staleResources: number;
+    insufficientEvidence: number;
+    resourcesMissingPolicy: number;
+    latestSuccessAt: string | null;
+  };
+  alerts: {
+    key: string;
+    severity: "warning" | "critical";
+    message: string;
+    count: number;
+    integrationId: string | null;
+    observedAt: string;
+  }[];
+  runs: SyncRun[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pages: number;
+  generatedAt: string;
+};
+
+export async function getSyncHealth(
+  organizationId: string,
+  token: string,
+  query: {
+    integrationId?: string;
+    status?: string;
+    warningsOnly?: boolean;
+    page?: number;
+  } = {},
+): Promise<SyncHealth> {
+  const params = new URLSearchParams();
+  if (query.integrationId) params.set("integration_id", query.integrationId);
+  if (query.status) params.set("run_status", query.status);
+  if (query.warningsOnly) params.set("warnings_only", "true");
+  params.set("page", String(query.page ?? 1));
+  const dto = await coreRequest<{
+    summary: {
+      total_runs: number;
+      succeeded_runs: number;
+      failed_runs: number;
+      runs_with_warnings: number;
+      active_runs: number;
+      stale_resources: number;
+      insufficient_evidence: number;
+      resources_missing_policy: number;
+      latest_success_at: string | null;
+    };
+    alerts: {
+      key: string;
+      severity: "warning" | "critical";
+      message: string;
+      count: number;
+      integration_id: string | null;
+      observed_at: string;
+    }[];
+    runs: SyncDto[];
+    total: number;
+    page: number;
+    page_size: number;
+    pages: number;
+    generated_at: string;
+  }>(`${base(organizationId)}/sync-health?${params}`, token);
+  return {
+    summary: {
+      totalRuns: dto.summary.total_runs,
+      succeededRuns: dto.summary.succeeded_runs,
+      failedRuns: dto.summary.failed_runs,
+      runsWithWarnings: dto.summary.runs_with_warnings,
+      activeRuns: dto.summary.active_runs,
+      staleResources: dto.summary.stale_resources,
+      insufficientEvidence: dto.summary.insufficient_evidence,
+      resourcesMissingPolicy: dto.summary.resources_missing_policy,
+      latestSuccessAt: dto.summary.latest_success_at,
+    },
+    alerts: dto.alerts.map((alert) => ({
+      key: alert.key,
+      severity: alert.severity,
+      message: alert.message,
+      count: alert.count,
+      integrationId: alert.integration_id,
+      observedAt: alert.observed_at,
+    })),
+    runs: dto.runs.map(run),
+    total: dto.total,
+    page: dto.page,
+    pageSize: dto.page_size,
+    pages: dto.pages,
+    generatedAt: dto.generated_at,
+  };
+}
 function integration(
   dto: IntegrationDto,
   organizationId: string,

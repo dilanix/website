@@ -9,6 +9,7 @@ const productNavigation: Record<string, { label: string; suffix: string }[]> = {
     { label: "Resources", suffix: "/resources" },
     { label: "Recommendations", suffix: "/recommendations" },
     { label: "Integrations", suffix: "/integrations" },
+    { label: "Sync Health", suffix: "/sync-health" },
   ],
 };
 
