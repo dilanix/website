@@ -118,3 +118,7 @@ export const getResourceAnalyticsAction = async (
   execute((organizationId, token) =>
     api.getResourceAnalytics(organizationId, resourceId, range, token),
   );
+export const getResourceEvidenceAction = async (resourceId: string) =>
+  execute((organizationId, token) =>
+    api.getResourceEvidence(organizationId, resourceId, token),
+  );

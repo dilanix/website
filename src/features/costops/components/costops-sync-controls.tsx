@@ -193,7 +193,7 @@ function SyncStatus({
 }) {
   if (syncing) {
     const current = activeSync?.progressCurrent ?? 0;
-    const total = activeSync?.progressTotal ?? 4;
+    const total = activeSync?.progressTotal ?? 5;
     const percent = Math.min(
       100,
       Math.round((current / Math.max(total, 1)) * 100),

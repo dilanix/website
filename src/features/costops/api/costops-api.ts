@@ -25,6 +25,7 @@ import type {
   ResourceAnalytics,
   TimeRange,
 } from "../resources/analytics/types";
+import type { ResourceEvidence } from "../resources/analytics/evidence-types";
 
 type ProviderCatalogDto = {
   slug: string;
@@ -645,6 +646,40 @@ export async function getResourceAnalytics(
     token,
   );
   return mapResourceAnalytics(dto);
+}
+export async function getResourceEvidence(
+  organizationId: string,
+  resourceId: string,
+  token: string,
+): Promise<ResourceEvidence | null> {
+  const dto = await coreRequest<{
+    id: string;
+    analysis_type: string;
+    schema_version: string;
+    window_start: string;
+    window_end: string;
+    updated_at: string;
+    evidence: {
+      resource_type: string;
+      metrics: ResourceEvidence["metrics"];
+      signals: ResourceEvidence["signals"];
+    };
+    quality: ResourceEvidence["quality"];
+  } | null>(`${base(organizationId)}/resources/${resourceId}/evidence`, token);
+  return dto
+    ? {
+        id: dto.id,
+        analysisType: dto.analysis_type,
+        schemaVersion: dto.schema_version,
+        windowStart: dto.window_start,
+        windowEnd: dto.window_end,
+        updatedAt: dto.updated_at,
+        resourceType: dto.evidence.resource_type,
+        metrics: dto.evidence.metrics,
+        signals: dto.evidence.signals,
+        quality: dto.quality,
+      }
+    : null;
 }
 export async function getSnapshot(
   organizationId: string,

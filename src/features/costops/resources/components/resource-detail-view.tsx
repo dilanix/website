@@ -17,13 +17,17 @@ import type { CloudResource } from "../types";
 import type { ResourceAnalytics } from "../analytics/types";
 import { ResourceUtilization } from "./resource-utilization";
 import { RESOURCE_METRIC_DEFINITIONS } from "../analytics/metric-definitions";
+import type { ResourceEvidence } from "../analytics/evidence-types";
+import { ResourceEvidencePanel } from "./resource-evidence";
 
 export function ResourceDetailView({
   resource,
   initialAnalytics,
+  initialEvidence,
 }: {
   resource: CloudResource;
   initialAnalytics: ResourceAnalytics | null;
+  initialEvidence: ResourceEvidence | null;
 }) {
   const { integrations } = useCostOps();
   const integration = integrations.find(
@@ -104,6 +108,9 @@ export function ResourceDetailView({
             description="Monitoring data could not be loaded. Try refreshing this page."
           />
         </Section>
+      ) : null}
+      {metricDefinition ? (
+        <ResourceEvidencePanel evidence={initialEvidence} />
       ) : null}
       <Section title="Tags">
         {Object.keys(resource.tags).length ? (
