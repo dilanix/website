@@ -1,6 +1,12 @@
 export type MetricKey = string;
 export type MetricUnit =
-  "percent" | "bytes" | "bytes_per_second" | "iops" | "count";
+  | "percent"
+  | "bytes"
+  | "bytes_per_second"
+  | "iops"
+  | "count"
+  | "seconds"
+  | "milliseconds";
 export type MetricAvailability =
   "available" | "unavailable" | "no_data" | "loading" | "stale" | "error";
 export type TimeRange = "24h" | "7d" | "30d";

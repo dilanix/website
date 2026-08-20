@@ -21,6 +21,14 @@ export function formatMetricValue(
       return integer.format(value);
     case "count":
       return value < 10 ? decimal.format(value) : integer.format(value);
+    case "seconds":
+      return value < 1
+        ? `${decimal.format(value * 1000)} ms`
+        : `${decimal.format(value)} s`;
+    case "milliseconds":
+      return value >= 1000
+        ? `${decimal.format(value / 1000)} s`
+        : `${decimal.format(value)} ms`;
   }
 }
 

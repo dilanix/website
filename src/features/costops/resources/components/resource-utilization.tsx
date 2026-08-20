@@ -524,15 +524,21 @@ function CapacityAnalysis({
           <div className="lg:text-right">
             <p className="text-muted-foreground text-xs">Overall utilization</p>
             <div className="mt-3">
-              <StatusBadge
-                status={
-                  selected.capacityAnalysis.classification === "High"
-                    ? "warning"
-                    : "neutral"
-                }
-              >
-                {selected.capacityAnalysis.classification}
-              </StatusBadge>
+              {observed.length ? (
+                <StatusBadge
+                  status={
+                    selected.capacityAnalysis.classification === "High"
+                      ? "warning"
+                      : "neutral"
+                  }
+                >
+                  {selected.capacityAnalysis.classification}
+                </StatusBadge>
+              ) : (
+                <span className="text-muted-foreground text-xs">
+                  Not classified
+                </span>
+              )}
             </div>
           </div>
         </div>

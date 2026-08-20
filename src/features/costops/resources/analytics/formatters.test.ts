@@ -10,6 +10,8 @@ describe("resource metric formatters", () => {
     expect(formatMetricValue(8.34, "percent")).toBe("8.3%");
     expect(formatMetricValue(1_800_000, "bytes_per_second")).toBe("1.8 MB/s");
     expect(formatMetricValue(14, "iops")).toBe("14");
+    expect(formatMetricValue(0.125, "seconds")).toBe("125 ms");
+    expect(formatMetricValue(1_250, "milliseconds")).toBe("1.3 s");
     expect(formatBytes(2_400_000_000)).toBe("2.4 GB");
   });
 
