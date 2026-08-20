@@ -51,9 +51,37 @@ export const COMPUTE_INSTANCE_METRICS: ResourceMetricDefinition = {
   ],
 };
 
+export const CONTAINER_CLUSTER_METRICS: ResourceMetricDefinition = {
+  latest: [
+    { key: "cpu.utilization", shortLabel: "CPU" },
+    { key: "memory.utilization", shortLabel: "Memory" },
+  ],
+  groups: [
+    {
+      id: "cpu",
+      title: "CPU",
+      description:
+        "Running-task-weighted utilization across active ECS services",
+      keys: ["cpu.utilization"],
+      presentation: "distribution",
+      chart: "single",
+    },
+    {
+      id: "memory",
+      title: "Memory",
+      description:
+        "Running-task-weighted utilization across active ECS services",
+      keys: ["memory.utilization"],
+      presentation: "distribution",
+      chart: "single",
+    },
+  ],
+};
+
 export const RESOURCE_METRIC_DEFINITIONS: Record<
   string,
   ResourceMetricDefinition
 > = {
   compute_instance: COMPUTE_INSTANCE_METRICS,
+  container_cluster: CONTAINER_CLUSTER_METRICS,
 };

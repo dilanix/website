@@ -473,7 +473,7 @@ function CapacityAnalysis({
             </p>
             <dl className="mt-3 grid grid-cols-2 gap-4">
               <CompactStat
-                label="Instance type"
+                label="Resource class"
                 value={analytics.capacity.resourceClass}
               />
               {analytics.capacity.attributes.map((attribute) => (
