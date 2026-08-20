@@ -18,6 +18,13 @@ import type {
   CloudResourcePage,
   ResourceQuery,
 } from "../resources/types";
+import type {
+  HealthSignal,
+  LatestMetric,
+  MetricSeries,
+  ResourceAnalytics,
+  TimeRange,
+} from "../resources/analytics/types";
 
 type ProviderCatalogDto = {
   slug: string;
@@ -130,6 +137,49 @@ type ResourceFilterOptionsDto = {
   regions: FilterOptionDto[];
   states: FilterOptionDto[];
 };
+type MetricSeriesDto = {
+  key: string;
+  label: string;
+  unit: MetricSeries["unit"];
+  total_unit: MetricSeries["totalUnit"] | null;
+  points: { timestamp: string; value: number }[];
+  summary: MetricSeries["summary"] | null;
+  availability: Exclude<MetricSeries["availability"], "loading">;
+  message: string | null;
+};
+type LatestMetricDto = {
+  key: string;
+  label: string;
+  value: {
+    value: number | null;
+    unit: LatestMetric["value"]["unit"];
+    observed_at: string | null;
+    availability: Exclude<LatestMetric["value"]["availability"], "loading">;
+    message: string | null;
+  };
+};
+type HealthSignalDto = Omit<HealthSignal, "timestamp"> & {
+  observed_at: string | null;
+};
+type ResourceAnalyticsDto = {
+  resource_id: string;
+  generated_at: string;
+  freshness_threshold_seconds: number;
+  range: TimeRange;
+  start_at: string;
+  end_at: string;
+  latest: Record<string, LatestMetricDto>;
+  series: Record<string, MetricSeriesDto>;
+  health: { overall: HealthSignalDto; signals: HealthSignalDto[] };
+  capacity: {
+    resource_class: string;
+    attributes: { label: string; value: string }[];
+  };
+  capacity_analysis: {
+    classification: "Low" | "Moderate" | "High";
+    observed_metric_keys: string[];
+  };
+};
 
 const base = (organizationId: string) =>
   `/v1/organizations/${organizationId}/costops`;
@@ -220,6 +270,68 @@ export const mapCloudResource = (dto: ResourceDto): CloudResource => ({
   createdAt: dto.created_at,
   updatedAt: dto.updated_at,
 });
+
+export const mapResourceAnalytics = (
+  dto: ResourceAnalyticsDto,
+): ResourceAnalytics => {
+  const signal = (value: HealthSignalDto): HealthSignal => ({
+    ...value,
+    timestamp: value.observed_at,
+  });
+  const latest = Object.fromEntries(
+    Object.entries(dto.latest).map(([key, value]) => [
+      key,
+      {
+        key: value.key,
+        label: value.label,
+        value: {
+          value: value.value.value,
+          unit: value.value.unit,
+          timestamp: value.value.observed_at,
+          availability: value.value.availability,
+          message: value.value.message ?? undefined,
+        },
+      },
+    ]),
+  );
+  const series = Object.fromEntries(
+    Object.entries(dto.series).map(([key, value]) => [
+      key,
+      {
+        ...value,
+        totalUnit: value.total_unit ?? undefined,
+        summary: value.summary ?? undefined,
+        message: value.message ?? undefined,
+      },
+    ]),
+  );
+  return {
+    resourceId: dto.resource_id,
+    generatedAt: dto.generated_at,
+    freshnessThresholdMinutes: dto.freshness_threshold_seconds / 60,
+    latest,
+    health: {
+      overall: signal(dto.health.overall),
+      signals: dto.health.signals.map(signal),
+    },
+    capacity: {
+      resourceClass: dto.capacity.resource_class,
+      attributes: dto.capacity.attributes,
+    },
+    ranges: {
+      [dto.range]: {
+        range: dto.range,
+        startAt: dto.start_at,
+        endAt: dto.end_at,
+        series,
+        capacityAnalysis: {
+          classification: dto.capacity_analysis.classification,
+          observedMetricKeys: dto.capacity_analysis.observed_metric_keys,
+        },
+      },
+    },
+  };
+};
 
 export async function listIntegrations(organizationId: string, token: string) {
   return coreRequest<IntegrationDto[]>(
@@ -511,6 +623,18 @@ export async function getResource(
       token,
     ),
   );
+}
+export async function getResourceAnalytics(
+  organizationId: string,
+  resourceId: string,
+  range: TimeRange,
+  token: string,
+) {
+  const dto = await coreRequest<ResourceAnalyticsDto>(
+    `${base(organizationId)}/resources/${resourceId}/analytics?range=${range}`,
+    token,
+  );
+  return mapResourceAnalytics(dto);
 }
 export async function getSnapshot(
   organizationId: string,

@@ -8,6 +8,7 @@ import type {
   OverviewPeriod,
 } from "@/features/costops/types";
 import type { ResourceQuery } from "@/features/costops/resources/types";
+import type { TimeRange } from "@/features/costops/resources/analytics/types";
 type Result<T> = { data?: T; error?: string; status?: number };
 async function context() {
   const token = await getAccessToken();
@@ -109,4 +110,11 @@ export const resourceFilterOptionsAction = async () =>
 export const getResourceAction = async (resourceId: string) =>
   execute((organizationId, token) =>
     api.getResource(organizationId, resourceId, token),
+  );
+export const getResourceAnalyticsAction = async (
+  resourceId: string,
+  range: TimeRange,
+) =>
+  execute((organizationId, token) =>
+    api.getResourceAnalytics(organizationId, resourceId, range, token),
   );

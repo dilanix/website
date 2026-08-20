@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ResourceDetailView } from "@/features/costops/resources/components/resource-detail-view";
-import { getResourceAction } from "../../actions";
+import { getResourceAction, getResourceAnalyticsAction } from "../../actions";
 import { resourceDisplayName } from "@/features/costops/resources/presentation";
 
 export async function generateMetadata({
@@ -22,8 +22,16 @@ export default async function ResourceDetailPage({
   params,
 }: PageProps<"/dashboard/costops/resources/[resourceId]">) {
   const { resourceId } = await params;
-  const result = await getResourceAction(resourceId);
+  const [result, analyticsResult] = await Promise.all([
+    getResourceAction(resourceId),
+    getResourceAnalyticsAction(resourceId, "24h"),
+  ]);
   if (result.status === 404) notFound();
   if (!result.data) throw new Error("Unable to load resource details.");
-  return <ResourceDetailView resource={result.data} />;
+  return (
+    <ResourceDetailView
+      resource={result.data}
+      initialAnalytics={analyticsResult.data ?? null}
+    />
+  );
 }

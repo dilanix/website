@@ -14,8 +14,17 @@ import {
   resourceDisplayName,
 } from "../presentation";
 import type { CloudResource } from "../types";
+import type { ResourceAnalytics } from "../analytics/types";
+import { ResourceUtilization } from "./resource-utilization";
+import { RESOURCE_METRIC_DEFINITIONS } from "../analytics/metric-definitions";
 
-export function ResourceDetailView({ resource }: { resource: CloudResource }) {
+export function ResourceDetailView({
+  resource,
+  initialAnalytics,
+}: {
+  resource: CloudResource;
+  initialAnalytics: ResourceAnalytics | null;
+}) {
   const { integrations } = useCostOps();
   const integration = integrations.find(
     (item) => item.id === resource.integrationId,
@@ -34,6 +43,7 @@ export function ResourceDetailView({ resource }: { resource: CloudResource }) {
     ["External ID", resource.externalId],
   ];
   const configEntries = configurationEntries(resource);
+  const metricDefinition = RESOURCE_METRIC_DEFINITIONS[resource.resourceType];
   return (
     <div className="flex flex-col gap-8">
       <header>
@@ -82,6 +92,19 @@ export function ResourceDetailView({ resource }: { resource: CloudResource }) {
           />
         )}
       </Section>
+      {metricDefinition && initialAnalytics ? (
+        <ResourceUtilization
+          analytics={initialAnalytics}
+          definition={metricDefinition}
+        />
+      ) : metricDefinition ? (
+        <Section title="Utilization & Performance">
+          <CompactEmpty
+            title="Analytics unavailable"
+            description="Monitoring data could not be loaded. Try refreshing this page."
+          />
+        </Section>
+      ) : null}
       <Section title="Tags">
         {Object.keys(resource.tags).length ? (
           <DefinitionGrid
@@ -97,6 +120,10 @@ export function ResourceDetailView({ resource }: { resource: CloudResource }) {
         )}
       </Section>
       <Section title="Discovery">
+        <p className="text-muted-foreground -mt-2 mb-4 text-xs leading-5">
+          Inventory collection timestamps, separate from monitoring metric
+          observation times above.
+        </p>
         <DefinitionGrid
           entries={[
             ["First discovered", formatDateTime(resource.firstSeenAt)],
@@ -105,11 +132,6 @@ export function ResourceDetailView({ resource }: { resource: CloudResource }) {
           ]}
         />
       </Section>
-      <p className="text-muted-foreground text-xs leading-5">
-        Inventory metadata is the foundation for future evidence-based
-        optimization analysis. Metrics and recommendations are not available in
-        this view yet.
-      </p>
     </div>
   );
 }
