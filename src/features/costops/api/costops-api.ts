@@ -72,6 +72,11 @@ type SyncDto = {
   started_at: string | null;
   finished_at: string | null;
   records_processed: number;
+  stage: string;
+  progress_current: number;
+  progress_total: number;
+  progress_message: string | null;
+  heartbeat_at: string | null;
   error_code: string | null;
   error_message: string | null;
   created_at: string;
@@ -203,6 +208,11 @@ const run = (dto: SyncDto): SyncRun => ({
   integrationId: "",
   status: dto.status,
   recordsProcessed: dto.records_processed,
+  stage: dto.stage,
+  progressCurrent: dto.progress_current,
+  progressTotal: dto.progress_total,
+  progressMessage: dto.progress_message,
+  heartbeatAt: dto.heartbeat_at,
   errorCode: dto.error_code,
   errorMessage: dto.error_message,
 });

@@ -42,6 +42,7 @@ export function CostOpsSyncControls({
         ? selectedId
         : (connected[0]?.id ?? "");
   const integration = connected.find((item) => item.id === resolvedId);
+  const activeSync = integration ? api.activeSyncs[integration.id] : undefined;
   const syncing = Boolean(
     integration &&
     (requesting ||
@@ -141,6 +142,7 @@ export function CostOpsSyncControls({
       ) : null}
       <SyncStatus
         syncing={syncing}
+        activeSync={activeSync}
         failed={failed}
         lastSyncedAt={integration.lastSyncedAt}
         now={now}
@@ -165,7 +167,10 @@ export function CostOpsSyncControls({
         onChange={(interval) => void updateAutoSync(interval)}
       />
       {settingsFailed ? (
-        <span role="alert" className="text-xs text-amber-600 dark:text-amber-300">
+        <span
+          role="alert"
+          className="text-xs text-amber-600 dark:text-amber-300"
+        >
           Auto-sync update failed
         </span>
       ) : null}
@@ -175,26 +180,41 @@ export function CostOpsSyncControls({
 
 function SyncStatus({
   syncing,
+  activeSync,
   failed,
   lastSyncedAt,
   now,
 }: {
   syncing: boolean;
+  activeSync?: import("../types").SyncRun;
   failed: boolean;
   lastSyncedAt: string | null;
   now: number;
 }) {
-  if (syncing)
+  if (syncing) {
+    const current = activeSync?.progressCurrent ?? 0;
+    const total = activeSync?.progressTotal ?? 4;
+    const percent = Math.min(
+      100,
+      Math.round((current / Math.max(total, 1)) * 100),
+    );
     return (
-      <span className="border-foreground/15 text-muted-foreground inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium">
+      <span
+        className="border-foreground/15 text-muted-foreground inline-flex h-9 min-w-44 items-center gap-2 rounded-full border px-3 text-xs font-medium"
+        title={activeSync?.progressMessage ?? "Starting sync"}
+      >
         <RefreshCw
           size={12}
           className="text-accent animate-spin"
           aria-hidden="true"
         />
-        Syncing...
+        <span className="min-w-0 flex-1 truncate">
+          {activeSync?.progressMessage ?? "Starting sync"}
+        </span>
+        <span className="font-mono">{percent}%</span>
       </span>
     );
+  }
   if (failed)
     return (
       <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 text-xs font-medium text-amber-600 dark:text-amber-300">

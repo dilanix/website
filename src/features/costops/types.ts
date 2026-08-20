@@ -60,6 +60,11 @@ export interface SyncRun {
   integrationId: string;
   status: SyncStatus;
   recordsProcessed: number;
+  stage: string;
+  progressCurrent: number;
+  progressTotal: number;
+  progressMessage: string | null;
+  heartbeatAt: string | null;
   errorCode: string | null;
   errorMessage: string | null;
 }

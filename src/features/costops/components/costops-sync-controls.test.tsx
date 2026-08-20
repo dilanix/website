@@ -120,11 +120,18 @@ describe("CostOpsSyncControls", () => {
         integrationId: "integration-1",
         status: "running",
         recordsProcessed: 0,
+        stage: "metrics",
+        progressCurrent: 2,
+        progressTotal: 4,
+        progressMessage: "Collecting resource metrics",
+        heartbeatAt: "2026-08-19T20:00:00Z",
         errorCode: null,
         errorMessage: null,
       },
     };
     view.rerender(<CostOpsSyncControls onSyncCompleted={onSyncCompleted} />);
+    expect(screen.getByText("Collecting resource metrics")).toBeInTheDocument();
+    expect(screen.getByText("50%")).toBeInTheDocument();
     value.activeSyncs = {};
     value.integrations = [
       integration({ lastSyncedAt: "2026-08-19T20:00:00Z" }),
