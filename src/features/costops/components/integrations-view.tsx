@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { RefreshCw, Trash2 } from "lucide-react";
+import { Cloud, RefreshCw, Trash2 } from "lucide-react";
 import { PageHeader, StatusBadge } from "@/components/dashboard/primitives";
 import { useCostOps } from "../costops-context";
 import { getProvider, getProviderShortName } from "../providers/registry";
@@ -8,6 +8,7 @@ import { formatDateTime, formatRelativeTime } from "../utils";
 import { AwsConnectWizard } from "../providers/aws/aws-connect-wizard";
 import type { CostOpsIntegration } from "../types";
 import { CostOpsAutoSyncSelect } from "./costops-auto-sync-select";
+import { NextSyncCountdown } from "./next-sync-countdown";
 
 function safeIntegrationError(item: CostOpsIntegration) {
   if (item.errorCode === "AccountIdMismatchError") {
@@ -155,9 +156,35 @@ export function IntegrationsView() {
               );
             })}
           </div>
-        </section>
-      ) : null}
-      <section>
+              </section>
+            ) : (
+              <section>
+                <h2 className="text-muted-foreground mb-3 text-xs font-semibold tracking-wider uppercase">
+                  Configured
+                </h2>
+
+                <div className="border-foreground/15 bg-card/20 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed p-12 text-center">
+                  <div className="bg-foreground/5 flex h-12 w-12 items-center justify-center rounded-xl">
+                    <Cloud
+                      size={24}
+                      className="text-accent"
+                      aria-hidden="true"
+                    />
+                  </div>
+
+                  <h3 className="text-foreground mt-4 text-sm font-semibold">
+                    No integrations yet
+                  </h3>
+
+                  <p className="text-muted-foreground mt-2 max-w-md text-sm leading-6">
+                    Connect a cloud provider to start importing resources, costs, and
+                    optimization data.
+                  </p>
+                </div>
+              </section>
+            )}
+
+            <section>
         {pageError ? (
           <p role="alert" className="mb-4 text-sm text-red-500">
             {pageError}
@@ -250,8 +277,7 @@ export function IntegrationsView() {
                           ? `Every ${item.autoSyncIntervalMinutes / 60} hour${item.autoSyncIntervalMinutes === 60 ? "" : "s"}`
                           : "Off",
                       ],
-                      ["Next sync", formatDateTime(item.nextSyncAt)],
-                    ].map(([label, value]) => (
+                      ].map(([label, value]) => (
                       <div
                         key={label}
                         className="grid gap-1 sm:grid-cols-[8rem_1fr]"
@@ -260,6 +286,12 @@ export function IntegrationsView() {
                         <dd className="break-all">{value}</dd>
                       </div>
                     ))}
+                <div className="grid gap-1 sm:grid-cols-[8rem_1fr]">
+                  <dt className="text-muted-foreground">Next sync</dt>
+                  <dd>
+                    <NextSyncCountdown nextSyncAt={item.nextSyncAt} />
+                  </dd>
+                </div>
                   </dl>
                   {item.status === "connected" ? (
                     <div className="border-foreground/10 mt-5 border-t pt-5">
