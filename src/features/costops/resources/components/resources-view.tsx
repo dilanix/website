@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
+import { Server } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   queryResourcesAction,
@@ -8,7 +9,6 @@ import {
 } from "@/app/dashboard/costops/actions";
 import {
   DashboardError,
-  EmptyState,
   PageHeader,
   Skeleton,
 } from "@/components/dashboard/primitives";
@@ -244,25 +244,35 @@ export function ResourcesView() {
           ) : null}
         </div>
       ) : (
-        <EmptyState
-          title={hasFilters ? "No filter results" : "No resources"}
-          description={
-            hasFilters
-              ? "No resources match the selected filters."
-              : "Resources will appear here after a connected integration completes inventory collection."
-          }
-          actions={
-            hasFilters ? (
-              <button
-                type="button"
-                onClick={clear}
-                className="border-foreground/15 rounded-lg border px-4 py-2 text-sm"
-              >
-                Clear filters
-              </button>
-            ) : undefined
-          }
-        />
+        <div className="border-foreground/15 bg-card/20 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed p-12 text-center">
+          <div className="bg-foreground/5 flex h-12 w-12 items-center justify-center rounded-xl">
+            <Server
+              size={24}
+              className="text-accent"
+              aria-hidden="true"
+            />
+          </div>
+
+          <h3 className="text-foreground mt-4 text-sm font-semibold">
+            {hasFilters ? "No resources match your filters" : "No resources found"}
+          </h3>
+
+          <p className="text-muted-foreground mt-2 max-w-md text-sm leading-6">
+            {hasFilters
+              ? "No cloud resources match the selected filters. Try changing or clearing the filters."
+              : "No cloud resources have been discovered yet. Connect an integration and run a sync to populate your inventory."}
+          </p>
+
+          {hasFilters ? (
+            <button
+              type="button"
+              onClick={clear}
+              className="border-foreground/15 hover:border-accent/50 hover:text-accent mt-5 rounded-lg border px-4 py-2 text-sm font-medium transition-colors"
+            >
+              Clear filters
+            </button>
+          ) : null}
+        </div>
       )}
     </div>
   );

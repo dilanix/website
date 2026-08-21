@@ -1,13 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { RefreshCw, SlidersHorizontal, Sparkles } from "lucide-react";
-import { StatCard } from "@/components/dashboard/stat-card";
-import { RecommendationCard } from "./recommendation-card";
 import {
-  updateRecommendationStatusAction,
+  Download,
+  RefreshCw,
+  SlidersHorizontal,
+  Sparkles,
+} from "lucide-react";
+
+import { StatCard } from "@/components/dashboard/stat-card";
+import {
   evaluateRecommendationsAction,
+  updateRecommendationStatusAction,
 } from "@/app/dashboard/costops/actions";
+import { exportRecommendationsCsv } from "@/features/costops/recommendations/export-recommendations";
+
+import { RecommendationCard } from "./recommendation-card";
+
 import type {
   CostOpsRecommendation,
   CostOpsRecommendationSummary,
@@ -27,14 +36,18 @@ export function RecommendationsView({
   const [recommendations, setRecommendations] = useState<
     CostOpsRecommendation[]
   >(initialRecommendations);
+
   const [summary, setSummary] =
     useState<CostOpsRecommendationSummary>(initialSummary);
-  const [activeTab, setActiveTab] = useState<RecommendationStatus | "all">(
-    "active",
-  );
+
+  const [activeTab, setActiveTab] = useState<
+    RecommendationStatus | "all"
+  >("active");
+
   const [selectedCategory, setSelectedCategory] = useState<
     RecommendationCategory | "all"
   >("all");
+
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
@@ -44,13 +57,24 @@ export function RecommendationsView({
     reason?: string,
   ) => {
     setUpdatingId(id);
+
     try {
-      const result = await updateRecommendationStatusAction(id, status, reason);
-      if (!result.data) return;
+      const result = await updateRecommendationStatusAction(
+        id,
+        status,
+        reason,
+      );
+
+      if (!result.data) {
+        return;
+      }
+
       const updated = result.data;
 
       setRecommendations((prev) =>
-        prev.map((item) => (item.id === id ? updated : item)),
+        prev.map((item) =>
+          item.id === id ? updated : item,
+        ),
       );
 
       // Recompute local summary
@@ -62,6 +86,7 @@ export function RecommendationsView({
 
         return {
           ...prev,
+
           total_potential_monthly_savings_usd: Math.max(
             0,
             prev.total_potential_monthly_savings_usd +
@@ -69,14 +94,20 @@ export function RecommendationsView({
                 ? updated.estimated_monthly_savings_usd
                 : diffSavings),
           ),
+
           active_recommendations_count:
             status === "active"
               ? prev.active_recommendations_count + 1
-              : Math.max(0, prev.active_recommendations_count - 1),
+              : Math.max(
+                  0,
+                  prev.active_recommendations_count - 1,
+                ),
+
           applied_recommendations_count:
             status === "applied"
               ? prev.applied_recommendations_count + 1
               : prev.applied_recommendations_count,
+
           dismissed_recommendations_count:
             status === "dismissed"
               ? prev.dismissed_recommendations_count + 1
@@ -90,6 +121,7 @@ export function RecommendationsView({
 
   const handleRunEvaluation = async () => {
     setIsEvaluating(true);
+
     try {
       await evaluateRecommendationsAction();
       window.location.reload();
@@ -98,25 +130,41 @@ export function RecommendationsView({
     }
   };
 
-  // Filter recommendations based on active tabs & category
+  // Current visible recommendations after status/category filters.
+  // CSV export must use this array.
   const filtered = useMemo(() => {
     return recommendations.filter((item) => {
       const matchesStatus =
-        activeTab === "all" ? true : item.status === activeTab;
+        activeTab === "all"
+          ? true
+          : item.status === activeTab;
+
       const matchesCategory =
-        selectedCategory === "all" ? true : item.category === selectedCategory;
+        selectedCategory === "all"
+          ? true
+          : item.category === selectedCategory;
+
       return matchesStatus && matchesCategory;
     });
-  }, [recommendations, activeTab, selectedCategory]);
+  }, [
+    recommendations,
+    activeTab,
+    selectedCategory,
+  ]);
 
   const activeCount = recommendations.filter(
-    (r) => r.status === "active",
+    (recommendation) =>
+      recommendation.status === "active",
   ).length;
+
   const appliedCount = recommendations.filter(
-    (r) => r.status === "applied",
+    (recommendation) =>
+      recommendation.status === "applied",
   ).length;
+
   const dismissedCount = recommendations.filter(
-    (r) => r.status === "dismissed",
+    (recommendation) =>
+      recommendation.status === "dismissed",
   ).length;
 
   return (
@@ -135,7 +183,10 @@ export function RecommendationsView({
           tone="success"
         />
 
-        <StatCard label="Active Opportunities" value={activeCount.toString()} />
+        <StatCard
+          label="Active Opportunities"
+          value={activeCount.toString()}
+        />
 
         <StatCard
           label="Applied Actions"
@@ -143,7 +194,10 @@ export function RecommendationsView({
           tone="success"
         />
 
-        <StatCard label="Average Confidence" value="90%" />
+        <StatCard
+          label="Average Confidence"
+          value="90%"
+        />
       </div>
 
       {/* Control Bar & Filter Tabs */}
@@ -161,6 +215,7 @@ export function RecommendationsView({
           >
             Active ({activeCount})
           </button>
+
           <button
             type="button"
             onClick={() => setActiveTab("applied")}
@@ -172,6 +227,7 @@ export function RecommendationsView({
           >
             Applied ({appliedCount})
           </button>
+
           <button
             type="button"
             onClick={() => setActiveTab("dismissed")}
@@ -183,6 +239,7 @@ export function RecommendationsView({
           >
             Dismissed ({dismissedCount})
           </button>
+
           <button
             type="button"
             onClick={() => setActiveTab("all")}
@@ -196,27 +253,68 @@ export function RecommendationsView({
           </button>
         </div>
 
-        {/* Category & Evaluation Controls */}
+        {/* Category, Export & Evaluation Controls */}
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="flex items-center gap-1.5">
-            <SlidersHorizontal size={14} className="text-muted-foreground" />
+            <SlidersHorizontal
+              size={14}
+              className="text-muted-foreground"
+            />
+
             <select
               aria-label="Filter recommendations by category"
               value={selectedCategory}
-              onChange={(e) =>
+              onChange={(event) =>
                 setSelectedCategory(
-                  e.target.value as RecommendationCategory | "all",
+                  event.target.value as
+                    | RecommendationCategory
+                    | "all",
                 )
               }
               className="border-foreground/15 bg-background text-foreground focus:border-accent cursor-pointer rounded-lg border px-3 py-1.5 text-xs font-medium focus:outline-hidden"
             >
-              <option value="all">All Categories</option>
-              <option value="rightsizing">Rightsizing</option>
-              <option value="idle_cleanup">Idle Cleanup</option>
-              <option value="storage_optimization">Storage Optimization</option>
-              <option value="modernization">Modernization</option>
+              <option value="all">
+                All Categories
+              </option>
+
+              <option value="rightsizing">
+                Rightsizing
+              </option>
+
+              <option value="idle_cleanup">
+                Idle Cleanup
+              </option>
+
+              <option value="storage_optimization">
+                Storage Optimization
+              </option>
+
+              <option value="modernization">
+                Modernization
+              </option>
+
+              <option value="architectural">
+                Architectural
+              </option>
             </select>
           </div>
+
+          {/* Export current filtered recommendations */}
+          <button
+            type="button"
+            disabled={filtered.length === 0}
+            onClick={() =>
+              exportRecommendationsCsv(filtered)
+            }
+            className="border-foreground/15 bg-background text-foreground hover:border-accent/50 hover:text-accent inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download
+              size={13}
+              aria-hidden="true"
+            />
+
+            <span>Export CSV</span>
+          </button>
 
           <button
             type="button"
@@ -226,9 +324,18 @@ export function RecommendationsView({
           >
             <RefreshCw
               size={13}
-              className={isEvaluating ? "text-accent animate-spin" : ""}
+              className={
+                isEvaluating
+                  ? "text-accent animate-spin"
+                  : ""
+              }
             />
-            <span>{isEvaluating ? "Analyzing..." : "Re-evaluate"}</span>
+
+            <span>
+              {isEvaluating
+                ? "Analyzing..."
+                : "Re-evaluate"}
+            </span>
           </button>
         </div>
       </div>
@@ -236,30 +343,39 @@ export function RecommendationsView({
       {/* Recommendation Card List */}
       {filtered.length > 0 ? (
         <div className="grid grid-cols-1 gap-4">
-          {filtered.map((rec) => (
+          {filtered.map((recommendation) => (
             <RecommendationCard
-              key={rec.id}
-              recommendation={rec}
+              key={recommendation.id}
+              recommendation={recommendation}
               onStatusChange={handleStatusChange}
-              isUpdating={updatingId === rec.id}
+              isUpdating={
+                updatingId === recommendation.id
+              }
             />
           ))}
         </div>
       ) : (
         <div className="border-foreground/15 bg-card/20 flex flex-col items-center justify-center rounded-2xl border border-dashed p-12 text-center">
-          <div className="bg-foreground/5 text-muted-foreground flex h-12 w-12 items-center justify-center rounded-xl">
-            <Sparkles size={24} className="text-accent" />
+          <div className="bg-foreground/5 flex h-12 w-12 items-center justify-center rounded-xl">
+            <Sparkles
+              size={24}
+              className="text-accent"
+              aria-hidden="true"
+            />
           </div>
+
           <h3 className="text-foreground mt-4 text-sm font-semibold">
-            {activeTab === "active"
-              ? "No active recommendations found"
+            {activeTab === "active" && selectedCategory === "all"
+              ? "All clear!"
               : "No recommendations match the filter"}
           </h3>
-          <p className="text-muted-foreground mt-1 max-w-md text-xs leading-relaxed">
-            {activeTab === "active"
-              ? "Your monitored infrastructure is currently sized well within utilization thresholds, or fresh evidence snapshots are accumulating."
-              : "Try switching filters or running an evaluation to check for new optimization opportunities."}
+
+          <p className="text-muted-foreground mt-2 max-w-md text-sm leading-6">
+            {activeTab === "active" && selectedCategory === "all"
+              ? "No optimization opportunities found. Your infrastructure is running efficiently."
+              : "Try changing the filters or running a fresh analysis to check for new optimization opportunities."}
           </p>
+
           <button
             type="button"
             onClick={handleRunEvaluation}
@@ -269,8 +385,12 @@ export function RecommendationsView({
             <RefreshCw
               size={13}
               className={isEvaluating ? "animate-spin" : ""}
+              aria-hidden="true"
             />
-            <span>Run Fresh Analysis</span>
+
+            <span>
+              {isEvaluating ? "Analyzing..." : "Run Fresh Analysis"}
+            </span>
           </button>
         </div>
       )}

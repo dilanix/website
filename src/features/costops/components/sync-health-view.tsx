@@ -16,6 +16,7 @@ import { getSyncHealthAction } from "@/app/dashboard/costops/actions";
 import type { SyncHealth } from "../api/costops-api";
 import { useCostOps } from "../costops-context";
 import { formatDateTime } from "../utils";
+import { NextSyncCountdown } from "./next-sync-countdown";
 
 export function SyncHealthView({
   initialHealth,
@@ -57,21 +58,40 @@ export function SyncHealthView({
 
   const integrationName = (id: string) =>
     integrations.find((item) => item.id === id)?.name ?? id;
+
+  const nextSyncAt = integrationId
+    ? integrations.find((item) => item.id === integrationId)?.nextSyncAt ?? null
+    : integrations.reduce<string | null>((earliest, item) => {
+        if (!item.nextSyncAt) return earliest;
+
+        if (!earliest) {
+          return item.nextSyncAt;
+        }
+
+        return new Date(item.nextSyncAt).getTime() <
+          new Date(earliest).getTime()
+          ? item.nextSyncAt
+          : earliest;
+      }, null);
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Sync Health"
         description="Persistent run outcomes, collection warnings, data completeness alerts, and retention-aware operational history."
         action={
-          <button
-            type="button"
-            onClick={() => void load(health.page)}
-            disabled={loading}
-            className="border-foreground/15 inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-medium disabled:opacity-50"
-          >
-            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <NextSyncCountdown nextSyncAt={nextSyncAt} />
+
+            <button
+              type="button"
+              onClick={() => void load(health.page)}
+              disabled={loading}
+              className="border-foreground/15 inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-medium disabled:opacity-50"
+            >
+              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </div>
         }
       />
       <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
