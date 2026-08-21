@@ -94,6 +94,16 @@ export function RecommendationCard({
     (recommendation.recommended_configuration?.action as string) ??
     "Optimized Specs";
 
+  const currentCost = recommendation.current_configuration?.estimated_monthly_cost_usd as number | undefined;
+  const currentCpu = recommendation.current_configuration?.baseline_average_cpu_percent as number | undefined;
+  const currentVcpus = recommendation.current_configuration?.vcpus as number | undefined;
+  const currentRam = recommendation.current_configuration?.memory_gib as number | undefined;
+
+  const targetCost = recommendation.recommended_configuration?.estimated_monthly_cost_usd as number | undefined;
+  const targetVcpus = recommendation.recommended_configuration?.vcpus as number | undefined;
+  const targetRam = recommendation.recommended_configuration?.memory_gib as number | undefined;
+  const savingsPct = (recommendation.estimated_savings_percentage ?? recommendation.recommended_configuration?.savings_percentage) as number | undefined;
+
   const cliCommand = recommendation.action_plan?.cli_command;
   const terraformCode = recommendation.action_plan?.terraform_suggestion;
   const safeSteps = recommendation.ai_analysis?.safe_execution_steps;
@@ -197,28 +207,53 @@ export function RecommendationCard({
         </div>
 
         {/* Configuration Change Visualizer */}
-        <div className="border-foreground/10 bg-background/50 mt-4 flex flex-wrap items-center gap-3 rounded-xl border p-3 text-xs">
-          <div className="flex flex-col">
+        <div className="border-foreground/10 bg-background/50 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3.5 text-xs">
+          <div className="flex flex-col min-w-[130px]">
             <span className="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
-              Current Configuration
+              Current / Baseline
             </span>
-            <span className="text-foreground font-mono font-semibold">
+            <span className="text-foreground font-mono font-semibold text-sm mt-0.5">
               {currentType}
             </span>
+            <div className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-[11px] mt-1">
+              {currentCost !== undefined && <span>~${currentCost}/mo</span>}
+              {currentVcpus && currentRam ? <span>• {currentVcpus} vCPU, {currentRam} GB</span> : null}
+              {currentCpu !== undefined ? <span>• {currentCpu}% CPU</span> : null}
+            </div>
           </div>
 
-          <div className="text-muted-foreground flex items-center px-1">
-            <ArrowRight size={14} className="text-accent" />
+          <div className="text-muted-foreground hidden sm:flex items-center px-2">
+            <ArrowRight size={16} className="text-accent" />
           </div>
 
-          <div className="flex flex-col">
+          <div className="flex flex-col min-w-[130px]">
             <span className="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
               Target Configuration
             </span>
-            <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+            <span className="font-mono font-semibold text-sm text-emerald-600 dark:text-emerald-400 mt-0.5">
               {targetType}
             </span>
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-medium">
+              {targetCost !== undefined && <span>~${targetCost}/mo</span>}
+              {targetVcpus && targetRam ? <span>• {targetVcpus} vCPU, {targetRam} GB</span> : null}
+              {savingsPct ? <span>• Save {savingsPct}%</span> : null}
+            </div>
           </div>
+
+          {recommendation.applied_at && (
+            <div className="border-foreground/10 sm:border-l sm:pl-3.5 flex flex-col text-[11px]">
+              <span className="text-muted-foreground text-[10px] font-medium uppercase">
+                Applied Date
+              </span>
+              <span className="text-foreground font-medium mt-0.5">
+                {new Date(recommendation.applied_at).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Action Buttons & Status Row */}
