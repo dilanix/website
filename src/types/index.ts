@@ -24,16 +24,20 @@ export interface Product {
   /** One-line promise shown as the card's headline. */
   headline: string;
   description: string;
-  status: "active" | "in-development";
+  status: "active" | "in-development" | "upcoming" | "beta";
+  tag?: string;
+  category?: string;
   featured: boolean;
   capabilities: ProductCapability[];
+  features?: string[];
+  highlights?: { label: string; value: string }[];
+  faqs?: ProductFaqItem[];
+  documentation?: string;
+  sortOrder?: number;
   ctaLabel: string;
   ctaHref: string;
   /**
-   * Base URL of this product's own backend microservice — each product is a
-   * fully separate service, not a path on the shared `api.dilanix.org`.
-   * Undefined until that product's backend exists, in which case its
-   * dashboard falls back to mock data instead of failing.
+   * Base URL of this product's own backend microservice.
    */
   apiBaseUrl?: string;
 }
@@ -122,8 +126,29 @@ export interface BlogPost {
   slug: string;
   title: string;
   excerpt: string;
+  content?: string;
+  category?: string;
+  readTime?: string;
+  author?: {
+    name: string;
+    role: string;
+    avatar?: string;
+  };
   publishedAt: string;
   status: "draft" | "published";
+}
+
+export interface ProductFaqItem {
+  question: string;
+  answer: string;
+}
+
+export interface ProductComparisonItem {
+  feature: string;
+  costops: boolean | string;
+  legacyFinOps: boolean | string;
+  spreadsheets: boolean | string;
+  highlight?: boolean;
 }
 
 export interface CompanyPage {

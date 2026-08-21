@@ -4,24 +4,18 @@ import { LinkedinIcon, GithubIcon } from "@/components/icons/social-icons";
 
 const columns = [
   {
-    title: "Company",
+    title: "Products",
     links: [
-      { label: "About", href: "/company" },
-      { label: "Contact", href: "/contact" },
-      { label: "Blog", href: "/blog" },
-      { label: "Careers", href: "/careers" },
+      { label: "Overview", href: "/products" },
+      { label: "CostOps", href: "/products/costops" },
     ],
   },
   {
-    title: "Products",
-    links: [{ label: "CostOps", href: "/products/costops" }],
-  },
-  {
-    title: "Resources",
+    title: "Company",
     links: [
-      { label: "Security", href: "/security" },
-      { label: "Status", href: "/status" },
-      { label: "Documentation", href: "/docs" },
+      { label: "About", href: "/company" },
+      { label: "Blog", href: "/blog" },
+      { label: "Contact", href: "/contact" },
     ],
   },
   {
@@ -36,7 +30,7 @@ const columns = [
 export function Footer({ settings }: { settings: SiteSettings }) {
   return (
     <footer className="border-foreground/5 border-t">
-      <Container className="grid gap-12 py-16 md:grid-cols-[1.4fr_repeat(4,1fr)] md:py-20">
+      <Container className="grid gap-12 py-16 md:grid-cols-[1.5fr_repeat(3,1fr)] md:py-20">
         <div className="flex flex-col gap-4">
           <span className="text-foreground text-sm font-semibold tracking-[0.25em]">
             DILANIX

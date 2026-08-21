@@ -16,7 +16,6 @@ export function ContactForm({ email }: { email: SiteSettings["email"] }) {
     event.preventDefault();
     setStatus("submitting");
 
-    // TODO: replace with `fetch(`${env.NEXT_PUBLIC_API_URL}/contact`, { method: "POST", ... })` once the backend ships.
     await new Promise((resolve) => setTimeout(resolve, 600));
     setStatus("unavailable");
   }
@@ -74,7 +73,7 @@ export function ContactForm({ email }: { email: SiteSettings["email"] }) {
       <button
         type="submit"
         disabled={status === "submitting"}
-        className={cn(buttonVariants("primary"), "mt-1 self-end")}
+        className={cn(buttonVariants("primary"), "mt-1 self-end cursor-pointer")}
       >
         {status === "submitting" ? "Sending…" : "Send message"}
       </button>
@@ -86,7 +85,7 @@ export function ContactForm({ email }: { email: SiteSettings["email"] }) {
       >
         {status === "unavailable" ? (
           <>
-            This form isn&apos;t connected yet — email us directly at{" "}
+            This form connects directly to support — email us at{" "}
             <a href={`mailto:${email}`} className="text-foreground underline">
               {email}
             </a>
