@@ -1,4 +1,9 @@
-import type { BillingPlan, DashboardOverview, Invoice, UsageRow } from "@/types";
+import type {
+  BillingPlan,
+  DashboardOverview,
+  Invoice,
+  UsageRow,
+} from "@/types";
 
 // Keyed by product slug — only CostOps has dashboard content today, but
 // this is the shape that lets each future product bring its own metrics
@@ -79,16 +84,76 @@ const overviewBySlug: Record<string, DashboardOverview> = {
 
 const usageBySlug: Record<string, UsageRow[]> = {
   costops: [
-    { id: "1", service: "ECS — document-analysis", provider: "AWS", monthlySpendUsd: 5120, trendPct: 4.2 },
-    { id: "2", service: "S3 storage", provider: "AWS", monthlySpendUsd: 3480, trendPct: -1.8 },
-    { id: "3", service: "RDS — postgres-primary", provider: "AWS", monthlySpendUsd: 2960, trendPct: 0.6 },
-    { id: "4", service: "Vertex AI — batch-inference", provider: "Vertex AI", monthlySpendUsd: 3280, trendPct: 12.4 },
-    { id: "5", service: "Vertex AI — embeddings", provider: "Vertex AI", monthlySpendUsd: 2000, trendPct: -3.1 },
-    { id: "6", service: "GPT-4 — summarization", provider: "OpenAI", monthlySpendUsd: 2410, trendPct: 7.9 },
-    { id: "7", service: "GPT-4 — support-assistant", provider: "OpenAI", monthlySpendUsd: 1300, trendPct: -5.4 },
-    { id: "8", service: "CloudFront", provider: "AWS", monthlySpendUsd: 980, trendPct: 1.1 },
-    { id: "9", service: "Datadog", provider: "Other", monthlySpendUsd: 610, trendPct: 0 },
-    { id: "10", service: "PagerDuty", provider: "Other", monthlySpendUsd: 180, trendPct: 0 },
+    {
+      id: "1",
+      service: "ECS — document-analysis",
+      provider: "AWS",
+      monthlySpendUsd: 5120,
+      trendPct: 4.2,
+    },
+    {
+      id: "2",
+      service: "S3 storage",
+      provider: "AWS",
+      monthlySpendUsd: 3480,
+      trendPct: -1.8,
+    },
+    {
+      id: "3",
+      service: "RDS — postgres-primary",
+      provider: "AWS",
+      monthlySpendUsd: 2960,
+      trendPct: 0.6,
+    },
+    {
+      id: "4",
+      service: "Vertex AI — batch-inference",
+      provider: "Vertex AI",
+      monthlySpendUsd: 3280,
+      trendPct: 12.4,
+    },
+    {
+      id: "5",
+      service: "Vertex AI — embeddings",
+      provider: "Vertex AI",
+      monthlySpendUsd: 2000,
+      trendPct: -3.1,
+    },
+    {
+      id: "6",
+      service: "GPT-4 — summarization",
+      provider: "OpenAI",
+      monthlySpendUsd: 2410,
+      trendPct: 7.9,
+    },
+    {
+      id: "7",
+      service: "GPT-4 — support-assistant",
+      provider: "OpenAI",
+      monthlySpendUsd: 1300,
+      trendPct: -5.4,
+    },
+    {
+      id: "8",
+      service: "CloudFront",
+      provider: "AWS",
+      monthlySpendUsd: 980,
+      trendPct: 1.1,
+    },
+    {
+      id: "9",
+      service: "Datadog",
+      provider: "Other",
+      monthlySpendUsd: 610,
+      trendPct: 0,
+    },
+    {
+      id: "10",
+      service: "PagerDuty",
+      provider: "Other",
+      monthlySpendUsd: 180,
+      trendPct: 0,
+    },
   ],
 };
 

@@ -31,7 +31,8 @@ export async function signInAction(
     tokens = await login(email, password, rememberMe);
   } catch (error) {
     return {
-      error: error instanceof AuthApiError ? error.message : "Unable to sign in.",
+      error:
+        error instanceof AuthApiError ? error.message : "Unable to sign in.",
     };
   }
 
@@ -48,7 +49,8 @@ export async function signInAction(
       mustChangePassword = true;
     } else {
       return {
-        error: error instanceof AuthApiError ? error.message : "Unable to sign in.",
+        error:
+          error instanceof AuthApiError ? error.message : "Unable to sign in.",
       };
     }
   }

@@ -120,3 +120,23 @@ export function revokeApiKey(
     { method: "POST" },
   );
 }
+
+export interface ProductDocumentation {
+  product_id: string;
+  product_name: string;
+  product_slug: string;
+  documentation: string;
+  access_status: "active" | "pending" | "expired" | "disabled";
+  updated_at: string | null;
+}
+
+export function getProductDocumentation(
+  organizationId: string,
+  slug: string,
+  token: string,
+) {
+  return coreRequest<ProductDocumentation>(
+    `/v1/organizations/${organizationId}/products/${slug}/docs`,
+    token,
+  );
+}

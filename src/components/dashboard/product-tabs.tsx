@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -24,11 +25,12 @@ export function ProductTabs({ slug }: { slug: string }) {
   const pathname = usePathname();
   const overviewActive = pathname === `/dashboard/products/${slug}`;
   const usageActive = pathname === `/dashboard/products/${slug}/usage`;
+  const docsActive = pathname === `/dashboard/products/${slug}/docs`;
 
   return (
     <div className="border-foreground/10 flex gap-1 border-b">
       <Link
-        href={`/dashboard/products/${slug}`}
+        href={`/dashboard/products/${slug}` as Route}
         aria-current={overviewActive ? "page" : undefined}
         className={tabClassName(overviewActive)}
       >
@@ -36,12 +38,20 @@ export function ProductTabs({ slug }: { slug: string }) {
         {overviewActive ? <ActiveUnderline /> : null}
       </Link>
       <Link
-        href={`/dashboard/products/${slug}/usage`}
+        href={`/dashboard/products/${slug}/usage` as Route}
         aria-current={usageActive ? "page" : undefined}
         className={tabClassName(usageActive)}
       >
         Usage
         {usageActive ? <ActiveUnderline /> : null}
+      </Link>
+      <Link
+        href={`/dashboard/products/${slug}/docs` as Route}
+        aria-current={docsActive ? "page" : undefined}
+        className={tabClassName(docsActive)}
+      >
+        Documentation
+        {docsActive ? <ActiveUnderline /> : null}
       </Link>
     </div>
   );

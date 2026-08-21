@@ -22,11 +22,16 @@ interface RefreshedTokens {
   refresh_expires_in: number;
 }
 
-async function tryRefresh(refreshToken: string): Promise<RefreshedTokens | null> {
+async function tryRefresh(
+  refreshToken: string,
+): Promise<RefreshedTokens | null> {
   try {
     const response = await fetch(`${env.NEXT_PUBLIC_API_URL}/v1/auth/refresh`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
       body: JSON.stringify({ refresh_token: refreshToken }),
       cache: "no-store",
     });
@@ -87,8 +92,7 @@ function clearSessionCookies(response: NextResponse) {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const refreshToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
-  const rememberMe =
-    request.cookies.get(REMEMBER_ME_COOKIE)?.value === "1";
+  const rememberMe = request.cookies.get(REMEMBER_ME_COOKIE)?.value === "1";
   const mustChangePassword =
     request.cookies.get(MUST_CHANGE_PASSWORD_COOKIE)?.value === "1";
 
@@ -126,19 +130,17 @@ export async function proxy(request: NextRequest) {
     response = NextResponse.redirect(new URL("/change-password", request.url));
   } else if (pathname === "/sign-in") {
     response = NextResponse.redirect(
-      new URL(mustChangePassword ? "/change-password" : "/dashboard", request.url),
+      new URL(
+        mustChangePassword ? "/change-password" : "/dashboard",
+        request.url,
+      ),
     );
   } else {
     response = NextResponse.next({ request: { headers: request.headers } });
   }
 
   if (refreshed) {
-    applyRefreshedCookies(
-      response,
-      refreshed,
-      rememberMe,
-      mustChangePassword,
-    );
+    applyRefreshedCookies(response, refreshed, rememberMe, mustChangePassword);
   }
 
   return response;

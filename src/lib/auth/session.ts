@@ -52,11 +52,7 @@ export async function createSession(
     accessOptions,
   );
   cookieStore.set(REFRESH_TOKEN_COOKIE, tokens.refresh_token, refreshOptions);
-  cookieStore.set(
-    REMEMBER_ME_COOKIE,
-    rememberMe ? "1" : "0",
-    refreshOptions,
-  );
+  cookieStore.set(REMEMBER_ME_COOKIE, rememberMe ? "1" : "0", refreshOptions);
   cookieStore.set(
     MUST_CHANGE_PASSWORD_COOKIE,
     mustChangePassword ? "1" : "0",

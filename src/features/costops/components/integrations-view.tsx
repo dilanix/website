@@ -275,7 +275,9 @@ export function IntegrationsView() {
                           try {
                             await api.updateSyncSettings(item.id, interval);
                           } catch {
-                            setPageError("Unable to update auto-sync settings.");
+                            setPageError(
+                              "Unable to update auto-sync settings.",
+                            );
                           } finally {
                             setSyncSettingsBusy(false);
                           }

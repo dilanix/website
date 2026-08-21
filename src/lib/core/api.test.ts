@@ -16,4 +16,37 @@ describe("coreRequest", () => {
     ).resolves.toBeUndefined();
     expect(json).not.toHaveBeenCalled();
   });
+
+  it("fetches product documentation for an organization", async () => {
+    const mockDocs = {
+      product_id: "prod-1",
+      product_name: "CostOps",
+      product_slug: "costops",
+      documentation: "# CostOps Guide",
+      access_status: "active",
+      updated_at: "2026-08-21T10:00:00Z",
+    };
+    const response = new Response(JSON.stringify(mockDocs), { status: 200 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getProductDocumentation } = await import("./api");
+    const result = await getProductDocumentation(
+      "org-123",
+      "costops",
+      "test-token",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/products/costops/docs",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockDocs);
+  });
 });
