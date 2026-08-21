@@ -3,6 +3,15 @@ import { getAccessToken } from "@/lib/auth/session";
 import { getMe } from "@/lib/auth/api";
 import { CoreApiError } from "@/lib/core/api";
 import * as api from "@/features/costops/api/costops-api";
+import {
+  listRecommendations,
+  updateRecommendationStatus,
+  evaluateRecommendations,
+} from "@/features/costops/recommendations/api";
+import type {
+  RecommendationCategory,
+  RecommendationStatus,
+} from "@/features/costops/recommendations/types";
 import type {
   CostSeriesGroupBy,
   OverviewPeriod,
@@ -148,4 +157,30 @@ export const createAnalysisPolicyAction = async (input: {
 export const activateAnalysisPolicyAction = async (policyId: string) =>
   execute((_organizationId, token) =>
     api.activateAnalysisPolicy(token, policyId),
+  );
+export const listRecommendationsAction = async (filters?: {
+  status?: RecommendationStatus;
+  category?: RecommendationCategory;
+  minSavings?: number;
+}) =>
+  execute((organizationId, token) =>
+    listRecommendations(organizationId, token, filters),
+  );
+export const updateRecommendationStatusAction = async (
+  recommendationId: string,
+  status: RecommendationStatus,
+  dismissedReason?: string,
+) =>
+  execute((organizationId, token) =>
+    updateRecommendationStatus(
+      organizationId,
+      recommendationId,
+      status,
+      token,
+      dismissedReason,
+    ),
+  );
+export const evaluateRecommendationsAction = async () =>
+  execute((organizationId, token) =>
+    evaluateRecommendations(organizationId, token),
   );
