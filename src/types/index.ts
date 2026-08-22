@@ -15,9 +15,9 @@ export interface ProductCapability {
 
 export interface Product {
   slug: string;
-  /** Full brand name, e.g. "Dilanix CostOps" — used where the Dilanix relationship should read clearly. */
+  /** Full brand name, e.g. "Dena Cloud Storage". */
   name: string;
-  /** Compact name for dense UI, e.g. "CostOps". Falls back to `name` if omitted. */
+  /** Compact name for dense UI, e.g. "Dena". Falls back to `name` if omitted. */
   shortName?: string;
   /** Short marker shown above the name, e.g. "FEATURED PRODUCT". */
   eyebrow?: string;
@@ -141,14 +141,6 @@ export interface BlogPost {
 export interface ProductFaqItem {
   question: string;
   answer: string;
-}
-
-export interface ProductComparisonItem {
-  feature: string;
-  costops: boolean | string;
-  legacyFinOps: boolean | string;
-  spreadsheets: boolean | string;
-  highlight?: boolean;
 }
 
 export interface CompanyPage {

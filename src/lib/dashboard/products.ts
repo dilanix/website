@@ -3,22 +3,27 @@ import type { CoreProduct } from "@/lib/core/api";
 import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
 
 const productNavigation: Record<string, { label: string; suffix: string }[]> = {
-  costops: [
+  dena: [
     { label: "Overview", suffix: "" },
-    { label: "Costs", suffix: "/costs" },
-    { label: "Resources", suffix: "/resources" },
-    { label: "Recommendations", suffix: "/recommendations" },
-    { label: "Integrations", suffix: "/integrations" },
-    { label: "Sync Health", suffix: "/sync-health" },
+    { label: "Usage", suffix: "/usage" },
+    { label: "Docs", suffix: "/docs" },
+  ],
+  pulse: [
+    { label: "Overview", suffix: "" },
+    { label: "Usage", suffix: "/usage" },
+    { label: "Docs", suffix: "/docs" },
+  ],
+  guard: [
+    { label: "Overview", suffix: "" },
+    { label: "Usage", suffix: "/usage" },
     { label: "Docs", suffix: "/docs" },
   ],
 };
 
 export function toDashboardProduct(
   product: CoreProduct,
-  options?: { isSuperuser?: boolean },
 ): DashboardProduct {
-  const base = `/dashboard/${product.slug}`;
+  const base = `/dashboard/products/${product.slug}`;
   return {
     id: product.id,
     name: product.name,
@@ -28,16 +33,14 @@ export function toDashboardProduct(
     accessExpiresAt: product.access_expires_at,
     href: base as Route,
     navigation: (
-      productNavigation[product.slug] ?? [{ label: "Overview", suffix: "" }]
-    )
-      .concat(
-        product.slug === "costops" && options?.isSuperuser
-          ? [{ label: "Policies", suffix: "/policies" }]
-          : [],
-      )
-      .map((item) => ({
-        label: item.label,
-        href: `${base}${item.suffix}` as Route,
-      })),
+      productNavigation[product.slug] ?? [
+        { label: "Overview", suffix: "" },
+        { label: "Usage", suffix: "/usage" },
+        { label: "Docs", suffix: "/docs" },
+      ]
+    ).map((item) => ({
+      label: item.label,
+      href: `${base}${item.suffix}` as Route,
+    })),
   };
 }

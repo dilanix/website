@@ -188,7 +188,6 @@ export function ApiKeysClient({
                           type="checkbox"
                           name="products"
                           value={product.id}
-                          defaultChecked={product.slug === "costops"}
                         />
                         {product.name}
                       </label>

@@ -9,8 +9,6 @@ import { getSiteSettings } from "@/lib/data/site";
 import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
 import { FeaturedProductCard } from "@/components/product/featured-product-card";
-import { SavingsCalculator } from "@/components/product/savings-calculator";
-import { IntegrationsMarquee } from "@/components/sections/integrations-marquee";
 import {
   CircleDashed,
   CheckCircle2,
@@ -19,7 +17,7 @@ import {
 export const metadata: Metadata = {
   title: "Products — Dilanix Software Ecosystem",
   description:
-    "Explore the Dilanix product ecosystem, starting with CostOps — our multi-cloud and AI cost intelligence platform.",
+    "Explore the Dilanix product ecosystem engineered around high-impact, measurable infrastructure challenges.",
   alternates: { canonical: "/products" },
 };
 
@@ -64,21 +62,21 @@ export default async function ProductsPage() {
         </Container>
       </section>
 
-      {/* Flagship Featured Product: CostOps */}
+      {/* Flagship Featured Product */}
       <section className="pb-20">
         <Container>
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="bg-success h-2 w-2 rounded-full" />
+              <span className="bg-accent h-2 w-2 rounded-full" />
               <span className="text-foreground font-mono text-xs font-semibold tracking-wider uppercase">
-                Flagship Active Product
+                Featured Product
               </span>
             </div>
             <Link
-              href="/products/costops"
+              href="/contact"
               className="text-accent flex items-center gap-1 font-mono text-xs hover:underline"
             >
-              View Full Product Deep Dive →
+              Request Early Access →
             </Link>
           </div>
 
@@ -89,9 +87,6 @@ export default async function ProductsPage() {
           />
         </Container>
       </section>
-
-      {/* Integration Marquee */}
-      <IntegrationsMarquee />
 
       {/* Upcoming Products Pipeline */}
       <section className="border-foreground/5 bg-foreground/[0.01] border-t py-24 sm:py-32">
@@ -175,13 +170,6 @@ export default async function ProductsPage() {
               );
             })}
           </div>
-        </Container>
-      </section>
-
-      {/* ROI Savings Estimator */}
-      <section className="border-foreground/5 border-t py-24 sm:py-32">
-        <Container>
-          <SavingsCalculator calendlyUrl={settings.calendlyUrl} />
         </Container>
       </section>
 

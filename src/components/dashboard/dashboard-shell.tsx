@@ -81,9 +81,9 @@ export function DashboardShell({
             </div>
             {product.navigation.map((item) => {
               const active =
-                item.href === `/dashboard/${product.slug}`
-                  ? pathname === item.href
-                  : pathname.startsWith(item.href);
+                pathname === item.href ||
+                (item.href !== `/dashboard/products/${product.slug}` &&
+                  pathname.startsWith(item.href));
               return (
                 <Link
                   key={item.href}

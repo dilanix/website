@@ -20,9 +20,9 @@ describe("coreRequest", () => {
   it("fetches product documentation for an organization", async () => {
     const mockDocs = {
       product_id: "prod-1",
-      product_name: "CostOps",
-      product_slug: "costops",
-      documentation: "# CostOps Guide",
+      product_name: "Dena Cloud Storage",
+      product_slug: "dena",
+      documentation: "# Dena Guide",
       access_status: "active",
       updated_at: "2026-08-21T10:00:00Z",
     };
@@ -33,13 +33,13 @@ describe("coreRequest", () => {
     const { getProductDocumentation } = await import("./api");
     const result = await getProductDocumentation(
       "org-123",
-      "costops",
+      "dena",
       "test-token",
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/v1/organizations/org-123/products/costops/docs",
+        "/v1/organizations/org-123/products/dena/docs",
       ),
       expect.objectContaining({
         headers: expect.objectContaining({

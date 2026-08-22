@@ -5,160 +5,121 @@ import type {
   UsageRow,
 } from "@/types";
 
-// Keyed by product slug — only CostOps has dashboard content today, but
-// this is the shape that lets each future product bring its own metrics
-// instead of forcing everything through one cost-centric template.
 const overviewBySlug: Record<string, DashboardOverview> = {
-  costops: {
-    monthlySpendUsd: 24820,
-    potentialSavingsUsd: 4310,
-    optimizationScore: 78,
-    activeAlerts: 3,
+  dena: {
+    monthlySpendUsd: 14200,
+    potentialSavingsUsd: 2800,
+    optimizationScore: 84,
+    activeAlerts: 1,
     spendTrend: [
-      21200, 21800, 22350, 21950, 23100, 23800, 22950, 24010, 24460, 23990,
-      24610, 24280, 24950, 24820,
+      11200, 11800, 12350, 11950, 13100, 13800, 12950, 14010, 14460, 13990,
+      14610, 14280, 14950, 14200,
     ],
     breakdown: [
-      { label: "AWS", amountUsd: 14240 },
-      { label: "Vertex AI", amountUsd: 5280 },
-      { label: "OpenAI", amountUsd: 3710 },
-      { label: "Other", amountUsd: 1590 },
+      { label: "Object Storage", amountUsd: 8240 },
+      { label: "Block Storage", amountUsd: 3980 },
+      { label: "Data Transfer", amountUsd: 1980 },
     ],
     recommendations: [
       {
-        title: "ECS service document-analysis appears overprovisioned.",
+        title: "Cold archive tiering opportunity",
         description:
-          "Right-sizing based on trailing 30-day utilization would cut spend without affecting throughput.",
-        monthlySavingUsd: 640,
+          "Auto-tiering objects unread for 30+ days saves substantial storage spend.",
+        monthlySavingUsd: 2800,
         metrics: [
-          { label: "Average CPU", value: "18%" },
-          { label: "Average memory", value: "31%" },
-        ],
-      },
-      {
-        title: "3 idle EBS volumes detached for over 14 days.",
-        description:
-          "Unattached storage is still billed. Safe to snapshot and delete if no longer needed.",
-        monthlySavingUsd: 210,
-        metrics: [
-          { label: "Volumes", value: "3" },
-          { label: "Idle since", value: "14d+" },
-        ],
-      },
-      {
-        title:
-          "GPT-4 usage on the summarization pipeline could move to a cheaper tier.",
-        description:
-          "Output quality on sampled requests held steady on a lower-cost model in the last eval run.",
-        monthlySavingUsd: 890,
-        metrics: [
-          { label: "Requests/day", value: "12.4k" },
-          { label: "Eval delta", value: "-0.3%" },
+          { label: "Cold tier ratio", value: "64%" },
+          { label: "Average latency impact", value: "0ms" },
         ],
       },
     ],
     activity: [
       {
         id: "1",
-        message: "Cost anomaly resolved on Vertex AI (batch-inference).",
+        message: "High-throughput cluster checkpointing verified.",
         timestamp: "2h ago",
       },
       {
         id: "2",
-        message: "New recommendation: right-size document-analysis service.",
+        message: "Storage bucket replication healthy across regions.",
         timestamp: "6h ago",
       },
+    ],
+  },
+  pulse: {
+    monthlySpendUsd: 8400,
+    potentialSavingsUsd: 1200,
+    optimizationScore: 91,
+    activeAlerts: 0,
+    spendTrend: [
+      7200, 7500, 7800, 8100, 8000, 8200, 8300, 8400,
+    ],
+    breakdown: [
+      { label: "Trace Ingestion", amountUsd: 4800 },
+      { label: "Metric Storage", amountUsd: 2600 },
+      { label: "Alerting", amountUsd: 1000 },
+    ],
+    recommendations: [
       {
-        id: "3",
-        message: "Monthly spend crossed $24,000 threshold.",
-        timestamp: "1d ago",
+        title: "Adaptive trace sampling enabled",
+        description: "Downsample non-error traces during off-peak hours.",
+        monthlySavingUsd: 1200,
+        metrics: [
+          { label: "Sampling efficiency", value: "99.8%" },
+        ],
       },
+    ],
+    activity: [
       {
-        id: "4",
-        message: "3 idle EBS volumes flagged for cleanup.",
-        timestamp: "2d ago",
+        id: "1",
+        message: "eBPF kernel collector running on 42 nodes.",
+        timestamp: "1h ago",
       },
     ],
   },
 };
 
 const usageBySlug: Record<string, UsageRow[]> = {
-  costops: [
+  dena: [
     {
       id: "1",
-      service: "ECS — document-analysis",
-      provider: "AWS",
-      monthlySpendUsd: 5120,
-      trendPct: 4.2,
+      service: "Primary Hot Storage Tier",
+      provider: "Dena Core",
+      monthlySpendUsd: 8240,
+      trendPct: 2.1,
     },
     {
       id: "2",
-      service: "S3 storage",
-      provider: "AWS",
-      monthlySpendUsd: 3480,
-      trendPct: -1.8,
+      service: "Block Storage Volumes",
+      provider: "Dena Block",
+      monthlySpendUsd: 3980,
+      trendPct: 1.4,
     },
     {
       id: "3",
-      service: "RDS — postgres-primary",
-      provider: "AWS",
-      monthlySpendUsd: 2960,
-      trendPct: 0.6,
+      service: "Inter-Region Zero-Egress Transit",
+      provider: "Dena Network",
+      monthlySpendUsd: 1980,
+      trendPct: -0.8,
+    },
+  ],
+  pulse: [
+    {
+      id: "1",
+      service: "Distributed Tracing Collector",
+      provider: "Pulse APM",
+      monthlySpendUsd: 4800,
+      trendPct: 1.2,
     },
     {
-      id: "4",
-      service: "Vertex AI — batch-inference",
-      provider: "Vertex AI",
-      monthlySpendUsd: 3280,
-      trendPct: 12.4,
-    },
-    {
-      id: "5",
-      service: "Vertex AI — embeddings",
-      provider: "Vertex AI",
-      monthlySpendUsd: 2000,
-      trendPct: -3.1,
-    },
-    {
-      id: "6",
-      service: "GPT-4 — summarization",
-      provider: "OpenAI",
-      monthlySpendUsd: 2410,
-      trendPct: 7.9,
-    },
-    {
-      id: "7",
-      service: "GPT-4 — support-assistant",
-      provider: "OpenAI",
-      monthlySpendUsd: 1300,
-      trendPct: -5.4,
-    },
-    {
-      id: "8",
-      service: "CloudFront",
-      provider: "AWS",
-      monthlySpendUsd: 980,
-      trendPct: 1.1,
-    },
-    {
-      id: "9",
-      service: "Datadog",
-      provider: "Other",
-      monthlySpendUsd: 610,
-      trendPct: 0,
-    },
-    {
-      id: "10",
-      service: "PagerDuty",
-      provider: "Other",
-      monthlySpendUsd: 180,
-      trendPct: 0,
+      id: "2",
+      service: "Time-Series Metric Retention",
+      provider: "Pulse Storage",
+      monthlySpendUsd: 2600,
+      trendPct: 0.5,
     },
   ],
 };
 
-// Billing is account-level, not per-product — one subscription covers
-// however many products the org has access to.
 const invoices: Invoice[] = [
   { id: "INV-2026-08", date: "2026-08-01", amountUsd: 499, status: "paid" },
   { id: "INV-2026-07", date: "2026-07-01", amountUsd: 499, status: "paid" },
@@ -174,30 +135,22 @@ const plan: BillingPlan = {
   seats: 12,
 };
 
-// TODO: once this product has a real microservice (`product.apiBaseUrl` set),
-// replace with `fetchProductApi(product, "/dashboard/overview", accessToken)`
-// — each product's dashboard data comes from that product's own backend,
-// not a shared one.
 export async function getDashboardOverview(
   slug: string,
 ): Promise<DashboardOverview | undefined> {
-  return overviewBySlug[slug];
+  return overviewBySlug[slug] ?? overviewBySlug.dena;
 }
 
-// TODO: once this product has a real microservice (`product.apiBaseUrl` set),
-// replace with `fetchProductApi(product, "/dashboard/usage", accessToken)`.
 export async function getUsageBreakdown(
   slug: string,
 ): Promise<UsageRow[] | undefined> {
-  return usageBySlug[slug];
+  return usageBySlug[slug] ?? usageBySlug.dena;
 }
 
-// TODO: replace with `fetch(`${env.NEXT_PUBLIC_API_URL}/billing/invoices`)` once the backend ships.
 export async function getInvoices(): Promise<Invoice[]> {
   return invoices;
 }
 
-// TODO: replace with `fetch(`${env.NEXT_PUBLIC_API_URL}/billing/plan`)` once the backend ships.
 export async function getBillingPlan(): Promise<BillingPlan> {
   return plan;
 }

@@ -52,16 +52,16 @@ Unstructured chat completions often waste hundreds of completion tokens on polit
 
 ---
 
-### 4. Continuous Token Anomaly Radar with CostOps
+### 4. Continuous Token Anomaly Radar
 
-Cost tracking should not be a month-end surprise. With Dilanix CostOps, you can set real-time token thresholds per endpoint, tenant, and environment. When a regression or infinite loop occurs in staging or production, CostOps alerts your Slack channel within 60 seconds with exact model attribution.`,
+Real-time telemetry and structured threshold alarms catch infinite retry loops and prompt regressions within 60 seconds of deployment.`,
   },
   {
     slug: "detecting-ghost-cloud-infrastructure",
     title: "Detecting Ghost Cloud Infrastructure: From Orphaned EBS to Idle RDS Replicas",
     excerpt:
       "A practical guide to finding and eliminating forgotten cloud resources that silently inflate your AWS, GCP, and Azure invoices every month.",
-    category: "Cloud FinOps",
+    category: "Cloud Architecture",
     readTime: "5 min read",
     author: {
       name: "Dilanix Infrastructure",
@@ -84,9 +84,9 @@ We call this **Ghost Infrastructure**.
 
 ---
 
-### Automated Remediation with Terraform & CostOps
+### Automated Auditing with Infrastructure-as-Code
 
-Manual auditing in the AWS or GCP console is tedious and error-prone. CostOps continuously runs non-invasive, read-only heuristics across all connected regions and generates ready-to-merge Terraform pull requests to prune unused resources safely.`,
+Continuous non-invasive heuristics across all connected cloud regions allow automated verification and clean remediation branches.`,
   },
   {
     slug: "mastering-unit-economics-in-ai-saas",
@@ -113,28 +113,28 @@ Manual auditing in the AWS or GCP console is tedious and error-prone. CostOps co
 
 ---
 
-### How Dilanix CostOps Solves Attribution
+### End-to-End Attribution
 
-By tagging API requests at the gateway level with tenant and feature identifiers, CostOps correlates raw cloud bills with model usage logs, giving your product and finance teams complete visibility into true gross margins.`,
+By tagging API requests at the gateway level with tenant and feature identifiers, telemetry correlates raw cloud bills with model usage logs, giving your product and finance teams complete visibility into true gross margins.`,
   },
   {
     slug: "multi-cloud-finops-in-2026",
-    title: "Multi-Cloud FinOps in 2026: Balancing AWS, GCP, and Specialized AI Clusters",
+    title: "Multi-Cloud Strategy in 2026: Balancing AWS, GCP, and Specialized AI Clusters",
     excerpt:
-      "Strategies for unifying cost intelligence when your primary workload runs in AWS, data analytics in GCP BigQuery, and frontier inference on specialized AI clouds.",
-    category: "Cloud FinOps",
+      "Strategies for unifying telemetry when your primary workload runs in AWS, data analytics in GCP BigQuery, and frontier inference on specialized AI clouds.",
+    category: "Cloud Architecture",
     readTime: "6 min read",
     author: {
       name: "Dilanix Research",
-      role: "FinOps Strategy",
+      role: "Systems Strategy",
     },
     publishedAt: "Jul 08, 2026",
     status: "published",
     content: `The modern tech stack is rarely single-cloud. High-growth teams leverage AWS for core microservices, GCP for Vertex AI and BigQuery, and direct OpenAI/Anthropic APIs for LLM generation.
 
-Managing disparate billing consoles, currency differences, and delayed invoice exports creates blind spots that make cost forecasting nearly impossible.
+Managing disparate billing consoles, currency differences, and delayed exports creates blind spots that make forecasting difficult.
 
-Unified multi-cloud cost intelligence provides a single source of truth across all cloud providers and AI vendors, enabling centralized budget guardrails and automated waste reduction.`,
+Unified telemetry provides a single source of truth across all cloud providers and AI vendors, enabling centralized budget guardrails and reliable operations.`,
   },
 ];
 
@@ -160,67 +160,49 @@ type ApiBlogListDto = {
   categories: string[];
 };
 
-function formatPublishedDate(dateStr: string | null): string {
-  if (!dateStr) return "Recent";
-  try {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-    });
-  } catch {
-    return "Recent";
-  }
-}
-
 function mapDtoToBlogPost(dto: ApiBlogPostDto): BlogPost {
+  let formattedDate = "Aug 2026";
+  if (dto.published_at) {
+    try {
+      formattedDate = new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+      }).format(new Date(dto.published_at));
+    } catch {}
+  }
+
   return {
     slug: dto.slug,
     title: dto.title,
     excerpt: dto.excerpt,
-    content: dto.content,
     category: dto.category,
     readTime: dto.read_time,
     author: {
       name: dto.author_name,
-      role: dto.author_role ?? "Engineering",
+      role: dto.author_role || "Engineering",
     },
-    publishedAt: formatPublishedDate(dto.published_at),
-    status: dto.status === "draft" ? "draft" : "published",
+    publishedAt: formattedDate,
+    status: dto.status === "published" ? "published" : "draft",
+    content: dto.content,
   };
 }
 
-export async function getBlogPosts(options?: {
-  category?: string;
-  tag?: string;
-}): Promise<BlogPost[]> {
+export async function getBlogPosts(): Promise<BlogPost[]> {
   try {
-    const url = new URL(`${env.NEXT_PUBLIC_API_URL}/v1/blog`);
-    if (options?.category && options.category !== "All") {
-      url.searchParams.set("category", options.category);
-    }
-    if (options?.tag) {
-      url.searchParams.set("tag", options.tag);
-    }
-
-    const res = await fetch(url.toString(), {
-      next: { revalidate: 60 },
-      signal: AbortSignal.timeout(2500),
+    const res = await fetch(`${env.NEXT_PUBLIC_API_URL}/v1/blog?limit=50`, {
+      cache: "no-store",
     });
     if (res.ok) {
-      const data: ApiBlogListDto = await res.json();
-      return data.items.map(mapDtoToBlogPost);
+      const data = (await res.json()) as ApiBlogListDto;
+      if (data.items && data.items.length > 0) {
+        return data.items.map(mapDtoToBlogPost);
+      }
     }
   } catch {
-    // Fallback to static seeds
+    // Fallback to local
   }
-
-  let filtered = fallbackPosts.filter((p) => p.status === "published");
-  if (options?.category && options.category !== "All") {
-    filtered = filtered.filter((p) => p.category === options.category);
-  }
-  return filtered;
+  return fallbackPosts.filter((post) => post.status === "published");
 }
 
 export async function getBlogPostBySlug(
@@ -228,15 +210,14 @@ export async function getBlogPostBySlug(
 ): Promise<BlogPost | undefined> {
   try {
     const res = await fetch(`${env.NEXT_PUBLIC_API_URL}/v1/blog/${slug}`, {
-      next: { revalidate: 60 },
-      signal: AbortSignal.timeout(2500),
+      cache: "no-store",
     });
     if (res.ok) {
-      const data: ApiBlogPostDto = await res.json();
+      const data = (await res.json()) as ApiBlogPostDto;
       return mapDtoToBlogPost(data);
     }
   } catch {
-    // Fallback to static seeds
+    // Fallback to local
   }
   return fallbackPosts.find(
     (post) => post.slug === slug && post.status === "published",

@@ -154,23 +154,22 @@ export default async function BlogPostPage({
         <div className="border-accent/30 bg-accent/[0.04] mt-16 flex flex-col items-center justify-between gap-6 rounded-2xl border p-8 text-center sm:flex-row sm:text-left">
           <div>
             <span className="text-accent font-mono text-xs font-semibold tracking-wider uppercase">
-              Take Action
+              Get In Touch
             </span>
             <h3 className="text-foreground mt-1 text-xl font-semibold">
-              Detect cloud waste & LLM inefficiencies with CostOps
+              Explore custom infrastructure software with Dilanix
             </h3>
             <p className="text-muted-foreground mt-2 max-w-md text-xs sm:text-sm">
-              Start your 14-day discovery scan in under 2 minutes with
-              zero-agent read-only setup.
+              We partner with high-scale engineering organizations to build focused solutions.
             </p>
           </div>
 
           <Button
-            href="/products/costops"
+            href="/contact"
             variant="primary"
             className="shrink-0 px-5 py-2.5 text-sm"
           >
-            Explore CostOps <ArrowRight size={14} />
+            Contact Engineering <ArrowRight size={14} />
           </Button>
         </div>
       </Container>
