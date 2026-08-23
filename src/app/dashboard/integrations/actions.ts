@@ -13,11 +13,13 @@ import {
   removeConnectionScope,
   triggerConnectionSync,
   finishConnectionSync,
+  getConnectionAwsSetup,
   CoreApiError,
   type CoreIntegrationConnection,
   type CoreConnectionCapability,
   type CoreConnectionScope,
   type CoreConnectionSyncRun,
+  type CoreAWSConnectionSetup,
 } from "@/lib/core/api";
 
 type ActionResult<T = undefined> = { data?: T; error?: string };
@@ -147,6 +149,22 @@ export async function addConnectionScopeAction(
       included: input.included,
     });
     revalidatePath(`/dashboard/integrations/${connectionId}`);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getConnectionAwsSetupAction(
+  connectionId: string,
+): Promise<ActionResult<CoreAWSConnectionSetup>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await getConnectionAwsSetup(
+      organizationId,
+      connectionId,
+      token,
+    );
     return { data };
   } catch (error) {
     return { error: message(error) };

@@ -1,15 +1,7 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Check,
-  Copy,
-  ExternalLink,
-  Plus,
-  RefreshCw,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Plus, RefreshCw, Trash2, X } from "lucide-react";
 import type {
   CoreAWSConnectionSetup,
   CoreConnectionActivity,
@@ -32,6 +24,7 @@ import {
   triggerConnectionSyncAction,
 } from "@/app/dashboard/integrations/actions";
 import { EmptyState, Section, StatusBadge } from "./primitives";
+import { AwsSetupPanel } from "./integrations/aws-setup-panel";
 
 function statusTone(
   status: IntegrationConnectionStatus,
@@ -104,14 +97,6 @@ export function ConnectionDetailClient({
   const [scopeDialog, setScopeDialog] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
-  const [copiedExternalId, setCopiedExternalId] = useState(false);
-
-  async function copyExternalId() {
-    if (!awsSetup.external_id) return;
-    await navigator.clipboard.writeText(awsSetup.external_id);
-    setCopiedExternalId(true);
-    setTimeout(() => setCopiedExternalId(false), 2000);
-  }
 
   const capabilitiesDirty = useMemo(() => {
     const current = new Set(connectionCapabilities.map((c) => c.capability_id));
@@ -283,70 +268,27 @@ export function ConnectionDetailClient({
 
       {awsSetup.cloudformation_supported ? (
         <Section title="AWS setup">
-          <div className="border-foreground/10 bg-foreground/[0.015] rounded-xl border p-5">
-            <p className="text-muted-foreground text-sm leading-6">
-              Launch the CloudFormation stack to grant Dilanix a read-only
-              cross-account IAM role. No AWS access keys are ever requested.
-            </p>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-              {awsSetup.cloudformation_url ? (
-                <a
-                  href={awsSetup.cloudformation_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-accent text-accent-foreground inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium"
-                >
-                  <ExternalLink size={15} />
-                  Launch in AWS CloudFormation
-                </a>
-              ) : (
-                <p className="text-muted-foreground text-sm">
-                  CloudFormation launch isn&apos;t configured on this deployment
-                  yet.
-                </p>
-              )}
-            </div>
-            {awsSetup.external_id ? (
-              <div className="mt-4">
-                <span className="text-muted-foreground mb-2 block text-xs font-medium">
-                  External ID — paste this into the console&apos;s
-                  &quot;ExternalId&quot; field
-                </span>
-                <div className="border-foreground/15 flex items-center gap-2 rounded-lg border p-3">
-                  <code className="min-w-0 flex-1 overflow-hidden text-sm text-ellipsis">
-                    {awsSetup.external_id}
-                  </code>
+          <AwsSetupPanel
+            awsSetup={awsSetup}
+            footer={
+              canVerify ? (
+                <>
                   <button
-                    onClick={copyExternalId}
-                    className="text-accent inline-flex shrink-0 items-center gap-1 text-xs"
+                    onClick={verify}
+                    disabled={pending}
+                    className="bg-accent text-accent-foreground rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
                   >
-                    {copiedExternalId ? (
-                      <Check size={14} />
-                    ) : (
-                      <Copy size={14} />
-                    )}
-                    {copiedExternalId ? "Copied" : "Copy"}
+                    {pending ? "Verifying…" : "Verify connection"}
                   </button>
-                </div>
-              </div>
-            ) : null}
-            {canVerify ? (
-              <div className="border-foreground/10 mt-5 border-t pt-5">
-                <button
-                  onClick={verify}
-                  disabled={pending}
-                  className="bg-accent text-accent-foreground rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
-                >
-                  {pending ? "Verifying…" : "Verify connection"}
-                </button>
-                <p className="text-muted-foreground mt-2 text-xs leading-5">
-                  Click once the CloudFormation stack has finished creating.
-                  Dilanix doesn&apos;t check AWS automatically yet — this marks
-                  the connection connected based on your confirmation.
-                </p>
-              </div>
-            ) : null}
-          </div>
+                  <p className="text-muted-foreground mt-2 text-xs leading-5">
+                    Click once the CloudFormation stack has finished creating.
+                    Dilanix doesn&apos;t check AWS automatically yet — this
+                    marks the connection connected based on your confirmation.
+                  </p>
+                </>
+              ) : undefined
+            }
+          />
         </Section>
       ) : null}
 

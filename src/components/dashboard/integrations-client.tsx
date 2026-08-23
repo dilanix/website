@@ -10,6 +10,13 @@ import type {
 } from "@/lib/core/api";
 import { createConnectionAction } from "@/app/dashboard/integrations/actions";
 import { EmptyState, StatusBadge } from "./primitives";
+import { AwsOnboardingWizard } from "./integrations/aws-onboarding-wizard";
+
+// The one integration with a dedicated onboarding wizard today — see
+// `integrations/aws-onboarding-wizard.tsx`. A future provider (GCP, Azure,
+// Cloudflare, ...) with its own multi-step setup would add its own wizard
+// component and a corresponding branch here, not change this one.
+const AWS_INTEGRATION_SLUG = "aws";
 
 function statusTone(
   status: IntegrationConnectionStatus,
@@ -31,6 +38,10 @@ export function IntegrationsClient({
   const [connectTo, setConnectTo] = useState<CoreIntegration | null>(null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const [onboarding, setOnboarding] = useState<{
+    connection: CoreIntegrationConnection;
+    integrationName: string;
+  } | null>(null);
 
   function close() {
     setConnectTo(null);
@@ -88,19 +99,23 @@ export function IntegrationsClient({
               {integrationConnections.length ? (
                 <ul className="border-foreground/10 mt-4 divide-y border-t">
                   {integrationConnections.map((connection) => (
-                    <li
-                      key={connection.id}
-                      className="flex items-center justify-between gap-3 py-3"
-                    >
+                    <li key={connection.id} className="py-3">
                       <Link
                         href={`/dashboard/integrations/${connection.id}`}
-                        className="min-w-0 flex-1 truncate text-sm hover:underline"
+                        className="group flex items-center justify-between gap-3"
                       >
-                        {connection.name}
+                        <span className="group-hover:text-foreground min-w-0 flex-1 truncate text-sm">
+                          {connection.name}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <StatusBadge status={statusTone(connection.status)}>
+                            {connection.status}
+                          </StatusBadge>
+                          <span className="text-muted-foreground group-hover:text-accent text-xs font-medium">
+                            Manage
+                          </span>
+                        </span>
                       </Link>
-                      <StatusBadge status={statusTone(connection.status)}>
-                        {connection.status}
-                      </StatusBadge>
                     </li>
                   ))}
                 </ul>
@@ -145,20 +160,25 @@ export function IntegrationsClient({
                 setError("");
                 const data = new FormData(event.currentTarget);
                 const name = String(data.get("name") ?? "").trim();
-                const externalReference = String(
-                  data.get("external_reference") ?? "",
-                ).trim();
                 startTransition(async () => {
                   const result = await createConnectionAction({
                     integrationId: connectTo.id,
                     name,
-                    externalReference: externalReference || null,
+                    externalReference: null,
                   });
                   if (result.error) return setError(result.error);
                   if (result.data) {
                     setConnections((current) => [result.data!, ...current]);
-                    close();
-                    router.push(`/dashboard/integrations/${result.data.id}`);
+                    if (connectTo.slug === AWS_INTEGRATION_SLUG) {
+                      setOnboarding({
+                        connection: result.data,
+                        integrationName: connectTo.name,
+                      });
+                      close();
+                    } else {
+                      close();
+                      router.push(`/dashboard/integrations/${result.data.id}`);
+                    }
                   }
                 });
               }}
@@ -170,16 +190,6 @@ export function IntegrationsClient({
                   name="name"
                   required
                   defaultValue={`${connectTo.name} Production`}
-                  className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 outline-none"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-2 block font-medium">
-                  External reference (optional)
-                </span>
-                <input
-                  name="external_reference"
-                  placeholder="e.g. account or project ID"
                   className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 outline-none"
                 />
               </label>
@@ -197,6 +207,19 @@ export function IntegrationsClient({
             </form>
           </div>
         </div>
+      ) : null}
+
+      {onboarding ? (
+        <AwsOnboardingWizard
+          connection={onboarding.connection}
+          integrationName={onboarding.integrationName}
+          onClose={() => setOnboarding(null)}
+          onConnectionChange={(updated) =>
+            setConnections((current) =>
+              current.map((c) => (c.id === updated.id ? updated : c)),
+            )
+          }
+        />
       ) : null}
     </>
   );
