@@ -140,3 +140,216 @@ export function getProductDocumentation(
     token,
   );
 }
+
+export type IntegrationStatus = "active" | "disabled" | "deprecated";
+export interface CoreIntegration {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  status: IntegrationStatus;
+  icon_key: string | null;
+}
+
+export type IntegrationCapabilityStatus = "active" | "disabled" | "deprecated";
+export interface CoreIntegrationCapability {
+  id: string;
+  integration_id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  status: IntegrationCapabilityStatus;
+}
+
+export type IntegrationConnectionStatus =
+  "draft" | "pending" | "connected" | "degraded" | "error" | "disabled";
+export interface CoreIntegrationConnection {
+  id: string;
+  organization_id: string;
+  integration_id: string;
+  name: string;
+  status: IntegrationConnectionStatus;
+  configuration: Record<string, unknown>;
+  external_reference: string | null;
+  last_verified_at: string | null;
+  last_success_at: string | null;
+  last_error_at: string | null;
+  last_error_code: string | null;
+  created_at: string;
+}
+export interface CreateConnectionInput {
+  integration_id: string;
+  name: string;
+  configuration?: Record<string, unknown>;
+  external_reference?: string | null;
+}
+
+export interface CoreConnectionCapability {
+  capability_id: string;
+  enabled: boolean;
+  capability: CoreIntegrationCapability;
+}
+
+export interface CoreConnectionScope {
+  scope_type: string;
+  scope_key: string;
+  included: boolean;
+  extra: Record<string, unknown>;
+}
+export interface AddConnectionScopeInput {
+  scope_type: string;
+  scope_key: string;
+  included?: boolean;
+  extra?: Record<string, unknown>;
+}
+
+export function listIntegrations(
+  token: string,
+  statusFilter?: IntegrationStatus,
+) {
+  const query = statusFilter ? `?status_filter=${statusFilter}` : "";
+  return coreRequest<CoreIntegration[]>(`/v1/integrations${query}`, token);
+}
+export function listIntegrationCapabilities(
+  integrationId: string,
+  token: string,
+) {
+  return coreRequest<CoreIntegrationCapability[]>(
+    `/v1/integrations/${integrationId}/capabilities`,
+    token,
+  );
+}
+
+export function listConnections(organizationId: string, token: string) {
+  return coreRequest<CoreIntegrationConnection[]>(
+    `/v1/organizations/${organizationId}/integrations/connections`,
+    token,
+  );
+}
+export function getConnection(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CoreIntegrationConnection>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}`,
+    token,
+  );
+}
+export function createConnection(
+  organizationId: string,
+  token: string,
+  input: CreateConnectionInput,
+) {
+  return coreRequest<CoreIntegrationConnection>(
+    `/v1/organizations/${organizationId}/integrations/connections`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+export function disableConnection(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CoreIntegrationConnection>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/disable`,
+    token,
+    { method: "POST" },
+  );
+}
+export function enableConnection(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CoreIntegrationConnection>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/enable`,
+    token,
+    { method: "POST" },
+  );
+}
+export function removeConnection(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export function listConnectionCapabilities(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  enabledOnly = false,
+) {
+  return coreRequest<CoreConnectionCapability[]>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/capabilities?enabled_only=${enabledOnly}`,
+    token,
+  );
+}
+export function setConnectionCapabilities(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  capabilityIds: string[],
+) {
+  return coreRequest<CoreConnectionCapability[]>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/capabilities`,
+    token,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ capability_ids: capabilityIds }),
+    },
+  );
+}
+
+export function listConnectionScopes(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CoreConnectionScope[]>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/scopes`,
+    token,
+  );
+}
+export function addConnectionScope(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  input: AddConnectionScopeInput,
+) {
+  return coreRequest<CoreConnectionScope>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/scopes`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+export function removeConnectionScope(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  scopeType: string,
+  scopeKey: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/scopes/${encodeURIComponent(scopeType)}/${encodeURIComponent(scopeKey)}`,
+    token,
+    { method: "DELETE" },
+  );
+}

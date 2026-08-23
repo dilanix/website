@@ -13,6 +13,7 @@ import {
   X,
   Boxes,
   ChevronsUpDown,
+  Plug,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,7 @@ import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
 
 const navItems = [
   { label: "Products", href: "/dashboard/products", icon: LayoutGrid },
+  { label: "Integrations", href: "/dashboard/integrations", icon: Plug },
   { label: "API Keys", href: "/dashboard/api-keys", icon: KeyRound },
   { label: "Billing", href: "/dashboard/billing", icon: CreditCard },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
