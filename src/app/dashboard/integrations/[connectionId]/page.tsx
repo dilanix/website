@@ -5,6 +5,7 @@ import { getMe } from "@/lib/auth/api";
 import {
   CoreApiError,
   getConnection,
+  getConnectionAwsSetup,
   listIntegrations,
   listIntegrationCapabilities,
   listConnectionCapabilities,
@@ -38,7 +39,7 @@ export default async function ConnectionDetailPage({
   });
   if (!connection) notFound();
 
-  const [integrations, capabilities, connectionCapabilities, scopes] =
+  const [integrations, capabilities, connectionCapabilities, scopes, awsSetup] =
     await Promise.all([
       listIntegrations(token),
       listIntegrationCapabilities(connection.integration_id, token),
@@ -49,6 +50,7 @@ export default async function ConnectionDetailPage({
         false,
       ),
       listConnectionScopes(organization.organization_id, connectionId, token),
+      getConnectionAwsSetup(organization.organization_id, connectionId, token),
     ]);
   const integration =
     integrations.find((item) => item.id === connection.integration_id) ?? null;
@@ -68,6 +70,7 @@ export default async function ConnectionDetailPage({
         capabilities={capabilities}
         initialConnectionCapabilities={connectionCapabilities}
         initialScopes={scopes}
+        awsSetup={awsSetup}
       />
     </div>
   );

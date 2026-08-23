@@ -1,6 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Plug, Plus, X } from "lucide-react";
 import type {
   CoreIntegration,
@@ -25,6 +26,7 @@ export function IntegrationsClient({
   integrations: CoreIntegration[];
   initialConnections: CoreIntegrationConnection[];
 }) {
+  const router = useRouter();
   const [connections, setConnections] = useState(initialConnections);
   const [connectTo, setConnectTo] = useState<CoreIntegration | null>(null);
   const [error, setError] = useState("");
@@ -156,6 +158,7 @@ export function IntegrationsClient({
                   if (result.data) {
                     setConnections((current) => [result.data!, ...current]);
                     close();
+                    router.push(`/dashboard/integrations/${result.data.id}`);
                   }
                 });
               }}

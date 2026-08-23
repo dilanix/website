@@ -274,6 +274,17 @@ export function enableConnection(
     { method: "POST" },
   );
 }
+export function markConnectionConnected(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CoreIntegrationConnection>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/mark-connected`,
+    token,
+    { method: "POST" },
+  );
+}
 export function removeConnection(
   organizationId: string,
   connectionId: string,
@@ -351,5 +362,23 @@ export function removeConnectionScope(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/scopes/${encodeURIComponent(scopeType)}/${encodeURIComponent(scopeKey)}`,
     token,
     { method: "DELETE" },
+  );
+}
+
+export interface CoreAWSConnectionSetup {
+  cloudformation_supported: boolean;
+  cloudformation_url: string | null;
+  external_id: string | null;
+  stack_name: string | null;
+}
+
+export function getConnectionAwsSetup(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CoreAWSConnectionSetup>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/setup`,
+    token,
   );
 }

@@ -1,8 +1,9 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, X } from "lucide-react";
+import { Check, Copy, ExternalLink, Plus, Trash2, X } from "lucide-react";
 import type {
+  CoreAWSConnectionSetup,
   CoreConnectionCapability,
   CoreConnectionScope,
   CoreIntegrationCapability,
@@ -13,6 +14,7 @@ import {
   addConnectionScopeAction,
   disableConnectionAction,
   enableConnectionAction,
+  markConnectionConnectedAction,
   removeConnectionAction,
   removeConnectionScopeAction,
   setConnectionCapabilitiesAction,
@@ -32,16 +34,23 @@ const REMOVABLE_STATUSES = new Set<IntegrationConnectionStatus>([
   "disabled",
 ]);
 
+const VERIFIABLE_STATUSES = new Set<IntegrationConnectionStatus>([
+  "draft",
+  "pending",
+]);
+
 export function ConnectionDetailClient({
   connection: initialConnection,
   capabilities,
   initialConnectionCapabilities,
   initialScopes,
+  awsSetup,
 }: {
   connection: CoreIntegrationConnection;
   capabilities: CoreIntegrationCapability[];
   initialConnectionCapabilities: CoreConnectionCapability[];
   initialScopes: CoreConnectionScope[];
+  awsSetup: CoreAWSConnectionSetup;
 }) {
   const router = useRouter();
   const [connection, setConnection] = useState(initialConnection);
@@ -56,6 +65,14 @@ export function ConnectionDetailClient({
   const [scopeDialog, setScopeDialog] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const [copiedExternalId, setCopiedExternalId] = useState(false);
+
+  async function copyExternalId() {
+    if (!awsSetup.external_id) return;
+    await navigator.clipboard.writeText(awsSetup.external_id);
+    setCopiedExternalId(true);
+    setTimeout(() => setCopiedExternalId(false), 2000);
+  }
 
   const capabilitiesDirty = useMemo(() => {
     const current = new Set(connectionCapabilities.map((c) => c.capability_id));
@@ -103,6 +120,15 @@ export function ConnectionDetailClient({
     });
   }
 
+  function verify() {
+    setError("");
+    startTransition(async () => {
+      const result = await markConnectionConnectedAction(connection.id);
+      if (result.error) return setError(result.error);
+      if (result.data) setConnection(result.data);
+    });
+  }
+
   function remove() {
     setError("");
     startTransition(async () => {
@@ -134,6 +160,7 @@ export function ConnectionDetailClient({
   }
 
   const canRemove = REMOVABLE_STATUSES.has(connection.status);
+  const canVerify = VERIFIABLE_STATUSES.has(connection.status);
 
   return (
     <div className="flex flex-col gap-8">
@@ -185,6 +212,75 @@ export function ConnectionDetailClient({
         <p role="alert" className="text-sm text-red-500">
           {error}
         </p>
+      ) : null}
+
+      {awsSetup.cloudformation_supported ? (
+        <Section title="AWS setup">
+          <div className="border-foreground/10 bg-foreground/[0.015] rounded-xl border p-5">
+            <p className="text-muted-foreground text-sm leading-6">
+              Launch the CloudFormation stack to grant Dilanix a read-only
+              cross-account IAM role. No AWS access keys are ever requested.
+            </p>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+              {awsSetup.cloudformation_url ? (
+                <a
+                  href={awsSetup.cloudformation_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-accent text-accent-foreground inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium"
+                >
+                  <ExternalLink size={15} />
+                  Launch in AWS CloudFormation
+                </a>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  CloudFormation launch isn&apos;t configured on this deployment
+                  yet.
+                </p>
+              )}
+            </div>
+            {awsSetup.external_id ? (
+              <div className="mt-4">
+                <span className="text-muted-foreground mb-2 block text-xs font-medium">
+                  External ID — paste this into the console&apos;s
+                  &quot;ExternalId&quot; field
+                </span>
+                <div className="border-foreground/15 flex items-center gap-2 rounded-lg border p-3">
+                  <code className="min-w-0 flex-1 overflow-hidden text-sm text-ellipsis">
+                    {awsSetup.external_id}
+                  </code>
+                  <button
+                    onClick={copyExternalId}
+                    className="text-accent inline-flex shrink-0 items-center gap-1 text-xs"
+                  >
+                    {copiedExternalId ? (
+                      <Check size={14} />
+                    ) : (
+                      <Copy size={14} />
+                    )}
+                    {copiedExternalId ? "Copied" : "Copy"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {canVerify ? (
+              <div className="border-foreground/10 mt-5 border-t pt-5">
+                <button
+                  onClick={verify}
+                  disabled={pending}
+                  className="bg-accent text-accent-foreground rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+                >
+                  {pending ? "Verifying…" : "Verify connection"}
+                </button>
+                <p className="text-muted-foreground mt-2 text-xs leading-5">
+                  Click once the CloudFormation stack has finished creating.
+                  Dilanix doesn&apos;t check AWS automatically yet — this marks
+                  the connection connected based on your confirmation.
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </Section>
       ) : null}
 
       <Section
