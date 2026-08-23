@@ -12,7 +12,8 @@ import {
   addConnectionScope,
   removeConnectionScope,
   triggerConnectionSync,
-  finishConnectionSync,
+  getConnectionSyncRun,
+  verifyAwsConnection,
   getConnectionAwsSetup,
   CoreApiError,
   type CoreIntegrationConnection,
@@ -20,6 +21,7 @@ import {
   type CoreConnectionScope,
   type CoreConnectionSyncRun,
   type CoreAWSConnectionSetup,
+  type CoreVerifyAwsConnectionResult,
 } from "@/lib/core/api";
 
 type ActionResult<T = undefined> = { data?: T; error?: string };
@@ -188,20 +190,37 @@ export async function triggerConnectionSyncAction(
   }
 }
 
-export async function finishConnectionSyncAction(
+export async function getConnectionSyncRunAction(
   connectionId: string,
   syncRunId: string,
-  status: "succeeded" | "failed",
 ): Promise<ActionResult<CoreConnectionSyncRun>> {
   try {
     const { token, organizationId } = await context();
-    const data = await finishConnectionSync(
+    const data = await getConnectionSyncRun(
       organizationId,
       connectionId,
       syncRunId,
       token,
-      { status },
     );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function verifyAwsConnectionAction(
+  connectionId: string,
+  awsAccountId: string,
+): Promise<ActionResult<CoreVerifyAwsConnectionResult>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await verifyAwsConnection(
+      organizationId,
+      connectionId,
+      token,
+      awsAccountId,
+    );
+    revalidatePath("/dashboard/integrations");
     revalidatePath(`/dashboard/integrations/${connectionId}`);
     return { data };
   } catch (error) {

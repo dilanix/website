@@ -384,14 +384,36 @@ export function getConnectionAwsSetup(
 }
 
 export type ConnectionSyncStatus = "running" | "succeeded" | "failed";
+export type ConnectionSyncMode = "full" | "incremental";
+export type ConnectionSyncStageStatus =
+  "pending" | "running" | "succeeded" | "failed";
+
+export interface CoreConnectionSyncStage {
+  id: string;
+  stage_key: string;
+  label: string;
+  sequence: number;
+  status: ConnectionSyncStageStatus;
+  started_at: string | null;
+  finished_at: string | null;
+  resource_count: number | null;
+  error_message: string | null;
+}
+
 export interface CoreConnectionSyncRun {
   id: string;
   connection_id: string;
   status: ConnectionSyncStatus;
+  mode: ConnectionSyncMode;
   triggered_by_user_id: string | null;
   finished_at: string | null;
   error_message: string | null;
   created_at: string;
+  stages: CoreConnectionSyncStage[];
+  total_stages: number;
+  completed_stages: number;
+  failed_stages: number;
+  current_stage: string | null;
 }
 
 export type ConnectionActivityType =
@@ -431,20 +453,36 @@ export function triggerConnectionSync(
     { method: "POST" },
   );
 }
-export function finishConnectionSync(
+export function getConnectionSyncRun(
   organizationId: string,
   connectionId: string,
   syncRunId: string,
   token: string,
-  input: { status: "succeeded" | "failed"; error_message?: string | null },
 ) {
   return coreRequest<CoreConnectionSyncRun>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync/${syncRunId}/finish`,
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync/${syncRunId}`,
+    token,
+  );
+}
+
+export interface CoreVerifyAwsConnectionResult {
+  connection: CoreIntegrationConnection;
+  sync_run: CoreConnectionSyncRun | null;
+}
+
+export function verifyAwsConnection(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  awsAccountId: string,
+) {
+  return coreRequest<CoreVerifyAwsConnectionResult>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/verify-aws`,
     token,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
+      body: JSON.stringify({ aws_account_id: awsAccountId }),
     },
   );
 }

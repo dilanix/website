@@ -16,15 +16,16 @@ import {
   addConnectionScopeAction,
   disableConnectionAction,
   enableConnectionAction,
-  finishConnectionSyncAction,
-  markConnectionConnectedAction,
   removeConnectionAction,
   removeConnectionScopeAction,
   setConnectionCapabilitiesAction,
   triggerConnectionSyncAction,
+  verifyAwsConnectionAction,
 } from "@/app/dashboard/integrations/actions";
 import { EmptyState, Section, StatusBadge } from "./primitives";
 import { AwsSetupPanel } from "./integrations/aws-setup-panel";
+import { SyncProgress } from "./integrations/sync-progress";
+import { useSyncRunPolling } from "./integrations/use-sync-run-polling";
 
 function statusTone(
   status: IntegrationConnectionStatus,
@@ -98,6 +99,20 @@ export function ConnectionDetailClient({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
+  const runningRun = syncRuns.find((run) => run.status === "running") ?? null;
+  const [polledRun] = useSyncRunPolling(connection.id, runningRun);
+  // Merge fresh polled progress into the history list during render (React's documented
+  // "adjusting state" pattern) rather than in an effect — guarded on object identity, since
+  // each poll produces a new `polledRun` object only when the backend actually returns one.
+  const [mergedPolledRun, setMergedPolledRun] =
+    useState<CoreConnectionSyncRun | null>(null);
+  if (polledRun && polledRun !== mergedPolledRun) {
+    setMergedPolledRun(polledRun);
+    setSyncRuns((current) =>
+      current.map((run) => (run.id === polledRun.id ? polledRun : run)),
+    );
+  }
+
   const capabilitiesDirty = useMemo(() => {
     const current = new Set(connectionCapabilities.map((c) => c.capability_id));
     if (current.size !== selectedCapabilityIds.size) return true;
@@ -144,12 +159,20 @@ export function ConnectionDetailClient({
     });
   }
 
-  function verify() {
+  function verifyAws(awsAccountId: string) {
     setError("");
     startTransition(async () => {
-      const result = await markConnectionConnectedAction(connection.id);
+      const result = await verifyAwsConnectionAction(
+        connection.id,
+        awsAccountId,
+      );
       if (result.error) return setError(result.error);
-      if (result.data) setConnection(result.data);
+      if (result.data) {
+        setConnection(result.data.connection);
+        if (result.data.sync_run) {
+          setSyncRuns((current) => [result.data!.sync_run!, ...current]);
+        }
+      }
     });
   }
 
@@ -159,23 +182,6 @@ export function ConnectionDetailClient({
       const result = await triggerConnectionSyncAction(connection.id);
       if (result.error) return setError(result.error);
       if (result.data) setSyncRuns((current) => [result.data!, ...current]);
-    });
-  }
-
-  function finishSync(syncRunId: string, status: "succeeded" | "failed") {
-    setError("");
-    startTransition(async () => {
-      const result = await finishConnectionSyncAction(
-        connection.id,
-        syncRunId,
-        status,
-      );
-      if (result.error) return setError(result.error);
-      if (result.data) {
-        setSyncRuns((current) =>
-          current.map((run) => (run.id === syncRunId ? result.data! : run)),
-        );
-      }
     });
   }
 
@@ -272,20 +278,42 @@ export function ConnectionDetailClient({
             awsSetup={awsSetup}
             footer={
               canVerify ? (
-                <>
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const data = new FormData(event.currentTarget);
+                    const awsAccountId = String(
+                      data.get("aws_account_id") ?? "",
+                    ).trim();
+                    verifyAws(awsAccountId);
+                  }}
+                >
+                  <label className="block text-sm">
+                    <span className="mb-2 block font-medium">
+                      AWS account ID
+                    </span>
+                    <input
+                      name="aws_account_id"
+                      required
+                      pattern="\d{12}"
+                      title="12-digit AWS account ID"
+                      placeholder="123456789012"
+                      defaultValue={connection.external_reference ?? ""}
+                      className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 font-mono text-sm outline-none"
+                    />
+                  </label>
                   <button
-                    onClick={verify}
                     disabled={pending}
-                    className="bg-accent text-accent-foreground rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+                    className="bg-accent text-accent-foreground mt-3 rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
                   >
                     {pending ? "Verifying…" : "Verify connection"}
                   </button>
                   <p className="text-muted-foreground mt-2 text-xs leading-5">
-                    Click once the CloudFormation stack has finished creating.
-                    Dilanix doesn&apos;t check AWS automatically yet — this
-                    marks the connection connected based on your confirmation.
+                    Assumes the role in AWS and confirms access before
+                    connecting — the account ID must match where the
+                    CloudFormation stack was created.
                   </p>
-                </>
+                </form>
               ) : undefined
             }
           />
@@ -313,55 +341,53 @@ export function ConnectionDetailClient({
         }
       >
         {syncRuns.length ? (
-          <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
-            {syncRuns.map((run) => (
-              <div
-                key={run.id}
-                className="flex items-center justify-between gap-3 p-4 text-sm"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <StatusBadge
-                      status={
-                        run.status === "succeeded"
-                          ? "success"
-                          : run.status === "failed"
-                            ? "warning"
-                            : "neutral"
-                      }
-                    >
-                      {run.status}
-                    </StatusBadge>
-                    <span className="text-muted-foreground text-xs">
-                      {new Date(run.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                  {run.error_message ? (
-                    <p className="text-muted-foreground mt-1.5 text-xs">
-                      {run.error_message}
-                    </p>
-                  ) : null}
-                </div>
-                {run.status === "running" ? (
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button
-                      onClick={() => finishSync(run.id, "succeeded")}
-                      disabled={pending}
-                      className="border-foreground/15 hover:bg-foreground/5 rounded-lg border px-2.5 py-1.5 text-xs font-medium disabled:opacity-50"
-                    >
-                      Mark succeeded
-                    </button>
-                    <button
-                      onClick={() => finishSync(run.id, "failed")}
-                      disabled={pending}
-                      className="rounded-lg border border-red-600/30 px-2.5 py-1.5 text-xs text-red-600 disabled:opacity-50"
-                    >
-                      Mark failed
-                    </button>
-                  </div>
-                ) : null}
+          <div className="flex flex-col gap-4">
+            {polledRun && polledRun.status === "running" ? (
+              <div className="border-foreground/10 bg-foreground/[0.015] rounded-xl border p-4">
+                <SyncProgress syncRun={polledRun} />
               </div>
-            ))}
+            ) : null}
+            <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
+              {syncRuns
+                .filter(
+                  (run) => run.id !== polledRun?.id || run.status !== "running",
+                )
+                .map((run) => (
+                  <div
+                    key={run.id}
+                    className="flex items-center justify-between gap-3 p-4 text-sm"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <StatusBadge
+                          status={
+                            run.status === "succeeded"
+                              ? "success"
+                              : run.status === "failed"
+                                ? "warning"
+                                : "neutral"
+                          }
+                        >
+                          {run.status}
+                        </StatusBadge>
+                        <span className="text-muted-foreground text-xs">
+                          {new Date(run.created_at).toLocaleString()}
+                        </span>
+                        {run.total_stages > 0 ? (
+                          <span className="text-muted-foreground text-xs">
+                            {run.completed_stages}/{run.total_stages} operations
+                          </span>
+                        ) : null}
+                      </div>
+                      {run.error_message ? (
+                        <p className="text-muted-foreground mt-1.5 text-xs">
+                          {run.error_message}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+            </div>
           </div>
         ) : (
           <EmptyState
