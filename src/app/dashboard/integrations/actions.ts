@@ -4,6 +4,7 @@ import { getAccessToken } from "@/lib/auth/session";
 import { getMe } from "@/lib/auth/api";
 import {
   createConnection,
+  updateConnection,
   disableConnection,
   enableConnection,
   markConnectionConnected,
@@ -17,6 +18,7 @@ import {
   getConnectionAwsSetup,
   CoreApiError,
   type CoreIntegrationConnection,
+  type UpdateConnectionInput,
   type CoreConnectionCapability,
   type CoreConnectionScope,
   type CoreConnectionSyncRun,
@@ -55,6 +57,26 @@ export async function createConnectionAction(input: {
       external_reference: input.externalReference,
     });
     revalidatePath("/dashboard/integrations");
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function updateConnectionAction(
+  connectionId: string,
+  input: UpdateConnectionInput,
+): Promise<ActionResult<CoreIntegrationConnection>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await updateConnection(
+      organizationId,
+      connectionId,
+      token,
+      input,
+    );
+    revalidatePath("/dashboard/integrations");
+    revalidatePath(`/dashboard/integrations/${connectionId}`);
     return { data };
   } catch (error) {
     return { error: message(error) };

@@ -252,6 +252,29 @@ export function createConnection(
     },
   );
 }
+
+export interface UpdateConnectionInput {
+  name?: string | null;
+  configuration?: Record<string, unknown> | null;
+  external_reference?: string | null;
+}
+
+export function updateConnection(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  input: UpdateConnectionInput,
+) {
+  return coreRequest<CoreIntegrationConnection>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
 export function disableConnection(
   organizationId: string,
   connectionId: string,
