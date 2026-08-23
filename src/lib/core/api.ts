@@ -79,6 +79,60 @@ export interface CreateApiKeyInput {
   expires_at: string | null;
 }
 
+export interface PublicProductRead {
+  id: string;
+  name: string;
+  short_name?: string | null;
+  slug: string;
+  headline?: string | null;
+  tag?: string | null;
+  category?: string | null;
+  product_status: string;
+  is_featured: boolean;
+  sort_order: number;
+  description?: string | null;
+  features: string[];
+  highlights: { label: string; value: string }[];
+  faqs: { question: string; answer: string }[];
+  dashboard_snapshot?: Record<string, unknown> | null;
+  dashboard_enabled: boolean;
+  api_enabled: boolean;
+  documentation?: string | null;
+}
+
+export interface PublicCatalogResponse {
+  featured: PublicProductRead | null;
+  active: PublicProductRead[];
+  upcoming: PublicProductRead[];
+}
+
+export async function getPublicCatalog(): Promise<PublicCatalogResponse> {
+  const response = await fetch(`${env.NEXT_PUBLIC_API_URL}/v1/products`, {
+    headers: { Accept: "application/json" },
+    next: { revalidate: 60 },
+  });
+  if (!response.ok) {
+    throw new CoreApiError("Failed to fetch public catalog", response.status);
+  }
+  return response.json() as Promise<PublicCatalogResponse>;
+}
+
+export async function getPublicProductDetail(
+  slug: string,
+): Promise<PublicProductRead> {
+  const response = await fetch(`${env.NEXT_PUBLIC_API_URL}/v1/products/${slug}`, {
+    headers: { Accept: "application/json" },
+    next: { revalidate: 60 },
+  });
+  if (!response.ok) {
+    throw new CoreApiError(
+      `Failed to fetch public product detail for ${slug}`,
+      response.status,
+    );
+  }
+  return response.json() as Promise<PublicProductRead>;
+}
+
 export function listOrganizationProducts(
   organizationId: string,
   token: string,

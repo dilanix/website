@@ -31,7 +31,7 @@ export default async function DashboardLayout({
           accessToken,
         )
       ).map((product) =>
-        toDashboardProduct(product, { isSuperuser: me.is_superuser }),
+        toDashboardProduct(product),
       )
     : [];
 
