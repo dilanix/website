@@ -382,3 +382,80 @@ export function getConnectionAwsSetup(
     token,
   );
 }
+
+export type ConnectionSyncStatus = "running" | "succeeded" | "failed";
+export interface CoreConnectionSyncRun {
+  id: string;
+  connection_id: string;
+  status: ConnectionSyncStatus;
+  triggered_by_user_id: string | null;
+  finished_at: string | null;
+  error_message: string | null;
+  created_at: string;
+}
+
+export type ConnectionActivityType =
+  | "created"
+  | "status_changed"
+  | "capabilities_changed"
+  | "scopes_changed"
+  | "sync_triggered"
+  | "sync_finished";
+export interface CoreConnectionActivity {
+  id: string;
+  connection_id: string;
+  activity_type: ConnectionActivityType;
+  actor_user_id: string | null;
+  detail: Record<string, unknown>;
+  created_at: string;
+}
+
+export function listConnectionSyncRuns(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CoreConnectionSyncRun[]>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync`,
+    token,
+  );
+}
+export function triggerConnectionSync(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CoreConnectionSyncRun>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync`,
+    token,
+    { method: "POST" },
+  );
+}
+export function finishConnectionSync(
+  organizationId: string,
+  connectionId: string,
+  syncRunId: string,
+  token: string,
+  input: { status: "succeeded" | "failed"; error_message?: string | null },
+) {
+  return coreRequest<CoreConnectionSyncRun>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync/${syncRunId}/finish`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function listConnectionActivity(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CoreConnectionActivity[]>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/activity`,
+    token,
+  );
+}

@@ -1,11 +1,21 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, ExternalLink, Plus, Trash2, X } from "lucide-react";
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  Plus,
+  RefreshCw,
+  Trash2,
+  X,
+} from "lucide-react";
 import type {
   CoreAWSConnectionSetup,
+  CoreConnectionActivity,
   CoreConnectionCapability,
   CoreConnectionScope,
+  CoreConnectionSyncRun,
   CoreIntegrationCapability,
   CoreIntegrationConnection,
   IntegrationConnectionStatus,
@@ -14,10 +24,12 @@ import {
   addConnectionScopeAction,
   disableConnectionAction,
   enableConnectionAction,
+  finishConnectionSyncAction,
   markConnectionConnectedAction,
   removeConnectionAction,
   removeConnectionScopeAction,
   setConnectionCapabilitiesAction,
+  triggerConnectionSyncAction,
 } from "@/app/dashboard/integrations/actions";
 import { EmptyState, Section, StatusBadge } from "./primitives";
 
@@ -39,18 +51,43 @@ const VERIFIABLE_STATUSES = new Set<IntegrationConnectionStatus>([
   "pending",
 ]);
 
+const SYNCABLE_STATUSES = new Set<IntegrationConnectionStatus>([
+  "connected",
+  "degraded",
+]);
+
+const ACTIVITY_LABELS: Record<CoreConnectionActivity["activity_type"], string> =
+  {
+    created: "Connection created",
+    status_changed: "Status changed",
+    capabilities_changed: "Capabilities changed",
+    scopes_changed: "Scopes changed",
+    sync_triggered: "Sync triggered",
+    sync_finished: "Sync finished",
+  };
+
+function formatActivityDetail(detail: Record<string, unknown>): string | null {
+  const entries = Object.entries(detail);
+  if (!entries.length) return null;
+  return entries.map(([key, value]) => `${key}: ${String(value)}`).join(", ");
+}
+
 export function ConnectionDetailClient({
   connection: initialConnection,
   capabilities,
   initialConnectionCapabilities,
   initialScopes,
   awsSetup,
+  initialSyncRuns,
+  initialActivity,
 }: {
   connection: CoreIntegrationConnection;
   capabilities: CoreIntegrationCapability[];
   initialConnectionCapabilities: CoreConnectionCapability[];
   initialScopes: CoreConnectionScope[];
   awsSetup: CoreAWSConnectionSetup;
+  initialSyncRuns: CoreConnectionSyncRun[];
+  initialActivity: CoreConnectionActivity[];
 }) {
   const router = useRouter();
   const [connection, setConnection] = useState(initialConnection);
@@ -58,6 +95,8 @@ export function ConnectionDetailClient({
     initialConnectionCapabilities,
   );
   const [scopes, setScopes] = useState(initialScopes);
+  const [syncRuns, setSyncRuns] = useState(initialSyncRuns);
+  const [activity] = useState(initialActivity);
   const [selectedCapabilityIds, setSelectedCapabilityIds] = useState<
     Set<string>
   >(() => new Set(initialConnectionCapabilities.map((c) => c.capability_id)));
@@ -129,6 +168,32 @@ export function ConnectionDetailClient({
     });
   }
 
+  function triggerSync() {
+    setError("");
+    startTransition(async () => {
+      const result = await triggerConnectionSyncAction(connection.id);
+      if (result.error) return setError(result.error);
+      if (result.data) setSyncRuns((current) => [result.data!, ...current]);
+    });
+  }
+
+  function finishSync(syncRunId: string, status: "succeeded" | "failed") {
+    setError("");
+    startTransition(async () => {
+      const result = await finishConnectionSyncAction(
+        connection.id,
+        syncRunId,
+        status,
+      );
+      if (result.error) return setError(result.error);
+      if (result.data) {
+        setSyncRuns((current) =>
+          current.map((run) => (run.id === syncRunId ? result.data! : run)),
+        );
+      }
+    });
+  }
+
   function remove() {
     setError("");
     startTransition(async () => {
@@ -161,6 +226,8 @@ export function ConnectionDetailClient({
 
   const canRemove = REMOVABLE_STATUSES.has(connection.status);
   const canVerify = VERIFIABLE_STATUSES.has(connection.status);
+  const hasRunningSync = syncRuns.some((run) => run.status === "running");
+  const canSync = SYNCABLE_STATUSES.has(connection.status) && !hasRunningSync;
 
   return (
     <div className="flex flex-col gap-8">
@@ -284,6 +351,85 @@ export function ConnectionDetailClient({
       ) : null}
 
       <Section
+        title="Sync"
+        action={
+          <button
+            onClick={triggerSync}
+            disabled={pending || !canSync}
+            title={
+              canSync
+                ? undefined
+                : hasRunningSync
+                  ? "A sync is already running"
+                  : "Connection must be connected or degraded to sync"
+            }
+            className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium disabled:opacity-40"
+          >
+            <RefreshCw size={13} />
+            Sync now
+          </button>
+        }
+      >
+        {syncRuns.length ? (
+          <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
+            {syncRuns.map((run) => (
+              <div
+                key={run.id}
+                className="flex items-center justify-between gap-3 p-4 text-sm"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <StatusBadge
+                      status={
+                        run.status === "succeeded"
+                          ? "success"
+                          : run.status === "failed"
+                            ? "warning"
+                            : "neutral"
+                      }
+                    >
+                      {run.status}
+                    </StatusBadge>
+                    <span className="text-muted-foreground text-xs">
+                      {new Date(run.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                  {run.error_message ? (
+                    <p className="text-muted-foreground mt-1.5 text-xs">
+                      {run.error_message}
+                    </p>
+                  ) : null}
+                </div>
+                {run.status === "running" ? (
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      onClick={() => finishSync(run.id, "succeeded")}
+                      disabled={pending}
+                      className="border-foreground/15 hover:bg-foreground/5 rounded-lg border px-2.5 py-1.5 text-xs font-medium disabled:opacity-50"
+                    >
+                      Mark succeeded
+                    </button>
+                    <button
+                      onClick={() => finishSync(run.id, "failed")}
+                      disabled={pending}
+                      className="rounded-lg border border-red-600/30 px-2.5 py-1.5 text-xs text-red-600 disabled:opacity-50"
+                    >
+                      Mark failed
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No syncs yet"
+            description="Sync pulls the latest data for this connection. Trigger one to start the history."
+          />
+        )}
+      </Section>
+
+      <Section
         title="Capabilities"
         action={
           capabilitiesDirty ? (
@@ -369,6 +515,41 @@ export function ConnectionDetailClient({
           <EmptyState
             title="No scopes"
             description="Scope this connection to specific regions, accounts, or projects."
+          />
+        )}
+      </Section>
+
+      <Section title="Activity">
+        {activity.length ? (
+          <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
+            {activity.map((event) => {
+              const detail = formatActivityDetail(event.detail);
+              return (
+                <div
+                  key={event.id}
+                  className="flex items-start justify-between gap-3 p-4 text-sm"
+                >
+                  <div>
+                    <p className="font-medium">
+                      {ACTIVITY_LABELS[event.activity_type]}
+                    </p>
+                    {detail ? (
+                      <p className="text-muted-foreground mt-1 font-mono text-xs">
+                        {detail}
+                      </p>
+                    ) : null}
+                  </div>
+                  <span className="text-muted-foreground shrink-0 text-xs">
+                    {new Date(event.created_at).toLocaleString()}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState
+            title="No activity yet"
+            description="Lifecycle events for this connection will show up here."
           />
         )}
       </Section>

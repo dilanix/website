@@ -10,6 +10,8 @@ import {
   listIntegrationCapabilities,
   listConnectionCapabilities,
   listConnectionScopes,
+  listConnectionSyncRuns,
+  listConnectionActivity,
 } from "@/lib/core/api";
 import { PageHeader } from "@/components/dashboard/primitives";
 import { ConnectionDetailClient } from "@/components/dashboard/connection-detail-client";
@@ -39,19 +41,28 @@ export default async function ConnectionDetailPage({
   });
   if (!connection) notFound();
 
-  const [integrations, capabilities, connectionCapabilities, scopes, awsSetup] =
-    await Promise.all([
-      listIntegrations(token),
-      listIntegrationCapabilities(connection.integration_id, token),
-      listConnectionCapabilities(
-        organization.organization_id,
-        connectionId,
-        token,
-        false,
-      ),
-      listConnectionScopes(organization.organization_id, connectionId, token),
-      getConnectionAwsSetup(organization.organization_id, connectionId, token),
-    ]);
+  const [
+    integrations,
+    capabilities,
+    connectionCapabilities,
+    scopes,
+    awsSetup,
+    syncRuns,
+    activity,
+  ] = await Promise.all([
+    listIntegrations(token),
+    listIntegrationCapabilities(connection.integration_id, token),
+    listConnectionCapabilities(
+      organization.organization_id,
+      connectionId,
+      token,
+      false,
+    ),
+    listConnectionScopes(organization.organization_id, connectionId, token),
+    getConnectionAwsSetup(organization.organization_id, connectionId, token),
+    listConnectionSyncRuns(organization.organization_id, connectionId, token),
+    listConnectionActivity(organization.organization_id, connectionId, token),
+  ]);
   const integration =
     integrations.find((item) => item.id === connection.integration_id) ?? null;
 
@@ -71,6 +82,8 @@ export default async function ConnectionDetailPage({
         initialConnectionCapabilities={connectionCapabilities}
         initialScopes={scopes}
         awsSetup={awsSetup}
+        initialSyncRuns={syncRuns}
+        initialActivity={activity}
       />
     </div>
   );

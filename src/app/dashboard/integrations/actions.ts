@@ -11,10 +11,13 @@ import {
   setConnectionCapabilities,
   addConnectionScope,
   removeConnectionScope,
+  triggerConnectionSync,
+  finishConnectionSync,
   CoreApiError,
   type CoreIntegrationConnection,
   type CoreConnectionCapability,
   type CoreConnectionScope,
+  type CoreConnectionSyncRun,
 } from "@/lib/core/api";
 
 type ActionResult<T = undefined> = { data?: T; error?: string };
@@ -143,6 +146,44 @@ export async function addConnectionScopeAction(
       scope_key: input.scopeKey,
       included: input.included,
     });
+    revalidatePath(`/dashboard/integrations/${connectionId}`);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function triggerConnectionSyncAction(
+  connectionId: string,
+): Promise<ActionResult<CoreConnectionSyncRun>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await triggerConnectionSync(
+      organizationId,
+      connectionId,
+      token,
+    );
+    revalidatePath(`/dashboard/integrations/${connectionId}`);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function finishConnectionSyncAction(
+  connectionId: string,
+  syncRunId: string,
+  status: "succeeded" | "failed",
+): Promise<ActionResult<CoreConnectionSyncRun>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await finishConnectionSync(
+      organizationId,
+      connectionId,
+      syncRunId,
+      token,
+      { status },
+    );
     revalidatePath(`/dashboard/integrations/${connectionId}`);
     return { data };
   } catch (error) {
