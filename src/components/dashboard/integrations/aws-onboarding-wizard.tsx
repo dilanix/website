@@ -8,21 +8,16 @@ import type {
 import {
   getConnectionAwsSetupAction,
   verifyAwsConnectionAction,
-  triggerConnectionSyncAction,
 } from "@/app/dashboard/integrations/actions";
 import { StatusBadge } from "../primitives";
 import { AwsSetupPanel } from "./aws-setup-panel";
-import { SyncProgress } from "./sync-progress";
-import { useSyncRunPolling } from "./use-sync-run-polling";
 
 /**
- * AWS-specific onboarding wizard: aws_setup -> verify -> syncing -> complete.
+ * AWS-specific onboarding wizard: aws_setup -> verify -> complete.
  *
  * Verification is a real backend STS AssumeRole + GetCallerIdentity check
  * (`verifyAwsConnectionAction` -> `POST .../verify-aws`) — nothing here
- * fakes it. On success the backend has already started a real, fully
- * staged sync; this component only polls and renders its progress (see
- * `useSyncRunPolling`/`SyncProgress`) — it never invents progress itself.
+ * fakes it.
  */
 
 type WizardState =
@@ -32,7 +27,6 @@ type WizardState =
       error: string | null;
     }
   | { step: "verify"; setup: CoreAWSConnectionSetup; error: string | null }
-  | { step: "syncing"; setup: CoreAWSConnectionSetup }
   | { step: "complete"; setup: CoreAWSConnectionSetup };
 
 function ModalShell({
@@ -86,7 +80,6 @@ export function AwsOnboardingWizard({
   });
   const [pending, startTransition] = useTransition();
   const loaded = useRef(false);
-  const [syncRun, setSyncRun] = useSyncRunPolling(connection.id, null);
 
   function loadSetup() {
     startTransition(async () => {
@@ -107,16 +100,6 @@ export function AwsOnboardingWizard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Once the polled sync run reaches a terminal state, move on from "syncing" automatically —
-  // adjusted during render (React's documented pattern) rather than in an effect.
-  if (
-    wizardState.step === "syncing" &&
-    syncRun &&
-    syncRun.status !== "running"
-  ) {
-    setWizardState({ step: "complete", setup: wizardState.setup });
-  }
-
   function verify(setup: CoreAWSConnectionSetup, awsAccountId: string) {
     startTransition(async () => {
       const result = await verifyAwsConnectionAction(
@@ -130,22 +113,7 @@ export function AwsOnboardingWizard({
       const updated = result.data!.connection;
       setConnection(updated);
       onConnectionChange(updated);
-      if (result.data!.sync_run) {
-        setSyncRun(result.data!.sync_run);
-        setWizardState({ step: "syncing", setup });
-      } else {
-        setWizardState({ step: "complete", setup });
-      }
-    });
-  }
-
-  function retrySync(setup: CoreAWSConnectionSetup) {
-    startTransition(async () => {
-      const result = await triggerConnectionSyncAction(connection.id);
-      if (result.data) {
-        setSyncRun(result.data);
-        setWizardState({ step: "syncing", setup });
-      }
+      setWizardState({ step: "complete", setup });
     });
   }
 
@@ -266,65 +234,16 @@ export function AwsOnboardingWizard({
     );
   }
 
-  if (wizardState.step === "syncing") {
-    return (
-      <ModalShell titleId="syncing-title" onClose={onClose}>
-        <h2 id="syncing-title" className="text-lg font-semibold">
-          Setting up your AWS data
-        </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Verified. Running the initial full sync now — you can close this and
-          it will keep running in the background.
-        </p>
-        <div className="mt-5">
-          {syncRun ? (
-            <SyncProgress syncRun={syncRun} />
-          ) : (
-            <div className="flex items-center justify-center py-10">
-              <Loader2
-                className="text-muted-foreground animate-spin"
-                size={22}
-              />
-            </div>
-          )}
-        </div>
-        <button
-          onClick={onClose}
-          className="border-foreground/15 hover:bg-foreground/5 mt-5 w-full rounded-lg border px-4 py-2.5 text-sm font-medium"
-        >
-          Close
-        </button>
-      </ModalShell>
-    );
-  }
-
-  const succeeded = !syncRun || syncRun.status === "succeeded";
-
   return (
     <ModalShell titleId="complete-title" onClose={onClose}>
       <h2 id="complete-title" className="text-lg font-semibold">
-        {succeeded ? "AWS connected and synchronized" : "Sync failed"}
+        AWS connected
       </h2>
       <div className="border-foreground/10 mt-4 rounded-xl border p-5">
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm font-medium">{connection.name}</span>
           <StatusBadge status="success">{connection.status}</StatusBadge>
         </div>
-        {syncRun ? (
-          <div className="border-foreground/10 mt-4 border-t pt-4">
-            <SyncProgress syncRun={syncRun} />
-            {!succeeded ? (
-              <button
-                onClick={() => retrySync(wizardState.setup)}
-                disabled={pending}
-                className="border-foreground/15 hover:bg-foreground/5 mt-4 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium disabled:opacity-50"
-              >
-                <RefreshCw size={13} />
-                {pending ? "Retrying…" : "Retry sync"}
-              </button>
-            ) : null}
-          </div>
-        ) : null}
       </div>
       <button
         onClick={onClose}

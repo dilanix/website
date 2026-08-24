@@ -120,10 +120,13 @@ export async function getPublicCatalog(): Promise<PublicCatalogResponse> {
 export async function getPublicProductDetail(
   slug: string,
 ): Promise<PublicProductRead> {
-  const response = await fetch(`${env.NEXT_PUBLIC_API_URL}/v1/products/${slug}`, {
-    headers: { Accept: "application/json" },
-    next: { revalidate: 60 },
-  });
+  const response = await fetch(
+    `${env.NEXT_PUBLIC_API_URL}/v1/products/${slug}`,
+    {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 60 },
+    },
+  );
   if (!response.ok) {
     throw new CoreApiError(
       `Failed to fetch public product detail for ${slug}`,
@@ -217,7 +220,7 @@ export interface CoreIntegrationCapability {
 }
 
 export type IntegrationConnectionStatus =
-  "draft" | "pending" | "connected" | "degraded" | "error" | "disabled";
+  "draft" | "pending" | "connected" | "error" | "disabled";
 export interface CoreIntegrationConnection {
   id: string;
   organization_id: string;
@@ -460,91 +463,8 @@ export function getConnectionAwsSetup(
   );
 }
 
-export type ConnectionSyncStatus = "running" | "succeeded" | "failed";
-export type ConnectionSyncMode = "full" | "incremental";
-export type ConnectionSyncStageStatus =
-  "pending" | "running" | "succeeded" | "failed";
-
-export interface CoreConnectionSyncStage {
-  id: string;
-  stage_key: string;
-  label: string;
-  sequence: number;
-  status: ConnectionSyncStageStatus;
-  started_at: string | null;
-  finished_at: string | null;
-  resource_count: number | null;
-  error_message: string | null;
-}
-
-export interface CoreConnectionSyncRun {
-  id: string;
-  connection_id: string;
-  status: ConnectionSyncStatus;
-  mode: ConnectionSyncMode;
-  triggered_by_user_id: string | null;
-  finished_at: string | null;
-  error_message: string | null;
-  created_at: string;
-  stages: CoreConnectionSyncStage[];
-  total_stages: number;
-  completed_stages: number;
-  failed_stages: number;
-  current_stage: string | null;
-}
-
-export type ConnectionActivityType =
-  | "created"
-  | "status_changed"
-  | "capabilities_changed"
-  | "scopes_changed"
-  | "sync_triggered"
-  | "sync_finished";
-export interface CoreConnectionActivity {
-  id: string;
-  connection_id: string;
-  activity_type: ConnectionActivityType;
-  actor_user_id: string | null;
-  detail: Record<string, unknown>;
-  created_at: string;
-}
-
-export function listConnectionSyncRuns(
-  organizationId: string,
-  connectionId: string,
-  token: string,
-) {
-  return coreRequest<CoreConnectionSyncRun[]>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync`,
-    token,
-  );
-}
-export function triggerConnectionSync(
-  organizationId: string,
-  connectionId: string,
-  token: string,
-) {
-  return coreRequest<CoreConnectionSyncRun>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync`,
-    token,
-    { method: "POST" },
-  );
-}
-export function getConnectionSyncRun(
-  organizationId: string,
-  connectionId: string,
-  syncRunId: string,
-  token: string,
-) {
-  return coreRequest<CoreConnectionSyncRun>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync/${syncRunId}`,
-    token,
-  );
-}
-
 export interface CoreVerifyAwsConnectionResult {
   connection: CoreIntegrationConnection;
-  sync_run: CoreConnectionSyncRun | null;
 }
 
 export function verifyAwsConnection(
@@ -561,16 +481,5 @@ export function verifyAwsConnection(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ aws_account_id: awsAccountId }),
     },
-  );
-}
-
-export function listConnectionActivity(
-  organizationId: string,
-  connectionId: string,
-  token: string,
-) {
-  return coreRequest<CoreConnectionActivity[]>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/activity`,
-    token,
   );
 }

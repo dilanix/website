@@ -22,7 +22,7 @@ function statusTone(
   status: IntegrationConnectionStatus,
 ): "success" | "neutral" | "warning" {
   if (status === "connected") return "success";
-  if (status === "error" || status === "degraded") return "warning";
+  if (status === "error") return "warning";
   return "neutral";
 }
 

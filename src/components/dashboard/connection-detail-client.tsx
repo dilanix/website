@@ -2,12 +2,10 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Activity,
   CheckCircle2,
   Edit2,
   Filter,
   Plus,
-  RefreshCw,
   ShieldCheck,
   Trash2,
   Zap,
@@ -15,10 +13,8 @@ import {
 } from "lucide-react";
 import type {
   CoreAWSConnectionSetup,
-  CoreConnectionActivity,
   CoreConnectionCapability,
   CoreConnectionScope,
-  CoreConnectionSyncRun,
   CoreIntegrationCapability,
   CoreIntegrationConnection,
   IntegrationConnectionStatus,
@@ -30,21 +26,18 @@ import {
   removeConnectionAction,
   removeConnectionScopeAction,
   setConnectionCapabilitiesAction,
-  triggerConnectionSyncAction,
   updateConnectionAction,
   verifyAwsConnectionAction,
 } from "@/app/dashboard/integrations/actions";
 import { EmptyState, Section, StatusBadge } from "./primitives";
 import { AwsSetupPanel } from "./integrations/aws-setup-panel";
-import { SyncProgress } from "./integrations/sync-progress";
-import { useSyncRunPolling } from "./integrations/use-sync-run-polling";
 import { cn } from "@/lib/utils";
 
 function statusTone(
   status: IntegrationConnectionStatus,
 ): "success" | "neutral" | "warning" {
   if (status === "connected") return "success";
-  if (status === "error" || status === "degraded") return "warning";
+  if (status === "error") return "warning";
   return "neutral";
 }
 
@@ -53,28 +46,7 @@ const REMOVABLE_STATUSES = new Set<IntegrationConnectionStatus>([
   "disabled",
 ]);
 
-const SYNCABLE_STATUSES = new Set<IntegrationConnectionStatus>([
-  "connected",
-  "degraded",
-]);
-
-const ACTIVITY_LABELS: Record<CoreConnectionActivity["activity_type"], string> =
-  {
-    created: "Connection created",
-    status_changed: "Status changed",
-    capabilities_changed: "Capabilities changed",
-    scopes_changed: "Scopes changed",
-    sync_triggered: "Sync triggered",
-    sync_finished: "Sync finished",
-  };
-
-function formatActivityDetail(detail: Record<string, unknown>): string | null {
-  const entries = Object.entries(detail);
-  if (!entries.length) return null;
-  return entries.map(([key, value]) => `${key}: ${String(value)}`).join(", ");
-}
-
-type TabType = "sync" | "capabilities" | "scopes" | "activity";
+type TabType = "capabilities" | "scopes";
 
 export function ConnectionDetailClient({
   connection: initialConnection,
@@ -82,26 +54,20 @@ export function ConnectionDetailClient({
   initialConnectionCapabilities,
   initialScopes,
   awsSetup,
-  initialSyncRuns,
-  initialActivity,
 }: {
   connection: CoreIntegrationConnection;
   capabilities: CoreIntegrationCapability[];
   initialConnectionCapabilities: CoreConnectionCapability[];
   initialScopes: CoreConnectionScope[];
   awsSetup: CoreAWSConnectionSetup;
-  initialSyncRuns: CoreConnectionSyncRun[];
-  initialActivity: CoreConnectionActivity[];
 }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabType>("sync");
+  const [activeTab, setActiveTab] = useState<TabType>("capabilities");
   const [connection, setConnection] = useState(initialConnection);
   const [connectionCapabilities, setConnectionCapabilities] = useState(
     initialConnectionCapabilities,
   );
   const [scopes, setScopes] = useState(initialScopes);
-  const [syncRuns, setSyncRuns] = useState(initialSyncRuns);
-  const [activity] = useState(initialActivity);
   const [selectedCapabilityIds, setSelectedCapabilityIds] = useState<
     Set<string>
   >(() => new Set(initialConnectionCapabilities.map((c) => c.capability_id)));
@@ -111,20 +77,6 @@ export function ConnectionDetailClient({
   const [scopeDialog, setScopeDialog] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
-
-  const runningRun = syncRuns.find((run) => run.status === "running") ?? null;
-  const [polledRun] = useSyncRunPolling(connection.id, runningRun);
-  // Merge fresh polled progress into the history list during render (React's documented
-  // "adjusting state" pattern) rather than in an effect — guarded on object identity, since
-  // each poll produces a new `polledRun` object only when the backend actually returns one.
-  const [mergedPolledRun, setMergedPolledRun] =
-    useState<CoreConnectionSyncRun | null>(null);
-  if (polledRun && polledRun !== mergedPolledRun) {
-    setMergedPolledRun(polledRun);
-    setSyncRuns((current) =>
-      current.map((run) => (run.id === polledRun.id ? polledRun : run)),
-    );
-  }
 
   const capabilitiesDirty = useMemo(() => {
     const current = new Set(connectionCapabilities.map((c) => c.capability_id));
@@ -182,20 +134,8 @@ export function ConnectionDetailClient({
       if (result.error) return setError(result.error);
       if (result.data) {
         setConnection(result.data.connection);
-        if (result.data.sync_run) {
-          setSyncRuns((current) => [result.data!.sync_run!, ...current]);
-        }
         if (onSuccess) onSuccess();
       }
-    });
-  }
-
-  function triggerSync() {
-    setError("");
-    startTransition(async () => {
-      const result = await triggerConnectionSyncAction(connection.id);
-      if (result.error) return setError(result.error);
-      if (result.data) setSyncRuns((current) => [result.data!, ...current]);
     });
   }
 
@@ -230,16 +170,13 @@ export function ConnectionDetailClient({
   }
 
   const canRemove = REMOVABLE_STATUSES.has(connection.status);
-  const hasRunningSync = syncRuns.some((run) => run.status === "running");
-  const canSync = SYNCABLE_STATUSES.has(connection.status) && !hasRunningSync;
 
-  const tabs: { id: TabType; label: string; icon: typeof RefreshCw; count?: number }[] = [
-    {
-      id: "sync",
-      label: "Sync History",
-      icon: RefreshCw,
-      count: syncRuns.length,
-    },
+  const tabs: {
+    id: TabType;
+    label: string;
+    icon: typeof Zap;
+    count?: number;
+  }[] = [
     {
       id: "capabilities",
       label: "Capabilities",
@@ -251,12 +188,6 @@ export function ConnectionDetailClient({
       label: "Scopes",
       icon: Filter,
       count: scopes.length,
-    },
-    {
-      id: "activity",
-      label: "Activity",
-      icon: Activity,
-      count: activity.length,
     },
   ];
 
@@ -275,7 +206,8 @@ export function ConnectionDetailClient({
           ) : null}
           {connection.last_verified_at ? (
             <span className="text-muted-foreground text-xs">
-              Verified: {new Date(connection.last_verified_at).toLocaleDateString()}
+              Verified:{" "}
+              {new Date(connection.last_verified_at).toLocaleDateString()}
             </span>
           ) : null}
         </div>
@@ -338,7 +270,10 @@ export function ConnectionDetailClient({
 
       {/* Beautiful Navigation Tabs */}
       <div className="border-foreground/10 border-b">
-        <nav className="-mb-px flex gap-1 sm:gap-2 overflow-x-auto" aria-label="Tabs">
+        <nav
+          className="-mb-px flex gap-1 overflow-x-auto sm:gap-2"
+          aria-label="Tabs"
+        >
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -347,10 +282,10 @@ export function ConnectionDetailClient({
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap",
+                  "inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors",
                   active
                     ? "border-accent text-accent font-semibold"
-                    : "border-transparent text-muted-foreground hover:border-foreground/20 hover:text-foreground",
+                    : "text-muted-foreground hover:border-foreground/20 hover:text-foreground border-transparent",
                 )}
               >
                 <Icon size={16} />
@@ -358,7 +293,7 @@ export function ConnectionDetailClient({
                 {typeof tab.count === "number" ? (
                   <span
                     className={cn(
-                      "rounded-full px-2 py-0.5 text-xs font-mono font-normal",
+                      "rounded-full px-2 py-0.5 font-mono text-xs font-normal",
                       active
                         ? "bg-accent/15 text-accent"
                         : "bg-foreground/5 text-muted-foreground",
@@ -375,88 +310,6 @@ export function ConnectionDetailClient({
 
       {/* Tab Panels */}
       <div className="pt-2">
-        {/* Sync Tab */}
-        {activeTab === "sync" && (
-          <Section
-            title="Sync Runs"
-            action={
-              <button
-                onClick={triggerSync}
-                disabled={pending || !canSync}
-                title={
-                  canSync
-                    ? undefined
-                    : hasRunningSync
-                      ? "A sync is already running"
-                      : "Connection must be connected or degraded to sync"
-                }
-                className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium disabled:opacity-40"
-              >
-                <RefreshCw size={13} />
-                Sync now
-              </button>
-            }
-          >
-            {syncRuns.length ? (
-              <div className="flex flex-col gap-4">
-                {polledRun && polledRun.status === "running" ? (
-                  <div className="border-foreground/10 bg-foreground/[0.015] rounded-xl border p-4">
-                    <SyncProgress syncRun={polledRun} />
-                  </div>
-                ) : null}
-                <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
-                  {syncRuns
-                    .filter(
-                      (run) =>
-                        run.id !== polledRun?.id || run.status !== "running",
-                    )
-                    .map((run) => (
-                      <div
-                        key={run.id}
-                        className="flex items-center justify-between gap-3 p-4 text-sm"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <StatusBadge
-                              status={
-                                run.status === "succeeded"
-                                  ? "success"
-                                  : run.status === "failed"
-                                    ? "warning"
-                                    : "neutral"
-                              }
-                            >
-                              {run.status}
-                            </StatusBadge>
-                            <span className="text-muted-foreground text-xs">
-                              {new Date(run.created_at).toLocaleString()}
-                            </span>
-                            {run.total_stages > 0 ? (
-                              <span className="text-muted-foreground text-xs">
-                                {run.completed_stages}/{run.total_stages}{" "}
-                                operations
-                              </span>
-                            ) : null}
-                          </div>
-                          {run.error_message ? (
-                            <p className="text-muted-foreground mt-1.5 text-xs">
-                              {run.error_message}
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            ) : (
-              <EmptyState
-                title="No syncs yet"
-                description="Sync pulls the latest data for this connection. Trigger one to start the history."
-              />
-            )}
-          </Section>
-        )}
-
         {/* Capabilities Tab */}
         {activeTab === "capabilities" && (
           <Section
@@ -487,7 +340,7 @@ export function ConnectionDetailClient({
                         checked={selected}
                         disabled={capability.status !== "active" && !selected}
                         onChange={() => toggleCapability(capability.id)}
-                        className="rounded border-foreground/20 text-accent focus:ring-accent"
+                        className="border-foreground/20 text-accent focus:ring-accent rounded"
                       />
                       <span className="flex-1">
                         <span className="font-medium">{capability.name}</span>
@@ -496,7 +349,10 @@ export function ConnectionDetailClient({
                         </span>
                       </span>
                       {selected ? (
-                        <CheckCircle2 size={16} className="text-success shrink-0" />
+                        <CheckCircle2
+                          size={16}
+                          className="text-success shrink-0"
+                        />
                       ) : null}
                     </label>
                   );
@@ -558,44 +414,6 @@ export function ConnectionDetailClient({
             )}
           </Section>
         )}
-
-        {/* Activity Tab */}
-        {activeTab === "activity" && (
-          <Section title="Activity Logs">
-            {activity.length ? (
-              <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
-                {activity.map((event) => {
-                  const detail = formatActivityDetail(event.detail);
-                  return (
-                    <div
-                      key={event.id}
-                      className="flex items-start justify-between gap-3 p-4 text-sm"
-                    >
-                      <div>
-                        <p className="font-medium">
-                          {ACTIVITY_LABELS[event.activity_type]}
-                        </p>
-                        {detail ? (
-                          <p className="text-muted-foreground mt-1 font-mono text-xs">
-                            {detail}
-                          </p>
-                        ) : null}
-                      </div>
-                      <span className="text-muted-foreground shrink-0 text-xs">
-                        {new Date(event.created_at).toLocaleString()}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyState
-                title="No activity yet"
-                description="Lifecycle events for this connection will show up here."
-              />
-            )}
-          </Section>
-        )}
       </div>
 
       {/* Modify Connection Dialog */}
@@ -613,7 +431,8 @@ export function ConnectionDetailClient({
                   Modify Connection
                 </h2>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  Update connection details or CloudFormation setup configuration.
+                  Update connection details or CloudFormation setup
+                  configuration.
                 </p>
               </div>
               <button
@@ -648,7 +467,9 @@ export function ConnectionDetailClient({
               className="mt-5 space-y-4"
             >
               <label className="block text-sm">
-                <span className="mb-1.5 block font-medium">Connection Name</span>
+                <span className="mb-1.5 block font-medium">
+                  Connection Name
+                </span>
                 <input
                   name="name"
                   required
@@ -671,7 +492,7 @@ export function ConnectionDetailClient({
 
               {awsSetup.cloudformation_supported ? (
                 <div className="pt-2">
-                  <span className="text-muted-foreground mb-2 block text-xs font-semibold uppercase tracking-wider">
+                  <span className="text-muted-foreground mb-2 block text-xs font-semibold tracking-wider uppercase">
                     CloudFormation Stack Setup
                   </span>
                   <AwsSetupPanel awsSetup={awsSetup} />
@@ -698,7 +519,9 @@ export function ConnectionDetailClient({
                     <ShieldCheck size={14} />
                     Verify Connection
                   </button>
-                ) : <span />}
+                ) : (
+                  <span />
+                )}
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -794,7 +617,7 @@ export function ConnectionDetailClient({
                           disabled={pending}
                           className="bg-accent text-accent-foreground rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
                         >
-                          {pending ? "Verifying…" : "Verify & Sync"}
+                          {pending ? "Verifying…" : "Verify"}
                         </button>
                       </div>
                     </form>

@@ -12,8 +12,6 @@ import {
   setConnectionCapabilities,
   addConnectionScope,
   removeConnectionScope,
-  triggerConnectionSync,
-  getConnectionSyncRun,
   verifyAwsConnection,
   getConnectionAwsSetup,
   CoreApiError,
@@ -21,7 +19,6 @@ import {
   type UpdateConnectionInput,
   type CoreConnectionCapability,
   type CoreConnectionScope,
-  type CoreConnectionSyncRun,
   type CoreAWSConnectionSetup,
   type CoreVerifyAwsConnectionResult,
 } from "@/lib/core/api";
@@ -187,41 +184,6 @@ export async function getConnectionAwsSetupAction(
     const data = await getConnectionAwsSetup(
       organizationId,
       connectionId,
-      token,
-    );
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function triggerConnectionSyncAction(
-  connectionId: string,
-): Promise<ActionResult<CoreConnectionSyncRun>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await triggerConnectionSync(
-      organizationId,
-      connectionId,
-      token,
-    );
-    revalidatePath(`/dashboard/integrations/${connectionId}`);
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function getConnectionSyncRunAction(
-  connectionId: string,
-  syncRunId: string,
-): Promise<ActionResult<CoreConnectionSyncRun>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await getConnectionSyncRun(
-      organizationId,
-      connectionId,
-      syncRunId,
       token,
     );
     return { data };
