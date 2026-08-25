@@ -9,6 +9,27 @@ export class CoreApiError extends Error {
   }
 }
 
+async function extractErrorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  try {
+    const body = (await response.json()) as { detail?: unknown };
+    if (typeof body.detail === "string") return body.detail;
+    if (Array.isArray(body.detail)) {
+      const details = body.detail
+        .map((item) =>
+          item && typeof item === "object" && "msg" in item
+            ? String(item.msg)
+            : "",
+        )
+        .filter(Boolean);
+      if (details.length) return details.join(" ");
+    }
+  } catch {}
+  return fallback;
+}
+
 export async function coreRequest<T>(
   path: string,
   accessToken: string,
@@ -24,21 +45,10 @@ export async function coreRequest<T>(
     cache: "no-store",
   });
   if (!response.ok) {
-    let message = "Dilanix Core request failed.";
-    try {
-      const body = (await response.json()) as { detail?: unknown };
-      if (typeof body.detail === "string") message = body.detail;
-      else if (Array.isArray(body.detail)) {
-        const details = body.detail
-          .map((item) =>
-            item && typeof item === "object" && "msg" in item
-              ? String(item.msg)
-              : "",
-          )
-          .filter(Boolean);
-        if (details.length) message = details.join(" ");
-      }
-    } catch {}
+    const message = await extractErrorMessage(
+      response,
+      "Dilanix Core request failed.",
+    );
     throw new CoreApiError(message, response.status);
   }
   if (response.status === 204) return undefined as T;
@@ -465,6 +475,37 @@ export function getConnectionAwsSetup(
 
 export interface CoreVerifyAwsConnectionResult {
   connection: CoreIntegrationConnection;
+}
+
+export interface SubmitContactMessageInput {
+  name: string;
+  email: string;
+  message: string;
+  company?: string;
+  subject?: string;
+}
+
+export async function submitContactMessage(
+  input: SubmitContactMessageInput,
+): Promise<void> {
+  const response = await fetch(
+    `${env.NEXT_PUBLIC_API_URL}/v1/site/contact-message`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!response.ok) {
+    const message = await extractErrorMessage(
+      response,
+      "Unable to send your message. Please try again.",
+    );
+    throw new CoreApiError(message, response.status);
+  }
 }
 
 export function verifyAwsConnection(

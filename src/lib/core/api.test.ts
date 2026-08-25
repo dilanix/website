@@ -89,3 +89,61 @@ describe("coreRequest", () => {
     expect(result).toEqual(mockConnection);
   });
 });
+
+describe("submitContactMessage", () => {
+  it("posts the contact message payload without an auth header", async () => {
+    const response = new Response(null, { status: 204 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { submitContactMessage } = await import("./api");
+    await submitContactMessage({
+      name: "Jane Doe",
+      email: "jane@example.com",
+      message: "Hello there.",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/v1/site/contact-message"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          name: "Jane Doe",
+          email: "jane@example.com",
+          message: "Hello there.",
+        }),
+      }),
+    );
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers).not.toHaveProperty("Authorization");
+  });
+
+  it("throws a CoreApiError with the backend detail message on failure", async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ detail: "Message too long." }), {
+          status: 422,
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { submitContactMessage, CoreApiError } = await import("./api");
+    await expect(
+      submitContactMessage({
+        name: "Jane Doe",
+        email: "jane@example.com",
+        message: "Hello there.",
+      }),
+    ).rejects.toThrow(CoreApiError);
+    await expect(
+      submitContactMessage({
+        name: "Jane Doe",
+        email: "jane@example.com",
+        message: "Hello there.",
+      }),
+    ).rejects.toThrow("Message too long.");
+  });
+});
