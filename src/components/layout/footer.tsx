@@ -1,6 +1,7 @@
 import type { SiteSettings } from "@/types";
 import { Container } from "@/components/ui/container";
 import { LinkedinIcon, GithubIcon } from "@/components/icons/social-icons";
+import { BrandLogo } from "./brand-logo";
 
 const columns = [
   {
@@ -31,9 +32,7 @@ export function Footer({ settings }: { settings: SiteSettings }) {
     <footer className="border-foreground/5 border-t">
       <Container className="grid gap-12 py-16 md:grid-cols-[1.5fr_repeat(3,1fr)] md:py-20">
         <div className="flex flex-col gap-4">
-          <span className="text-foreground text-sm font-semibold tracking-[0.25em]">
-            DILANIX
-          </span>
+          <BrandLogo className="h-8 w-auto" />
           <p className="text-muted-foreground max-w-xs text-sm">
             {settings.description}
           </p>

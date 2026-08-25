@@ -9,6 +9,7 @@ import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "./brand-logo";
 
 function isActiveLink(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -72,12 +73,7 @@ export function Navbar({
       )}
     >
       <Container className="flex h-16 items-center justify-between">
-        <Link
-          href="/"
-          className="text-foreground text-sm font-semibold tracking-[0.25em]"
-        >
-          DILANIX
-        </Link>
+        <BrandLogo className="h-7 w-auto" priority />
 
         <nav className="hidden items-center gap-8 md:flex">
           {links.map((link) => {

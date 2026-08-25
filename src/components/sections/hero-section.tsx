@@ -42,7 +42,7 @@ export function HeroSection({ calendlyUrl }: { calendlyUrl: string }) {
             variant="primary"
             className="shadow-accent/10 w-full justify-center px-6 py-3 text-base shadow-lg sm:w-auto"
           >
-            Book a consultation
+            Get started
             <ArrowRight size={16} />
           </Button>
           <Button

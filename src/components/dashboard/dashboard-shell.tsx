@@ -19,6 +19,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { signOutAction } from "@/app/dashboard/actions";
 import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
+import { BrandLogo } from "@/components/layout/brand-logo";
 
 const navItems = [
   { label: "Products", href: "/dashboard/products", icon: LayoutGrid },
@@ -111,12 +112,9 @@ export function DashboardShell({
   return (
     <div className="flex flex-1">
       <aside className="border-foreground/10 bg-card-strong/30 hidden w-60 shrink-0 flex-col border-r px-4 py-5 md:flex">
-        <Link
-          href="/dashboard"
-          className="text-foreground px-3 text-sm font-semibold tracking-[0.25em]"
-        >
-          DILANIX
-        </Link>
+        <div className="px-3">
+          <BrandLogo href="/dashboard" className="h-7 w-auto" />
+        </div>
         <button
           type="button"
           aria-label="Switch organization"
