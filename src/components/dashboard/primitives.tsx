@@ -36,7 +36,7 @@ export function Metric({
   tone?: "default" | "positive";
 }) {
   return (
-    <div className="border-foreground/10 min-w-0 border-l pl-4 first:border-l-0 first:pl-0 sm:first:border-l sm:first:pl-4">
+    <div className="border-border-soft min-w-0 border-l pl-4 first:border-l-0 first:pl-0 sm:first:border-l sm:first:pl-4">
       <dt className="text-muted-foreground text-xs">{label}</dt>
       <dd
         className={cn(
@@ -87,11 +87,12 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium shadow-[0_10px_24px_var(--shadow-card)]",
         status === "success" && "border-success/25 bg-success/10 text-success",
         status === "warning" &&
           "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-300",
-        status === "neutral" && "border-foreground/15 text-muted-foreground",
+        status === "neutral" &&
+          "border-border-soft bg-card-strong/75 text-muted-foreground",
       )}
     >
       <span
@@ -119,7 +120,7 @@ export function EmptyState({
   actions?: ReactNode;
 }) {
   return (
-    <div className="border-foreground/10 bg-foreground/[0.015] flex min-h-56 flex-col items-center justify-center rounded-xl border border-dashed px-6 py-10 text-center">
+    <div className="border-border-soft bg-card-strong/68 flex min-h-56 flex-col items-center justify-center rounded-2xl border border-dashed px-6 py-10 text-center shadow-[0_16px_40px_var(--shadow-card)]">
       <span className="bg-foreground/5 text-muted-foreground flex h-10 w-10 items-center justify-center rounded-lg">
         <Inbox size={18} />
       </span>
@@ -140,7 +141,7 @@ export function DashboardError({ onRetry }: { onRetry?: () => void }) {
   return (
     <div
       role="alert"
-      className="border-foreground/10 flex items-start gap-3 rounded-xl border p-5"
+      className="border-border-soft bg-card-strong/72 shadow-[0_16px_40px_var(--shadow-card)] flex items-start gap-3 rounded-2xl border p-5"
     >
       <AlertTriangle className="text-muted-foreground mt-0.5" size={18} />
       <div>
@@ -164,7 +165,7 @@ export function DashboardError({ onRetry }: { onRetry?: () => void }) {
 export function Skeleton({ className }: { className?: string }) {
   return (
     <div
-      className={cn("bg-foreground/7 animate-pulse rounded-md", className)}
+      className={cn("bg-foreground/7 animate-pulse rounded-xl", className)}
     />
   );
 }

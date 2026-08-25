@@ -4,14 +4,18 @@ import { Reveal } from "@/components/common/reveal";
 
 export function FinalCtaSection() {
   return (
-    <section className="border-foreground/5 border-t py-24 sm:py-32">
+    <section className="border-border-soft border-t py-24 sm:py-32">
       <Container>
         <Reveal>
-          <div className="border-foreground/10 relative overflow-hidden rounded-2xl border px-6 py-16 text-center sm:px-12 sm:py-20">
+          <div className="border-border-soft bg-card-strong/88 shadow-[0_24px_60px_var(--shadow-card)] relative overflow-hidden rounded-[1.9rem] border px-6 py-16 text-center sm:px-12 sm:py-20">
             <div
               aria-hidden="true"
-              className="absolute top-1/2 left-1/2 h-72 w-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-20 blur-[110px]"
-              style={{ background: "var(--accent)" }}
+              className="absolute top-1/2 left-[35%] h-72 w-[36rem] -translate-y-1/2 rounded-full opacity-18 blur-[92px]"
+              style={{ background: "var(--glow-blue)" }}
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-[10%] w-20 rotate-[16deg] bg-[linear-gradient(180deg,transparent_0%,rgba(255,255,255,0.16)_50%,transparent_100%)] opacity-28 blur-[1px]"
             />
             <div className="relative flex flex-col items-center gap-6">
               <h2 className="max-w-lg text-3xl font-semibold tracking-tight text-balance sm:text-4xl">

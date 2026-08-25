@@ -24,11 +24,11 @@ export function SectionHeading({
       )}
     >
       {eyebrow ? (
-        <span className="text-accent text-xs font-medium tracking-[0.2em] uppercase">
+        <span className="border-accent/15 bg-card-strong/75 text-accent inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.18em] uppercase shadow-[0_10px_24px_var(--shadow-card)]">
           {eyebrow}
         </span>
       ) : null}
-      <h2 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+      <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
         {title}
       </h2>
       {description ? (

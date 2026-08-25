@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
@@ -25,15 +25,32 @@ export function Navbar({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
-  // Keep the server render and the client's first render identical. The
-  // actual scroll position is synchronized immediately after hydration.
   const [scrolled, setScrolled] = useState(false);
+  const scrolledRef = useRef(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
+    let frame = 0;
+
+    const syncScrolled = () => {
+      const next = window.scrollY > 8;
+      if (next !== scrolledRef.current) {
+        scrolledRef.current = next;
+        setScrolled(next);
+      }
+      frame = 0;
+    };
+
+    const onScroll = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(syncScrolled);
+    };
+
+    syncScrolled();
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", onScroll);
+    };
   }, []);
 
   // The session cookie is httpOnly, so it can't be read from client JS —
@@ -66,9 +83,9 @@ export function Navbar({
   return (
     <header
       className={cn(
-        "sticky top-0 z-50 backdrop-blur-md transition-colors duration-300",
+        "sticky top-0 z-50 transition-all duration-300",
         scrolled
-          ? "bg-background/90 border-foreground/10 border-b"
+          ? "border-border-soft bg-background/96 border-b shadow-[0_12px_34px_var(--shadow-card)]"
           : "bg-background/0 border-b border-transparent",
       )}
     >

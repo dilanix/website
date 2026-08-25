@@ -65,8 +65,8 @@ export function DashboardShell({
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
               active
-                ? "bg-accent/10 text-accent"
-                : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+                ? "bg-[linear-gradient(135deg,color-mix(in_oklab,var(--accent)_16%,transparent),color-mix(in_oklab,var(--accent-secondary)_18%,transparent))] text-accent"
+                : "text-muted-foreground hover:bg-surface hover:text-foreground",
             )}
           >
             <Icon size={16} />
@@ -97,7 +97,7 @@ export function DashboardShell({
                     "ml-3 flex items-center rounded-lg border-l px-4 py-2 text-sm transition-colors",
                     active
                       ? "border-accent bg-accent/8 text-foreground"
-                      : "border-foreground/10 text-muted-foreground hover:border-foreground/25 hover:text-foreground",
+                      : "border-border-soft text-muted-foreground hover:border-accent/30 hover:text-foreground",
                   )}
                 >
                   {item.label}
@@ -111,14 +111,14 @@ export function DashboardShell({
 
   return (
     <div className="flex flex-1">
-      <aside className="border-foreground/10 bg-card-strong/30 hidden w-60 shrink-0 flex-col border-r px-4 py-5 md:flex">
+      <aside className="border-border-soft bg-card-strong/72 hidden w-60 shrink-0 flex-col border-r px-4 py-5 shadow-[0_20px_56px_var(--shadow-card)] backdrop-blur-sm md:flex">
         <div className="px-3">
           <BrandLogo href="/dashboard" className="h-7 w-auto" />
         </div>
         <button
           type="button"
           aria-label="Switch organization"
-          className="border-foreground/10 hover:bg-foreground/5 mt-6 flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-colors"
+          className="border-border-soft bg-surface/72 hover:border-accent/22 hover:bg-surface-strong mt-6 flex w-full items-center justify-between rounded-2xl border px-3 py-2.5 text-left shadow-[0_12px_28px_var(--shadow-card)] transition-colors"
         >
           <span>
             <span className="text-muted-foreground block text-[10px] tracking-wider uppercase">
@@ -134,7 +134,7 @@ export function DashboardShell({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="border-foreground/10 flex h-16 shrink-0 items-center justify-between border-b px-4 sm:px-6">
+        <header className="border-border-soft bg-background/58 flex h-16 shrink-0 items-center justify-between border-b px-4 backdrop-blur-sm sm:px-6">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -171,7 +171,7 @@ export function DashboardShell({
         </header>
 
         {open ? (
-          <div className="border-foreground/10 bg-background border-b px-4 py-4 md:hidden">
+          <div className="border-border-soft bg-card-strong/80 border-b px-4 py-4 backdrop-blur-sm md:hidden">
             {nav}
           </div>
         ) : null}

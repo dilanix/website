@@ -29,7 +29,7 @@ const columns = [
 
 export function Footer({ settings }: { settings: SiteSettings }) {
   return (
-    <footer className="border-foreground/5 border-t">
+    <footer className="border-border-soft mt-8 border-t">
       <Container className="grid gap-12 py-16 md:grid-cols-[1.5fr_repeat(3,1fr)] md:py-20">
         <div className="flex flex-col gap-4">
           <BrandLogo className="h-8 w-auto" />
@@ -85,7 +85,7 @@ export function Footer({ settings }: { settings: SiteSettings }) {
         ))}
       </Container>
 
-      <div className="border-foreground/5 border-t">
+      <div className="border-border-soft border-t">
         <Container className="py-6">
           <p className="text-muted-foreground text-xs">
             © {new Date().getFullYear()} {settings.name}. All rights reserved.

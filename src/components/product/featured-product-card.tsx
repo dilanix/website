@@ -22,7 +22,11 @@ export function FeaturedProductCard({
   const Heading = headingLevel;
 
   return (
-    <div className="border-foreground/10 from-foreground/[0.03] hover:border-foreground/15 grid gap-10 rounded-2xl border bg-gradient-to-b to-transparent p-6 transition-colors duration-300 sm:p-8 lg:grid-cols-2 lg:items-center lg:gap-12 lg:p-12">
+    <div className="group border-border-soft from-card-strong/92 to-surface/72 hover:border-accent/22 hover:-translate-y-1 shadow-[0_20px_56px_var(--shadow-card)] hover:shadow-[0_28px_68px_var(--shadow-brand)] relative grid gap-10 overflow-hidden rounded-[1.75rem] border bg-gradient-to-br p-6 transition-all duration-300 sm:p-8 lg:grid-cols-2 lg:items-center lg:gap-12 lg:p-12">
+      <div
+        aria-hidden="true"
+        className="absolute inset-y-0 left-[-12%] w-20 rotate-[16deg] bg-[linear-gradient(180deg,transparent_0%,rgba(255,255,255,0.32)_50%,transparent_100%)] opacity-0 blur-[1px] transition-opacity duration-300 group-hover:opacity-100 motion-reduce:hidden"
+      />
       <div className="flex flex-col gap-6">
         {product.eyebrow ? (
           <Badge tone="accent">{product.eyebrow.toUpperCase()}</Badge>
@@ -57,15 +61,22 @@ export function FeaturedProductCard({
             className="text-foreground hover:text-accent inline-flex w-fit items-center gap-1.5 text-sm font-medium transition-colors"
           >
             {product.ctaLabel}
-            <span aria-hidden="true">→</span>
+            <span
+              aria-hidden="true"
+              className="transition-transform duration-200 group-hover:translate-x-1"
+            >
+              →
+            </span>
           </a>
         ) : null}
       </div>
 
-      <DashboardMockup
-        productName={product.shortName ?? product.name}
-        snapshot={snapshot}
-      />
+      <div className="transition-transform duration-300 group-hover:-translate-y-1">
+        <DashboardMockup
+          productName={product.shortName ?? product.name}
+          snapshot={snapshot}
+        />
+      </div>
     </div>
   );
 }

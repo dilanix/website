@@ -3,7 +3,7 @@ import { Container } from "@/components/ui/container";
 
 export function ProblemSolutionSection() {
   return (
-    <section className="border-foreground/5 bg-foreground/[0.01] border-t py-24 sm:py-32">
+    <section className="border-border-soft bg-surface/42 border-t py-24 sm:py-32">
       <Container>
         <div className="mx-auto max-w-2xl text-center">
           <span className="text-accent font-mono text-xs font-medium tracking-widest uppercase">
@@ -20,7 +20,7 @@ export function ProblemSolutionSection() {
 
         <div className="mt-16 grid gap-8 lg:grid-cols-2">
           {/* Problem Card */}
-          <div className="rounded-2xl border border-rose-500/20 bg-rose-500/[0.02] p-6 sm:p-8">
+          <div className="shadow-[0_18px_44px_var(--shadow-card)] rounded-[1.6rem] border border-rose-500/18 bg-card-strong/70 p-6 sm:p-8">
             <div className="flex items-center gap-2 font-mono text-xs font-semibold tracking-wider text-rose-500 uppercase">
               <XCircle size={16} />
               The Monolithic Status Quo
@@ -60,7 +60,7 @@ export function ProblemSolutionSection() {
           </div>
 
           {/* Solution Card */}
-          <div className="border-accent/30 bg-accent/[0.04] shadow-accent/5 rounded-2xl border p-6 shadow-lg sm:p-8">
+          <div className="border-accent/22 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--accent)_9%,white),color-mix(in_oklab,var(--accent-secondary)_11%,transparent))] shadow-[0_20px_50px_var(--shadow-brand)] rounded-[1.6rem] border p-6 sm:p-8">
             <div className="text-accent flex items-center gap-2 font-mono text-xs font-semibold tracking-wider uppercase">
               <CheckCircle2 size={16} />
               The Dilanix Architecture

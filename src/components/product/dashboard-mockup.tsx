@@ -15,7 +15,15 @@ export function DashboardMockup({
   );
 
   return (
-    <div className="border-foreground/10 bg-card-strong rounded-xl border p-4 shadow-2xl shadow-black/20 sm:p-6">
+    <div className="border-border-soft bg-card-strong/88 relative overflow-hidden rounded-xl border p-4 shadow-2xl shadow-black/20 sm:p-6">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px"
+        style={{
+          background:
+            "linear-gradient(90deg, transparent 0%, color-mix(in oklab, var(--accent-secondary) 62%, transparent) 50%, transparent 100%)",
+        }}
+      />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="bg-foreground/10 hidden h-2.5 w-2.5 rounded-full sm:block" />
@@ -26,7 +34,7 @@ export function DashboardMockup({
           </span>
         </div>
         <span className="text-success flex items-center gap-1.5 text-xs">
-          <span className="bg-success h-1.5 w-1.5 rounded-full" />
+          <span className="bg-success animate-breathe h-1.5 w-1.5 rounded-full motion-reduce:animate-none" />
           Live
         </span>
       </div>
@@ -72,7 +80,7 @@ export function DashboardMockup({
               </span>
               <span className="bg-foreground/5 h-1.5 flex-1 overflow-hidden rounded-full">
                 <span
-                  className="bg-accent block h-full rounded-full"
+                  className="bg-[linear-gradient(90deg,var(--accent),var(--accent-secondary))] block h-full rounded-full transition-[width,opacity] duration-700"
                   style={{
                     width: `${(item.amountUsd / maxBreakdown) * 100}%`,
                     opacity: 1 - index * 0.18,

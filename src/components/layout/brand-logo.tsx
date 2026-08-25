@@ -24,7 +24,15 @@ export function BrandLogo({
         width={2172}
         height={724}
         priority={priority}
-        className={className}
+        className={`${className} dark:hidden`}
+      />
+      <Image
+        src="/dilanix-logo-dark.png"
+        alt="Dilanix"
+        width={2172}
+        height={724}
+        priority={priority}
+        className={`${className} hidden dark:block`}
       />
     </Link>
   );

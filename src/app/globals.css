@@ -6,25 +6,41 @@
 
 /* Light is the default theme; `.dark` (toggled by ThemeProvider) overrides it. */
 :root {
-  --background: #fafafa;
-  --foreground: #0b0c0e;
-  --muted-foreground: #6b6b72;
-  --accent: #2f6e68;
-  --accent-foreground: #f5fbfa;
-  --success: #047857;
+  --background: #f5f9fd;
+  --foreground: #091a33;
+  --muted-foreground: #5d708e;
+  --accent: #1779d5;
+  --accent-secondary: #20d0db;
+  --accent-foreground: #f8fcff;
+  --success: #0f9d7f;
   --card-strong: #ffffff;
-  --grid-dot: rgba(11, 12, 14, 0.14);
+  --surface: #edf4fb;
+  --surface-strong: #f8fbff;
+  --border-soft: rgba(11, 38, 74, 0.12);
+  --grid-dot: rgba(26, 86, 153, 0.14);
+  --shadow-brand: rgba(23, 121, 213, 0.22);
+  --shadow-card: rgba(10, 34, 69, 0.09);
+  --glow-blue: rgba(23, 121, 213, 0.18);
+  --glow-cyan: rgba(32, 208, 219, 0.12);
 }
 
 .dark {
-  --background: #08090a;
-  --foreground: #f5f5f2;
-  --muted-foreground: #96969e;
-  --accent: #6fa39d;
-  --accent-foreground: #10201e;
-  --success: #34d399;
-  --card-strong: #0b0c0e;
-  --grid-dot: rgba(255, 255, 255, 0.14);
+  --background: #07111f;
+  --foreground: #ecf4ff;
+  --muted-foreground: #8ea5c1;
+  --accent: #23c8da;
+  --accent-secondary: #4e9fff;
+  --accent-foreground: #071521;
+  --success: #33d5a6;
+  --card-strong: #0d192b;
+  --surface: #0f2035;
+  --surface-strong: #132840;
+  --border-soft: rgba(129, 182, 230, 0.16);
+  --grid-dot: rgba(117, 176, 237, 0.18);
+  --shadow-brand: rgba(35, 200, 218, 0.18);
+  --shadow-card: rgba(0, 0, 0, 0.28);
+  --glow-blue: rgba(78, 159, 255, 0.2);
+  --glow-cyan: rgba(35, 200, 218, 0.14);
 }
 
 @theme inline {
@@ -32,14 +48,22 @@
   --color-foreground: var(--foreground);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
+  --color-accent-secondary: var(--accent-secondary);
   --color-accent-foreground: var(--accent-foreground);
   --color-success: var(--success);
   --color-card-strong: var(--card-strong);
+  --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
+  --color-border-soft: var(--border-soft);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --animate-spin-slow: spin-slow 3s linear infinite;
   --animate-menu-reveal: menu-reveal 0.18s ease-out;
   --animate-toast-in: toast-in 0.22s ease-out;
+  --animate-float-slow: float-slow 8s ease-in-out infinite;
+  --animate-drift: drift 12s ease-in-out infinite;
+  --animate-sheen: sheen 3.8s ease-in-out infinite;
+  --animate-breathe: breathe 2.8s ease-in-out infinite;
 }
 
 @keyframes spin-slow {
@@ -70,6 +94,58 @@
   }
 }
 
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-10px) scale(1.015);
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  33% {
+    transform: translate3d(10px, -8px, 0);
+  }
+  66% {
+    transform: translate3d(-8px, 10px, 0);
+  }
+}
+
+@keyframes sheen {
+  0% {
+    transform: translateX(-140%);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.7;
+  }
+  48% {
+    opacity: 0.28;
+  }
+  100% {
+    transform: translateX(220%);
+    opacity: 0;
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
@@ -77,12 +153,19 @@
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(circle at top, var(--glow-blue) 0, transparent 32%),
+    radial-gradient(circle at 85% 20%, var(--glow-cyan) 0, transparent 24%),
+    var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   transition:
     background-color 0.2s ease,
     color 0.2s ease;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 24%, transparent);
 }
 
 /* A consistent interaction baseline for shared primitives and intentionally

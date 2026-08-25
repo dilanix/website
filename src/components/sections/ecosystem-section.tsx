@@ -17,7 +17,7 @@ export function EcosystemSection({ product }: { product: Product }) {
           <Reveal delayMs={0}>
             <a
               href={product.ctaHref}
-              className="group border-foreground/10 bg-foreground/[0.03] hover:border-foreground/20 flex h-full min-h-56 flex-col justify-between rounded-xl border p-6 transition-colors duration-300"
+              className="group border-border-soft bg-card-strong/78 hover:border-accent/22 hover:-translate-y-1 shadow-[0_16px_40px_var(--shadow-card)] hover:shadow-[0_24px_56px_var(--shadow-brand)] flex h-full min-h-56 flex-col justify-between rounded-2xl border p-6 transition-all duration-300"
             >
               <div className="flex items-center gap-2">
                 <span className="bg-success h-1.5 w-1.5 rounded-full" />
@@ -41,7 +41,7 @@ export function EcosystemSection({ product }: { product: Product }) {
 
           {[0, 1].map((index) => (
             <Reveal key={index} delayMs={(index + 1) * 100}>
-              <div className="border-foreground/15 bg-foreground/[0.015] flex h-full min-h-56 flex-col justify-between rounded-xl border border-dashed p-6">
+              <div className="border-border-soft bg-card-strong/58 flex h-full min-h-56 flex-col justify-between rounded-2xl border border-dashed p-6">
                 <div className="text-muted-foreground flex items-center gap-2">
                   <CircleDashed size={14} className="animate-spin-slow" />
                   <span className="text-xs font-medium tracking-wide uppercase">

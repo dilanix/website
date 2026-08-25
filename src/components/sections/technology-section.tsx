@@ -24,12 +24,12 @@ export function TechnologySection({
   title?: string;
 }) {
   return (
-    <section className="border-foreground/5 border-t py-20 sm:py-24">
+    <section className="border-border-soft border-t py-20 sm:py-24">
       <Container>
-        <h2 className="text-muted-foreground mb-10 text-xs font-medium tracking-widest uppercase">
+        <h2 className="text-accent mb-10 text-xs font-semibold tracking-[0.18em] uppercase">
           {title}
         </h2>
-        <div className="divide-foreground/10 flex flex-col divide-y sm:flex-row sm:divide-x sm:divide-y-0">
+        <div className="divide-border-soft flex flex-col divide-y sm:flex-row sm:divide-x sm:divide-y-0">
           {categories.map((category, index) => {
             const Icon = icons[category.icon];
             return (
