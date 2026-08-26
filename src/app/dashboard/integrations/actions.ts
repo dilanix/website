@@ -7,7 +7,6 @@ import {
   updateConnection,
   disableConnection,
   enableConnection,
-  markConnectionConnected,
   removeConnection,
   setConnectionCapabilities,
   addConnectionScope,
@@ -100,24 +99,6 @@ export async function enableConnectionAction(
   try {
     const { token, organizationId } = await context();
     const data = await enableConnection(organizationId, connectionId, token);
-    revalidatePath("/dashboard/integrations");
-    revalidatePath(`/dashboard/integrations/${connectionId}`);
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function markConnectionConnectedAction(
-  connectionId: string,
-): Promise<ActionResult<CoreIntegrationConnection>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await markConnectionConnected(
-      organizationId,
-      connectionId,
-      token,
-    );
     revalidatePath("/dashboard/integrations");
     revalidatePath(`/dashboard/integrations/${connectionId}`);
     return { data };

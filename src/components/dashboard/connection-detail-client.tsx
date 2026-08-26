@@ -409,7 +409,7 @@ export function ConnectionDetailClient({
             ) : (
               <EmptyState
                 title="No scopes configured"
-                description="Scope this connection to specific regions, accounts, or projects."
+                description="Scope this connection to specific regions or services. Accounts, subscriptions, and projects are set by verification, not scopes."
               />
             )}
           </Section>
@@ -449,13 +449,17 @@ export function ConnectionDetailClient({
                 setError("");
                 const data = new FormData(event.currentTarget);
                 const name = String(data.get("name") ?? "").trim();
-                const externalReference = String(
-                  data.get("external_reference") ?? "",
-                ).trim();
                 startTransition(async () => {
                   const result = await updateConnectionAction(connection.id, {
                     name: name || undefined,
-                    external_reference: externalReference || null,
+                    ...(awsSetup.cloudformation_supported
+                      ? {}
+                      : {
+                          external_reference:
+                            String(
+                              data.get("external_reference") ?? "",
+                            ).trim() || null,
+                        }),
                   });
                   if (result.error) return setError(result.error);
                   if (result.data) {
@@ -478,17 +482,23 @@ export function ConnectionDetailClient({
                 />
               </label>
 
-              <label className="block text-sm">
-                <span className="mb-1.5 block font-medium">
-                  AWS Account ID / Reference
-                </span>
-                <input
-                  name="external_reference"
-                  defaultValue={connection.external_reference ?? ""}
-                  placeholder="12-digit AWS account ID"
-                  className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 font-mono text-sm outline-none"
-                />
-              </label>
+              {awsSetup.cloudformation_supported ? (
+                <p className="border-foreground/10 text-muted-foreground rounded-lg border p-3 text-xs leading-5">
+                  Provider identity is set by verification, not by hand — use{" "}
+                  <span className="font-medium">Verify Connection</span> below
+                  to confirm the AWS account this connection resolves to.
+                </p>
+              ) : (
+                <label className="block text-sm">
+                  <span className="mb-1.5 block font-medium">Reference</span>
+                  <input
+                    name="external_reference"
+                    defaultValue={connection.external_reference ?? ""}
+                    placeholder="Optional external reference"
+                    className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 font-mono text-sm outline-none"
+                  />
+                </label>
+              )}
 
               {awsSetup.cloudformation_supported ? (
                 <div className="pt-2">
@@ -712,9 +722,13 @@ export function ConnectionDetailClient({
                 <input
                   name="scope_type"
                   required
-                  placeholder="e.g. region, account, project"
+                  placeholder="e.g. region, service"
                   className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 outline-none"
                 />
+                <span className="text-muted-foreground mt-1.5 block text-xs">
+                  Not accounts, subscriptions, projects, or clusters — those are
+                  resolved by verification.
+                </span>
               </label>
               <label className="block text-sm">
                 <span className="mb-2 block font-medium">Scope key</span>

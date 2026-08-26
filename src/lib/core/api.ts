@@ -238,6 +238,8 @@ export interface CoreIntegrationConnection {
   name: string;
   status: IntegrationConnectionStatus;
   configuration: Record<string, unknown>;
+  /** Compatibility projection only — real provider identity is verified and
+   * owned by the backend's IntegrationTarget, not writable here. */
   external_reference: string | null;
   last_verified_at: string | null;
   last_success_at: string | null;
@@ -360,17 +362,6 @@ export function enableConnection(
 ) {
   return coreRequest<CoreIntegrationConnection>(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/enable`,
-    token,
-    { method: "POST" },
-  );
-}
-export function markConnectionConnected(
-  organizationId: string,
-  connectionId: string,
-  token: string,
-) {
-  return coreRequest<CoreIntegrationConnection>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/mark-connected`,
     token,
     { method: "POST" },
   );
