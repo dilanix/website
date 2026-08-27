@@ -11,8 +11,10 @@ import {
   listConnectionCapabilities,
   listConnectionScopes,
   listSyncRuns,
+  listResources,
 } from "@/lib/core/api";
 import { SYNC_RUNS_PAGE_SIZE } from "@/lib/sync/datasets";
+import { RESOURCES_PAGE_SIZE } from "@/lib/inventory/resources";
 import { PageHeader } from "@/components/dashboard/primitives";
 import { ConnectionDetailClient } from "@/components/dashboard/connection-detail-client";
 
@@ -48,6 +50,7 @@ export default async function ConnectionDetailPage({
     scopes,
     awsSetup,
     syncRuns,
+    resources,
   ] = await Promise.all([
     listIntegrations(token),
     listIntegrationCapabilities(connection.integration_id, token),
@@ -61,6 +64,10 @@ export default async function ConnectionDetailPage({
     getConnectionAwsSetup(organization.organization_id, connectionId, token),
     listSyncRuns(organization.organization_id, connectionId, token, {
       limit: SYNC_RUNS_PAGE_SIZE,
+      offset: 0,
+    }),
+    listResources(organization.organization_id, connectionId, token, {
+      limit: RESOURCES_PAGE_SIZE,
       offset: 0,
     }),
   ]);
@@ -85,6 +92,8 @@ export default async function ConnectionDetailPage({
         awsSetup={awsSetup}
         initialSyncRuns={syncRuns.items}
         initialSyncTotal={syncRuns.total}
+        initialResources={resources.items}
+        initialResourceTotal={resources.total}
       />
     </div>
   );

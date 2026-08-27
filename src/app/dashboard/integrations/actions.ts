@@ -16,6 +16,7 @@ import {
   startSync,
   listSyncRuns,
   getSyncRun,
+  listResources,
   CoreApiError,
   type CoreIntegrationConnection,
   type UpdateConnectionInput,
@@ -26,6 +27,8 @@ import {
   type CoreSyncRun,
   type CoreSyncRunDetail,
   type CoreSyncRunListResponse,
+  type CoreResourceListResponse,
+  type ListResourcesParams,
 } from "@/lib/core/api";
 
 type ActionResult<T = undefined> = { data?: T; error?: string };
@@ -265,6 +268,24 @@ export async function getSyncRunAction(
       connectionId,
       syncRunId,
       token,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function listResourcesAction(
+  connectionId: string,
+  params: ListResourcesParams,
+): Promise<ActionResult<CoreResourceListResponse>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await listResources(
+      organizationId,
+      connectionId,
+      token,
+      params,
     );
     return { data };
   } catch (error) {

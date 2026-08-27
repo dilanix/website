@@ -2,6 +2,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Boxes,
   CheckCircle2,
   Edit2,
   Filter,
@@ -18,6 +19,7 @@ import type {
   CoreConnectionScope,
   CoreIntegrationCapability,
   CoreIntegrationConnection,
+  CoreResource,
   CoreSyncRun,
   IntegrationConnectionStatus,
 } from "@/lib/core/api";
@@ -34,6 +36,7 @@ import {
 import { EmptyState, Section, StatusBadge } from "./primitives";
 import { AwsSetupPanel } from "./integrations/aws-setup-panel";
 import { SyncPanel } from "./sync-panel";
+import { ResourcePanel } from "./resource-panel";
 import { cn } from "@/lib/utils";
 
 function statusTone(
@@ -49,7 +52,7 @@ const REMOVABLE_STATUSES = new Set<IntegrationConnectionStatus>([
   "disabled",
 ]);
 
-type TabType = "capabilities" | "scopes" | "sync";
+type TabType = "capabilities" | "scopes" | "sync" | "resources";
 
 export function ConnectionDetailClient({
   connection: initialConnection,
@@ -59,6 +62,8 @@ export function ConnectionDetailClient({
   awsSetup,
   initialSyncRuns,
   initialSyncTotal,
+  initialResources,
+  initialResourceTotal,
 }: {
   connection: CoreIntegrationConnection;
   capabilities: CoreIntegrationCapability[];
@@ -67,6 +72,8 @@ export function ConnectionDetailClient({
   awsSetup: CoreAWSConnectionSetup;
   initialSyncRuns: CoreSyncRun[];
   initialSyncTotal: number;
+  initialResources: CoreResource[];
+  initialResourceTotal: number;
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("capabilities");
@@ -200,6 +207,11 @@ export function ConnectionDetailClient({
       id: "sync",
       label: "Sync",
       icon: RefreshCw,
+    },
+    {
+      id: "resources",
+      label: "Resources",
+      icon: Boxes,
     },
   ];
 
@@ -443,6 +455,17 @@ export function ConnectionDetailClient({
               enabledCapabilitySlugs={enabledCapabilitySlugs}
               initialRuns={initialSyncRuns}
               initialTotal={initialSyncTotal}
+            />
+          </Section>
+        )}
+
+        {/* Resources Tab */}
+        {activeTab === "resources" && (
+          <Section title="Resources">
+            <ResourcePanel
+              connectionId={connection.id}
+              initialResources={initialResources}
+              initialTotal={initialResourceTotal}
             />
           </Section>
         )}

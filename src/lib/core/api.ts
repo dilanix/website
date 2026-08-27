@@ -618,3 +618,58 @@ export function getSyncRun(
     token,
   );
 }
+
+export interface CoreResource {
+  id: string;
+  organization_id: string;
+  connection_id: string;
+  target_id: string;
+  provider: string;
+  provider_resource_type: string;
+  resource_type: string;
+  category: string;
+  external_id: string;
+  provider_resource_key: string;
+  name: string | null;
+  region: string;
+  zone: string | null;
+  status: string;
+  tags: Record<string, string>;
+  extra: Record<string, unknown>;
+  first_seen_at: string;
+  last_seen_at: string;
+}
+
+export interface CoreResourceListResponse {
+  items: CoreResource[];
+  total: number;
+}
+
+export interface ListResourcesParams {
+  limit: number;
+  offset: number;
+  category?: string | null;
+  resourceType?: string | null;
+  region?: string | null;
+  status?: string | null;
+}
+
+export function listResources(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  params: ListResourcesParams,
+) {
+  const query = new URLSearchParams({
+    limit: String(params.limit),
+    offset: String(params.offset),
+  });
+  if (params.category) query.set("category", params.category);
+  if (params.resourceType) query.set("resource_type", params.resourceType);
+  if (params.region) query.set("region", params.region);
+  if (params.status) query.set("status", params.status);
+  return coreRequest<CoreResourceListResponse>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/resources?${query.toString()}`,
+    token,
+  );
+}

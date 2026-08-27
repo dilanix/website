@@ -188,6 +188,55 @@ describe("sync", () => {
   });
 });
 
+describe("resources", () => {
+  it("lists resources with pagination and filter query params", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResources } = await import("./api");
+    const result = await listResources("org-123", "conn-1", "test-token", {
+      limit: 20,
+      offset: 0,
+      category: "compute",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/resources?limit=20&offset=0&category=compute",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("omits unset filters from the query string", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResources } = await import("./api");
+    await listResources("org-123", "conn-1", "test-token", {
+      limit: 20,
+      offset: 0,
+    });
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).toContain("limit=20&offset=0");
+    expect(calledUrl).not.toContain("category=");
+  });
+});
+
 describe("submitContactMessage", () => {
   it("posts the contact message payload without an auth header", async () => {
     const response = new Response(null, { status: 204 });
