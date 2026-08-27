@@ -515,3 +515,106 @@ export function verifyAwsConnection(
     },
   );
 }
+
+export type SyncTrigger =
+  "bootstrap" | "manual" | "scheduled" | "backfill" | "reconciliation";
+export type SyncRunStatus =
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "partially_succeeded"
+  | "failed"
+  | "cancel_requested"
+  | "cancelled";
+export type SyncJobStatus =
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "skipped"
+  | "cancel_requested"
+  | "cancelled";
+export type SyncStrategy = "snapshot" | "incremental" | "windowed";
+
+export interface CoreSyncJob {
+  id: string;
+  target_id: string;
+  dataset: string;
+  strategy: SyncStrategy;
+  status: SyncJobStatus;
+  attempt: number;
+  records_read: number;
+  records_created: number;
+  records_updated: number;
+  records_deleted: number;
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface CoreSyncRun {
+  id: string;
+  organization_id: string;
+  connection_id: string;
+  trigger: SyncTrigger;
+  status: SyncRunStatus;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface CoreSyncRunDetail extends CoreSyncRun {
+  jobs: CoreSyncJob[];
+}
+
+export interface CoreSyncRunListResponse {
+  items: CoreSyncRun[];
+  total: number;
+}
+
+export interface StartSyncInput {
+  datasets: string[];
+  target_id?: string | null;
+}
+
+export function startSync(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  input: StartSyncInput,
+) {
+  return coreRequest<CoreSyncRun>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/syncs`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function listSyncRuns(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  params: { limit: number; offset: number },
+) {
+  return coreRequest<CoreSyncRunListResponse>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/syncs?limit=${params.limit}&offset=${params.offset}`,
+    token,
+  );
+}
+
+export function getSyncRun(
+  organizationId: string,
+  connectionId: string,
+  syncRunId: string,
+  token: string,
+) {
+  return coreRequest<CoreSyncRunDetail>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/syncs/${syncRunId}`,
+    token,
+  );
+}

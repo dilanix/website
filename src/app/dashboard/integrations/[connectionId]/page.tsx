@@ -10,7 +10,9 @@ import {
   listIntegrationCapabilities,
   listConnectionCapabilities,
   listConnectionScopes,
+  listSyncRuns,
 } from "@/lib/core/api";
+import { SYNC_RUNS_PAGE_SIZE } from "@/lib/sync/datasets";
 import { PageHeader } from "@/components/dashboard/primitives";
 import { ConnectionDetailClient } from "@/components/dashboard/connection-detail-client";
 
@@ -39,19 +41,29 @@ export default async function ConnectionDetailPage({
   });
   if (!connection) notFound();
 
-  const [integrations, capabilities, connectionCapabilities, scopes, awsSetup] =
-    await Promise.all([
-      listIntegrations(token),
-      listIntegrationCapabilities(connection.integration_id, token),
-      listConnectionCapabilities(
-        organization.organization_id,
-        connectionId,
-        token,
-        false,
-      ),
-      listConnectionScopes(organization.organization_id, connectionId, token),
-      getConnectionAwsSetup(organization.organization_id, connectionId, token),
-    ]);
+  const [
+    integrations,
+    capabilities,
+    connectionCapabilities,
+    scopes,
+    awsSetup,
+    syncRuns,
+  ] = await Promise.all([
+    listIntegrations(token),
+    listIntegrationCapabilities(connection.integration_id, token),
+    listConnectionCapabilities(
+      organization.organization_id,
+      connectionId,
+      token,
+      false,
+    ),
+    listConnectionScopes(organization.organization_id, connectionId, token),
+    getConnectionAwsSetup(organization.organization_id, connectionId, token),
+    listSyncRuns(organization.organization_id, connectionId, token, {
+      limit: SYNC_RUNS_PAGE_SIZE,
+      offset: 0,
+    }),
+  ]);
   const integration =
     integrations.find((item) => item.id === connection.integration_id) ?? null;
 
@@ -71,6 +83,8 @@ export default async function ConnectionDetailPage({
         initialConnectionCapabilities={connectionCapabilities}
         initialScopes={scopes}
         awsSetup={awsSetup}
+        initialSyncRuns={syncRuns.items}
+        initialSyncTotal={syncRuns.total}
       />
     </div>
   );

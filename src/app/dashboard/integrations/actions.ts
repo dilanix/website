@@ -13,6 +13,9 @@ import {
   removeConnectionScope,
   verifyAwsConnection,
   getConnectionAwsSetup,
+  startSync,
+  listSyncRuns,
+  getSyncRun,
   CoreApiError,
   type CoreIntegrationConnection,
   type UpdateConnectionInput,
@@ -20,6 +23,9 @@ import {
   type CoreConnectionScope,
   type CoreAWSConnectionSetup,
   type CoreVerifyAwsConnectionResult,
+  type CoreSyncRun,
+  type CoreSyncRunDetail,
+  type CoreSyncRunListResponse,
 } from "@/lib/core/api";
 
 type ActionResult<T = undefined> = { data?: T; error?: string };
@@ -209,6 +215,58 @@ export async function removeConnectionScopeAction(
     );
     revalidatePath(`/dashboard/integrations/${connectionId}`);
     return {};
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function startSyncAction(
+  connectionId: string,
+  datasets: string[],
+): Promise<ActionResult<CoreSyncRun>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await startSync(organizationId, connectionId, token, {
+      datasets,
+    });
+    revalidatePath(`/dashboard/integrations/${connectionId}`);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function listSyncRunsAction(
+  connectionId: string,
+  params: { limit: number; offset: number },
+): Promise<ActionResult<CoreSyncRunListResponse>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await listSyncRuns(
+      organizationId,
+      connectionId,
+      token,
+      params,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getSyncRunAction(
+  connectionId: string,
+  syncRunId: string,
+): Promise<ActionResult<CoreSyncRunDetail>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await getSyncRun(
+      organizationId,
+      connectionId,
+      syncRunId,
+      token,
+    );
+    return { data };
   } catch (error) {
     return { error: message(error) };
   }

@@ -90,6 +90,104 @@ describe("coreRequest", () => {
   });
 });
 
+describe("sync", () => {
+  it("starts a sync with the requested datasets", async () => {
+    const mockRun = {
+      id: "run-1",
+      organization_id: "org-123",
+      connection_id: "conn-1",
+      trigger: "manual",
+      status: "queued",
+      created_at: "2026-08-27T10:00:00Z",
+      started_at: null,
+      finished_at: null,
+    };
+    const response = new Response(JSON.stringify(mockRun), { status: 201 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { startSync } = await import("./api");
+    const result = await startSync("org-123", "conn-1", "test-token", {
+      datasets: ["inventory.resources"],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/syncs",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+        body: JSON.stringify({ datasets: ["inventory.resources"] }),
+      }),
+    );
+    expect(result).toEqual(mockRun);
+  });
+
+  it("lists sync runs with pagination query params", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listSyncRuns } = await import("./api");
+    const result = await listSyncRuns("org-123", "conn-1", "test-token", {
+      limit: 10,
+      offset: 20,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/syncs?limit=10&offset=20",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("fetches one sync run's detail including its jobs", async () => {
+    const mockDetail = {
+      id: "run-1",
+      organization_id: "org-123",
+      connection_id: "conn-1",
+      trigger: "manual",
+      status: "succeeded",
+      created_at: "2026-08-27T10:00:00Z",
+      started_at: "2026-08-27T10:00:01Z",
+      finished_at: "2026-08-27T10:00:05Z",
+      jobs: [],
+    };
+    const response = new Response(JSON.stringify(mockDetail), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getSyncRun } = await import("./api");
+    const result = await getSyncRun("org-123", "conn-1", "run-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/syncs/run-1",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockDetail);
+  });
+});
+
 describe("submitContactMessage", () => {
   it("posts the contact message payload without an auth header", async () => {
     const response = new Response(null, { status: 204 });

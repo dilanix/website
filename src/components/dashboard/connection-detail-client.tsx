@@ -6,6 +6,7 @@ import {
   Edit2,
   Filter,
   Plus,
+  RefreshCw,
   ShieldCheck,
   Trash2,
   Zap,
@@ -17,6 +18,7 @@ import type {
   CoreConnectionScope,
   CoreIntegrationCapability,
   CoreIntegrationConnection,
+  CoreSyncRun,
   IntegrationConnectionStatus,
 } from "@/lib/core/api";
 import {
@@ -31,6 +33,7 @@ import {
 } from "@/app/dashboard/integrations/actions";
 import { EmptyState, Section, StatusBadge } from "./primitives";
 import { AwsSetupPanel } from "./integrations/aws-setup-panel";
+import { SyncPanel } from "./sync-panel";
 import { cn } from "@/lib/utils";
 
 function statusTone(
@@ -46,7 +49,7 @@ const REMOVABLE_STATUSES = new Set<IntegrationConnectionStatus>([
   "disabled",
 ]);
 
-type TabType = "capabilities" | "scopes";
+type TabType = "capabilities" | "scopes" | "sync";
 
 export function ConnectionDetailClient({
   connection: initialConnection,
@@ -54,12 +57,16 @@ export function ConnectionDetailClient({
   initialConnectionCapabilities,
   initialScopes,
   awsSetup,
+  initialSyncRuns,
+  initialSyncTotal,
 }: {
   connection: CoreIntegrationConnection;
   capabilities: CoreIntegrationCapability[];
   initialConnectionCapabilities: CoreConnectionCapability[];
   initialScopes: CoreConnectionScope[];
   awsSetup: CoreAWSConnectionSetup;
+  initialSyncRuns: CoreSyncRun[];
+  initialSyncTotal: number;
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("capabilities");
@@ -189,7 +196,20 @@ export function ConnectionDetailClient({
       icon: Filter,
       count: scopes.length,
     },
+    {
+      id: "sync",
+      label: "Sync",
+      icon: RefreshCw,
+    },
   ];
+
+  const enabledCapabilitySlugs = useMemo(
+    () =>
+      connectionCapabilities
+        .filter((row) => row.enabled)
+        .map((row) => row.capability.slug),
+    [connectionCapabilities],
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -412,6 +432,18 @@ export function ConnectionDetailClient({
                 description="Scope this connection to specific regions or services. Accounts, subscriptions, and projects are set by verification, not scopes."
               />
             )}
+          </Section>
+        )}
+
+        {/* Sync Tab */}
+        {activeTab === "sync" && (
+          <Section title="Sync">
+            <SyncPanel
+              connectionId={connection.id}
+              enabledCapabilitySlugs={enabledCapabilitySlugs}
+              initialRuns={initialSyncRuns}
+              initialTotal={initialSyncTotal}
+            />
           </Section>
         )}
       </div>
