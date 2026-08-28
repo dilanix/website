@@ -4,9 +4,11 @@ import { ChevronRight, Cpu, Database, RefreshCw, Server } from "lucide-react";
 import type { CoreResource } from "@/lib/core/api";
 import { listResourcesAction } from "@/app/dashboard/integrations/actions";
 import {
+  formatSpecificationAttributes,
   RESOURCE_CATEGORY_LABELS,
   RESOURCES_PAGE_SIZE,
   resourceCategoryLabel,
+  resourceSpecificationSummary,
   resourceStatusTone,
 } from "@/lib/inventory/resources";
 import { EmptyState, StatusBadge } from "./primitives";
@@ -40,6 +42,12 @@ function ResourceRow({ resource }: { resource: CoreResource }) {
   const extraEntries = Object.entries(resource.extra).filter(
     ([, value]) => value !== null && value !== undefined && value !== "",
   );
+  const specificationSummary = resourceSpecificationSummary(
+    resource.specification,
+  );
+  const specificationAttributes = formatSpecificationAttributes(
+    resource.specification,
+  );
 
   return (
     <div>
@@ -65,10 +73,16 @@ function ResourceRow({ resource }: { resource: CoreResource }) {
             </p>
             <p className="text-muted-foreground truncate font-mono text-xs">
               {resource.provider_resource_type}
+              {resource.provider_sku ? ` · ${resource.provider_sku}` : ""}
             </p>
           </div>
         </div>
         <div className="text-muted-foreground flex shrink-0 items-center gap-4 text-xs">
+          {specificationSummary ? (
+            <span className="hidden font-mono md:inline">
+              {specificationSummary}
+            </span>
+          ) : null}
           <span className="hidden font-mono sm:inline">{resource.region}</span>
           <StatusBadge status={resourceStatusTone(resource.status)}>
             {resource.status}
@@ -83,6 +97,29 @@ function ResourceRow({ resource }: { resource: CoreResource }) {
             {resource.zone ? <span>zone {resource.zone}</span> : null}
             <span>first seen {formatRelativeTime(resource.first_seen_at)}</span>
           </div>
+          {resource.provider_sku ? (
+            specificationAttributes.length > 0 ? (
+              <div>
+                <p className="text-muted-foreground mb-1.5 font-medium">
+                  Specification
+                </p>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+                  {specificationAttributes.map(({ key, label, value }) => (
+                    <div key={key} className="min-w-0">
+                      <dt className="text-muted-foreground truncate">
+                        {label}
+                      </dt>
+                      <dd className="truncate font-mono">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ) : (
+              <p className="text-muted-foreground italic">
+                Technical specification not resolved yet.
+              </p>
+            )
+          ) : null}
           {tagEntries.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
               {tagEntries.map(([key, value]) => (

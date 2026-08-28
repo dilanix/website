@@ -619,6 +619,19 @@ export function getSyncRun(
   );
 }
 
+/**
+ * Mirrors Dilanix Core's `ResourceSpecificationRead` (`modules/catalog/schemas.py`)
+ * — a platform-global, provider-owned technical specification, never tenant data.
+ * `attributes` uses the canonical, provider-neutral vocabulary Core's catalog
+ * providers normalize into (e.g. `compute.vcpu`, `memory.bytes`); it is
+ * intentionally untyped/open-ended here for the same reason it's untyped on the
+ * backend — a new attribute must never require a frontend change to render.
+ */
+export interface CoreResourceSpecification {
+  attributes: Record<string, unknown>;
+  last_refreshed_at: string;
+}
+
 export interface CoreResource {
   id: string;
   organization_id: string;
@@ -630,6 +643,8 @@ export interface CoreResource {
   category: string;
   external_id: string;
   provider_resource_key: string;
+  /** The provider's own SKU/class (e.g. EC2 `t3a.medium`, RDS `db.t4g.medium`) — null for resource types with no meaningful one. */
+  provider_sku: string | null;
   name: string | null;
   region: string;
   zone: string | null;
@@ -638,6 +653,8 @@ export interface CoreResource {
   extra: Record<string, unknown>;
   first_seen_at: string;
   last_seen_at: string;
+  /** Null until `modules.catalog` resolves it asynchronously — a resource with a `provider_sku` and no `specification` yet is normal, not an error. */
+  specification: CoreResourceSpecification | null;
 }
 
 export interface CoreResourceListResponse {
