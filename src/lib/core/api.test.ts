@@ -254,6 +254,35 @@ describe("resources", () => {
     const [calledUrl] = fetchMock.mock.calls[0] as [string];
     expect(calledUrl).toContain("lifecycle_status=missing");
   });
+
+  it("fetches the distinct category/type/region filter options for a connection", async () => {
+    const mockResponse = {
+      category_types: [
+        { category: "compute", resource_type: "compute.instance" },
+      ],
+      regions: ["us-east-1"],
+    };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResourceFilters } = await import("./api");
+    const result = await listResourceFilters("org-123", "conn-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/resources/filters",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
 });
 
 describe("submitContactMessage", () => {

@@ -1,11 +1,25 @@
 "use client";
 import { type ReactNode, useState, useTransition } from "react";
-import { ChevronRight, Cpu, Database, RefreshCw, Server } from "lucide-react";
-import type { CoreResource } from "@/lib/core/api";
-import { listResourcesAction } from "@/app/dashboard/integrations/actions";
+import {
+  ChevronDown,
+  ChevronRight,
+  Container,
+  Cpu,
+  Database,
+  HardDrive,
+  Network,
+  RefreshCw,
+  Server,
+  Workflow,
+  Zap,
+} from "lucide-react";
+import type { CoreResource, CoreResourceFilterOptions } from "@/lib/core/api";
+import {
+  listResourcesAction,
+  listResourceFiltersAction,
+} from "@/app/dashboard/integrations/actions";
 import {
   formatSpecificationAttributes,
-  RESOURCE_CATEGORY_LABELS,
   RESOURCE_LIFECYCLE_STATUS_LABELS,
   RESOURCES_PAGE_SIZE,
   resourceCategoryLabel,
@@ -13,15 +27,23 @@ import {
   resourceLifecycleStatusTone,
   resourceSpecificationSummary,
   resourceStatusTone,
+  resourceTypeLabel,
 } from "@/lib/inventory/resources";
 import { EmptyState, StatusBadge } from "./primitives";
 import { cn } from "@/lib/utils";
 
 /** Renders as a plain conditional (never a dynamically-assigned component
- * reference) so it stays a stable JSX tag across renders. */
+ * reference) so it stays a stable JSX tag across renders. Falls back to a
+ * generic Server icon for a category the frontend doesn't recognize yet, so a
+ * new Core resource family never breaks this row, just shows a plain icon. */
 function CategoryIcon({ category, size }: { category: string; size: number }) {
   if (category === "compute") return <Cpu size={size} />;
   if (category === "database") return <Database size={size} />;
+  if (category === "container") return <Container size={size} />;
+  if (category === "network") return <Network size={size} />;
+  if (category === "storage") return <HardDrive size={size} />;
+  if (category === "cache") return <Zap size={size} />;
+  if (category === "orchestration") return <Workflow size={size} />;
   return <Server size={size} />;
 }
 
@@ -66,6 +88,49 @@ function FilterChip({
     >
       {children}
     </button>
+  );
+}
+
+/** A labeled native `<select>` dropdown filter — used instead of `FilterChip`
+ * once a dimension has too many/open-ended values to lay out as a row of
+ * chips (category × type across every resource family any connected
+ * provider produces — not AWS-specific, see `filterOptions` below). A native
+ * `<select>` also gets working keyboard/mobile picker behavior for free,
+ * matching this app's existing dropdown convention
+ * (`components/dashboard/api-keys-client.tsx`). */
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  disabled,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <label className="flex items-center gap-2">
+      <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+        {label}
+      </span>
+      <span className="relative inline-flex items-center">
+        <select
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          className="border-foreground/15 bg-background hover:bg-foreground/5 appearance-none rounded-lg border py-1.5 pr-7 pl-3 text-xs font-medium outline-none disabled:opacity-50"
+        >
+          {children}
+        </select>
+        <ChevronDown
+          size={12}
+          className="text-muted-foreground pointer-events-none absolute right-2.5"
+        />
+      </span>
+    </label>
   );
 }
 
@@ -209,50 +274,102 @@ function ResourceRow({ resource }: { resource: CoreResource }) {
   );
 }
 
+/** The full set of filter dimensions this panel drives — one place to thread
+ * through `reload`/`loadMore` instead of four positional parameters that would
+ * only grow more error-prone to reorder as filters are added. */
+interface ResourceFilters {
+  category: string | null;
+  resourceType: string | null;
+  region: string | null;
+  lifecycleStatus: string;
+}
+
+const ALL_VALUE = "all";
+
 export function ResourcePanel({
   connectionId,
   initialResources,
   initialTotal,
+  initialFilterOptions,
 }: {
   connectionId: string;
   initialResources: CoreResource[];
   initialTotal: number;
+  /** What category/type/region options this connection's resources actually
+   * had at page-load time (`ResourceService.list_resource_filter_options` in
+   * Core) — never a frontend-hardcoded resource-family list, and not
+   * AWS-specific: it reflects whatever `Resource.category`/`resource_type`
+   * this connection's provider (AWS today, any future provider automatically)
+   * actually produced. Refreshed alongside the resource list itself so a
+   * family added mid-session (a new sync run, a newly implemented collector)
+   * shows up without a reload. */
+  initialFilterOptions: CoreResourceFilterOptions;
 }) {
   const [resources, setResources] = useState(initialResources);
   const [total, setTotal] = useState(initialTotal);
-  const [category, setCategory] = useState<string | null>(null);
-  // Mirrors the backend's own default (PR #6): the common view is "what exists
-  // right now" — `missing`/`out_of_scope` history is opt-in, never the default.
-  const [lifecycleStatus, setLifecycleStatus] = useState<string>("active");
+  const [filterOptions, setFilterOptions] = useState(initialFilterOptions);
+  const [filters, setFilters] = useState<ResourceFilters>({
+    category: null,
+    resourceType: null,
+    region: null,
+    // Mirrors the backend's own default (PR #6): the common view is "what
+    // exists right now" — `missing`/`out_of_scope` history is opt-in.
+    lifecycleStatus: "active",
+  });
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  function reload(nextCategory: string | null, nextLifecycleStatus: string) {
+  function reload(next: ResourceFilters) {
     setRefreshing(true);
     startTransition(async () => {
-      const result = await listResourcesAction(connectionId, {
-        limit: RESOURCES_PAGE_SIZE,
-        offset: 0,
-        category: nextCategory,
-        lifecycleStatus: nextLifecycleStatus,
-      });
+      const [resourcesResult, filtersResult] = await Promise.all([
+        listResourcesAction(connectionId, {
+          limit: RESOURCES_PAGE_SIZE,
+          offset: 0,
+          category: next.category,
+          resourceType: next.resourceType,
+          region: next.region,
+          lifecycleStatus: next.lifecycleStatus,
+        }),
+        listResourceFiltersAction(connectionId),
+      ]);
       setRefreshing(false);
-      if (result.data) {
-        setResources(result.data.items);
-        setTotal(result.data.total);
+      if (resourcesResult.data) {
+        setResources(resourcesResult.data.items);
+        setTotal(resourcesResult.data.total);
+      }
+      if (filtersResult.data) {
+        setFilterOptions(filtersResult.data);
       }
     });
   }
 
   function selectCategory(next: string | null) {
-    setCategory(next);
-    reload(next, lifecycleStatus);
+    // A type chosen under the previous category may not exist under the new
+    // one (or "All categories") — clear it rather than silently filtering by
+    // a type/category combination the dropdown no longer offers.
+    const nextFilters = { ...filters, category: next, resourceType: null };
+    setFilters(nextFilters);
+    reload(nextFilters);
+  }
+
+  function selectResourceType(next: string | null) {
+    const nextFilters = { ...filters, resourceType: next };
+    setFilters(nextFilters);
+    reload(nextFilters);
   }
 
   function selectLifecycleStatus(next: string) {
-    setLifecycleStatus(next);
-    reload(category, next);
+    const nextFilters = { ...filters, lifecycleStatus: next };
+    setFilters(nextFilters);
+    reload(nextFilters);
+  }
+
+  function selectRegion(next: string | null) {
+    const nextFilters = { ...filters, region: next };
+    setFilters(nextFilters);
+    reload(nextFilters);
   }
 
   function loadMore() {
@@ -261,8 +378,10 @@ export function ResourcePanel({
       const result = await listResourcesAction(connectionId, {
         limit: RESOURCES_PAGE_SIZE,
         offset: resources.length,
-        category,
-        lifecycleStatus,
+        category: filters.category,
+        resourceType: filters.resourceType,
+        region: filters.region,
+        lifecycleStatus: filters.lifecycleStatus,
       });
       setLoadingMore(false);
       if (result.data) {
@@ -271,34 +390,92 @@ export function ResourcePanel({
     });
   }
 
+  // Every option below comes from `filterOptions` (`GET .../resources/filters`
+  // in Core) — never a frontend-hardcoded resource-family/region list, so a
+  // category/type/region only ever appears here when this connection actually
+  // has a matching resource right now.
+  const categories = Array.from(
+    new Set(filterOptions.category_types.map((entry) => entry.category)),
+  ).sort();
+  const typesByCategory = filterOptions.category_types.reduce<
+    Record<string, string[]>
+  >((accumulator, entry) => {
+    (accumulator[entry.category] ??= []).push(entry.resource_type);
+    return accumulator;
+  }, {});
+  const typeOptionsByCategory = filters.category
+    ? typesByCategory[filters.category]
+    : undefined;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <FilterGroup label="Category">
-            <FilterChip
-              active={category === null}
-              onClick={() => selectCategory(null)}
-            >
-              All
-            </FilterChip>
-            {Object.keys(RESOURCE_CATEGORY_LABELS).map((key) => (
-              <FilterChip
-                key={key}
-                active={category === key}
-                onClick={() => selectCategory(key)}
-              >
-                {resourceCategoryLabel(key)}
-              </FilterChip>
+          <FilterSelect
+            label="Category"
+            value={filters.category ?? ALL_VALUE}
+            onChange={(value) =>
+              selectCategory(value === ALL_VALUE ? null : value)
+            }
+            disabled={categories.length === 0}
+          >
+            <option value={ALL_VALUE}>All categories</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {resourceCategoryLabel(category)}
+              </option>
             ))}
-          </FilterGroup>
+          </FilterSelect>
+          <FilterSelect
+            label="Type"
+            value={filters.resourceType ?? ALL_VALUE}
+            onChange={(value) =>
+              selectResourceType(value === ALL_VALUE ? null : value)
+            }
+            disabled={filterOptions.category_types.length === 0}
+          >
+            <option value={ALL_VALUE}>All types</option>
+            {typeOptionsByCategory
+              ? typeOptionsByCategory.map((type) => (
+                  <option key={type} value={type}>
+                    {resourceTypeLabel(type)}
+                  </option>
+                ))
+              : Object.entries(typesByCategory).map(([categoryKey, types]) => (
+                  <optgroup
+                    key={categoryKey}
+                    label={resourceCategoryLabel(categoryKey)}
+                  >
+                    {types.map((type) => (
+                      <option key={type} value={type}>
+                        {resourceTypeLabel(type)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+          </FilterSelect>
+          <FilterSelect
+            label="Region"
+            value={filters.region ?? ALL_VALUE}
+            onChange={(value) =>
+              selectRegion(value === ALL_VALUE ? null : value)
+            }
+            disabled={filterOptions.regions.length === 0}
+          >
+            <option value={ALL_VALUE}>Any region</option>
+            {filterOptions.regions.map((region) => (
+              <option key={region} value={region}>
+                {region}
+              </option>
+            ))}
+          </FilterSelect>
           <div className="bg-foreground/10 hidden h-5 w-px sm:block" />
           <FilterGroup label="Status">
             {Object.entries(RESOURCE_LIFECYCLE_STATUS_LABELS).map(
               ([key, label]) => (
                 <FilterChip
                   key={key}
-                  active={lifecycleStatus === key}
+                  active={filters.lifecycleStatus === key}
                   onClick={() => selectLifecycleStatus(key)}
                 >
                   {label}
@@ -308,7 +485,7 @@ export function ResourcePanel({
           </FilterGroup>
         </div>
         <button
-          onClick={() => reload(category, lifecycleStatus)}
+          onClick={() => reload(filters)}
           disabled={refreshing}
           className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
         >
@@ -323,12 +500,12 @@ export function ResourcePanel({
       {resources.length === 0 ? (
         <EmptyState
           title={
-            lifecycleStatus === "active"
+            filters.lifecycleStatus === "active"
               ? "No resources discovered yet"
-              : `No ${resourceLifecycleStatusLabel(lifecycleStatus).toLowerCase()} resources`
+              : `No ${resourceLifecycleStatusLabel(filters.lifecycleStatus).toLowerCase()} resources`
           }
           description={
-            lifecycleStatus === "active"
+            filters.lifecycleStatus === "active"
               ? "Run an inventory sync for this connection to discover resources here."
               : "Nothing currently matches this filter."
           }

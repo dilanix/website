@@ -12,6 +12,7 @@ import {
   listConnectionScopes,
   listSyncRuns,
   listResources,
+  listResourceFilters,
 } from "@/lib/core/api";
 import { SYNC_RUNS_PAGE_SIZE } from "@/lib/sync/datasets";
 import { RESOURCES_PAGE_SIZE } from "@/lib/inventory/resources";
@@ -51,6 +52,7 @@ export default async function ConnectionDetailPage({
     awsSetup,
     syncRuns,
     resources,
+    resourceFilters,
   ] = await Promise.all([
     listIntegrations(token),
     listIntegrationCapabilities(connection.integration_id, token),
@@ -70,6 +72,7 @@ export default async function ConnectionDetailPage({
       limit: RESOURCES_PAGE_SIZE,
       offset: 0,
     }),
+    listResourceFilters(organization.organization_id, connectionId, token),
   ]);
   const integration =
     integrations.find((item) => item.id === connection.integration_id) ?? null;
@@ -94,6 +97,7 @@ export default async function ConnectionDetailPage({
         initialSyncTotal={syncRuns.total}
         initialResources={resources.items}
         initialResourceTotal={resources.total}
+        initialResourceFilters={resourceFilters}
       />
     </div>
   );

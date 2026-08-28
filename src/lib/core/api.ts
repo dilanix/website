@@ -704,3 +704,35 @@ export function listResources(
     token,
   );
 }
+
+export interface CoreResourceCategoryType {
+  category: string;
+  resource_type: string;
+}
+
+/**
+ * The distinct category/resource_type/region combinations this connection's
+ * resources actually have right now (`ResourceService.list_resource_filter_options`
+ * in Core) — never a fixed enum, and never AWS-specific: `category`/
+ * `resource_type` are Core's provider-neutral `Resource` fields
+ * (`modules.inventory.models.Resource`), so this reflects whatever this
+ * connection's provider actually produced (AWS today, any future provider
+ * automatically). Backs filter dropdowns so an option is only ever offered
+ * when it genuinely matches something, instead of the frontend hardcoding a
+ * resource-family list.
+ */
+export interface CoreResourceFilterOptions {
+  category_types: CoreResourceCategoryType[];
+  regions: string[];
+}
+
+export function listResourceFilters(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CoreResourceFilterOptions>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/resources/filters`,
+    token,
+  );
+}

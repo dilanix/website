@@ -8,16 +8,39 @@ import {
   resourceLifecycleStatusTone,
   resourceSpecificationSummary,
   resourceStatusTone,
+  resourceTypeLabel,
 } from "./resources";
 
 describe("resourceCategoryLabel", () => {
-  it("labels known categories", () => {
-    expect(resourceCategoryLabel("compute")).toBe("Compute");
+  it("labels known categories via the override table", () => {
     expect(resourceCategoryLabel("database")).toBe("Database");
   });
 
-  it("falls back to the raw category for an unknown value", () => {
-    expect(resourceCategoryLabel("security")).toBe("security");
+  it("humanizes an unrecognized category instead of showing the raw token", () => {
+    // No frontend list of "which categories exist" — `resource-panel.tsx` gets
+    // that from `listResourceFilters` (Core), never a hardcoded set here. Any
+    // category Core adds tomorrow must still render as a plain word.
+    expect(resourceCategoryLabel("compute")).toBe("Compute");
+    expect(resourceCategoryLabel("container")).toBe("Container");
+    expect(resourceCategoryLabel("orchestration")).toBe("Orchestration");
+    expect(resourceCategoryLabel("security")).toBe("Security");
+  });
+});
+
+describe("resourceTypeLabel", () => {
+  it("labels a canonical resource_type by humanizing its last dotted segment", () => {
+    expect(resourceTypeLabel("container.service")).toBe("Service");
+    expect(resourceTypeLabel("network.load_balancer")).toBe("Load balancer");
+  });
+
+  it("uses the override table for tokens humanizing alone gets wrong (acronyms, phrasing)", () => {
+    expect(resourceTypeLabel("network.vpc")).toBe("VPC");
+    expect(resourceTypeLabel("network.nat_gateway")).toBe("NAT gateway");
+    expect(resourceTypeLabel("database.instance")).toBe("Database instance");
+  });
+
+  it("humanizes an unrecognized future resource_type instead of showing the raw token", () => {
+    expect(resourceTypeLabel("future.thing")).toBe("Thing");
   });
 });
 

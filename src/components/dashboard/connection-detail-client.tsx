@@ -20,6 +20,7 @@ import type {
   CoreIntegrationCapability,
   CoreIntegrationConnection,
   CoreResource,
+  CoreResourceFilterOptions,
   CoreSyncRun,
   IntegrationConnectionStatus,
 } from "@/lib/core/api";
@@ -64,6 +65,7 @@ export function ConnectionDetailClient({
   initialSyncTotal,
   initialResources,
   initialResourceTotal,
+  initialResourceFilters,
 }: {
   connection: CoreIntegrationConnection;
   capabilities: CoreIntegrationCapability[];
@@ -74,6 +76,7 @@ export function ConnectionDetailClient({
   initialSyncTotal: number;
   initialResources: CoreResource[];
   initialResourceTotal: number;
+  initialResourceFilters: CoreResourceFilterOptions;
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("capabilities");
@@ -466,6 +469,7 @@ export function ConnectionDetailClient({
               connectionId={connection.id}
               initialResources={initialResources}
               initialTotal={initialResourceTotal}
+              initialFilterOptions={initialResourceFilters}
             />
           </Section>
         )}

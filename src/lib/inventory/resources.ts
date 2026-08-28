@@ -1,17 +1,56 @@
 /**
- * Mirrors the category/status vocabulary Dilanix Core's AWS inventory collector
- * actually produces (`src/modules/inventory/collectors/aws/{ec2,rds}.py` in the
- * Core repo). Both are free-form strings on the backend (no enum — a new provider
- * or resource family must never require a migration), so this is presentation-only
- * labeling/coloring, not a source of truth the backend enforces.
+ * Turns a raw `snake_case`/`dot.separated` backend token into a readable label
+ * by default — `"nat_gateway"` -> `"Nat gateway"`, `"orchestration"` ->
+ * `"Orchestration"` — so any `category`/`resource_type` Core's `Resource`
+ * model ever holds renders sensibly with zero frontend change. These are
+ * provider-neutral platform fields (`modules.inventory.models.Resource` in
+ * Core), never an AWS-specific vocabulary — a future non-AWS provider's
+ * categories/types get exactly the same automatic treatment, no frontend
+ * change required. `KNOWN_LABEL_OVERRIDES` below only fixes the handful of
+ * cases this mechanical rule gets wrong (acronyms, a friendlier phrasing) — it
+ * is cosmetic polish, not the source of truth for what categories/types
+ * *exist*: that list comes from `listResourceFilters` (`resource-panel.tsx`),
+ * never a hardcoded set here.
  */
-export const RESOURCE_CATEGORY_LABELS: Record<string, string> = {
-  compute: "Compute",
+function humanizeToken(value: string): string {
+  const words = value.split(/[._-]+/).filter(Boolean);
+  return words
+    .map((word, index) =>
+      index === 0 ? word[0].toUpperCase() + word.slice(1) : word.toLowerCase(),
+    )
+    .join(" ");
+}
+
+/** Overrides for the few tokens `humanizeToken` alone doesn't render well
+ * (acronyms like VPC/NAT, or a phrasing nicer than the mechanical split). Not
+ * exhaustive by design — anything missing here still renders correctly via
+ * `humanizeToken`, it just isn't specially polished yet. */
+const KNOWN_LABEL_OVERRIDES: Record<string, string> = {
   database: "Database",
+  "database.instance": "Database instance",
+  "network.vpc": "VPC",
+  "network.nat_gateway": "NAT gateway",
+  "network.ip_address": "IP address",
 };
 
 export function resourceCategoryLabel(category: string): string {
-  return RESOURCE_CATEGORY_LABELS[category] ?? category;
+  return KNOWN_LABEL_OVERRIDES[category] ?? humanizeToken(category);
+}
+
+/**
+ * Labels a canonical `resource_type` (`"container.service"`,
+ * `"network.nat_gateway"` — the provider-neutral type, never
+ * `provider_resource_type` like `ec2.instance`/`ecs.service`, which stays
+ * provider-specific) using the resource_type's own override key first, then
+ * falling back to humanizing just its last dotted segment (`"service"` from
+ * `"container.service"`) so an unrecognized future type still reads as a
+ * plain word, not a dotted backend token.
+ */
+export function resourceTypeLabel(resourceType: string): string {
+  if (KNOWN_LABEL_OVERRIDES[resourceType])
+    return KNOWN_LABEL_OVERRIDES[resourceType];
+  const segment = resourceType.split(".").pop() ?? resourceType;
+  return KNOWN_LABEL_OVERRIDES[segment] ?? humanizeToken(segment);
 }
 
 const SUCCESS_STATUSES = new Set(["running", "available", "active"]);
