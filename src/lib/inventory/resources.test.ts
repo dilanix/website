@@ -4,6 +4,8 @@ import {
   formatSpecificationAttributeValue,
   formatSpecificationAttributes,
   resourceCategoryLabel,
+  resourceLifecycleStatusLabel,
+  resourceLifecycleStatusTone,
   resourceSpecificationSummary,
   resourceStatusTone,
 } from "./resources";
@@ -200,5 +202,35 @@ describe("formatSpecificationAttributes", () => {
       "aaa.unknown",
       "zzz.unknown",
     ]);
+  });
+});
+
+describe("resourceLifecycleStatusLabel", () => {
+  it("labels known lifecycle statuses", () => {
+    expect(resourceLifecycleStatusLabel("active")).toBe("Active");
+    expect(resourceLifecycleStatusLabel("missing")).toBe("Missing");
+    expect(resourceLifecycleStatusLabel("out_of_scope")).toBe("Out of scope");
+  });
+
+  it("falls back to the raw value for an unrecognized status", () => {
+    expect(resourceLifecycleStatusLabel("future_status")).toBe("future_status");
+  });
+});
+
+describe("resourceLifecycleStatusTone", () => {
+  it("treats active as success", () => {
+    expect(resourceLifecycleStatusTone("active")).toBe("success");
+  });
+
+  it("treats missing as warning", () => {
+    expect(resourceLifecycleStatusTone("missing")).toBe("warning");
+  });
+
+  it("treats out_of_scope as neutral", () => {
+    expect(resourceLifecycleStatusTone("out_of_scope")).toBe("neutral");
+  });
+
+  it("falls back to success for an unrecognized status rather than alarming the user", () => {
+    expect(resourceLifecycleStatusTone("future_status")).toBe("success");
   });
 });

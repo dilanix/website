@@ -649,6 +649,16 @@ export interface CoreResource {
   region: string;
   zone: string | null;
   status: string;
+  /**
+   * Dilanix's own view of whether this Resource still authoritatively exists —
+   * independent from `status` above, which is the provider's own field (e.g. a
+   * `terminated` EC2 instance the provider still returns is still `active` here).
+   * `"active" | "missing" | "out_of_scope"` — kept as `string` since the backend
+   * enum is a plain `StrEnum`, not a fixed set the frontend must fully enumerate.
+   */
+  lifecycle_status: string;
+  missing_since: string | null;
+  out_of_scope_since: string | null;
   tags: Record<string, string>;
   extra: Record<string, unknown>;
   first_seen_at: string;
@@ -669,6 +679,8 @@ export interface ListResourcesParams {
   resourceType?: string | null;
   region?: string | null;
   status?: string | null;
+  /** Omitted -> the backend defaults to `active` only; pass `"missing"`/`"out_of_scope"` to see historical Resources. */
+  lifecycleStatus?: string | null;
 }
 
 export function listResources(
@@ -685,6 +697,8 @@ export function listResources(
   if (params.resourceType) query.set("resource_type", params.resourceType);
   if (params.region) query.set("region", params.region);
   if (params.status) query.set("status", params.status);
+  if (params.lifecycleStatus)
+    query.set("lifecycle_status", params.lifecycleStatus);
   return coreRequest<CoreResourceListResponse>(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/resources?${query.toString()}`,
     token,

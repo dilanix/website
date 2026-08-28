@@ -1,13 +1,16 @@
 "use client";
-import { useState, useTransition } from "react";
+import { type ReactNode, useState, useTransition } from "react";
 import { ChevronRight, Cpu, Database, RefreshCw, Server } from "lucide-react";
 import type { CoreResource } from "@/lib/core/api";
 import { listResourcesAction } from "@/app/dashboard/integrations/actions";
 import {
   formatSpecificationAttributes,
   RESOURCE_CATEGORY_LABELS,
+  RESOURCE_LIFECYCLE_STATUS_LABELS,
   RESOURCES_PAGE_SIZE,
   resourceCategoryLabel,
+  resourceLifecycleStatusLabel,
+  resourceLifecycleStatusTone,
   resourceSpecificationSummary,
   resourceStatusTone,
 } from "@/lib/inventory/resources";
@@ -20,6 +23,50 @@ function CategoryIcon({ category, size }: { category: string; size: number }) {
   if (category === "compute") return <Cpu size={size} />;
   if (category === "database") return <Database size={size} />;
   return <Server size={size} />;
+}
+
+/** One labeled cluster of filter chips (e.g. "Category" or "Status") — grouping
+ * keeps unrelated filter dimensions visually distinct instead of reading as one
+ * flat row of buttons. */
+function FilterGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </div>
+  );
+}
+
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+        active
+          ? "border-accent/25 bg-accent/10 text-accent"
+          : "border-foreground/10 text-muted-foreground hover:bg-foreground/5",
+      )}
+    >
+      {children}
+    </button>
+  );
 }
 
 function formatRelativeTime(iso: string): string {
@@ -48,6 +95,12 @@ function ResourceRow({ resource }: { resource: CoreResource }) {
   const specificationAttributes = formatSpecificationAttributes(
     resource.specification,
   );
+  const lifecycleSince =
+    resource.lifecycle_status === "missing"
+      ? resource.missing_since
+      : resource.lifecycle_status === "out_of_scope"
+        ? resource.out_of_scope_since
+        : null;
 
   return (
     <div>
@@ -84,6 +137,14 @@ function ResourceRow({ resource }: { resource: CoreResource }) {
             </span>
           ) : null}
           <span className="hidden font-mono sm:inline">{resource.region}</span>
+          {resource.lifecycle_status !== "active" ? (
+            <StatusBadge
+              status={resourceLifecycleStatusTone(resource.lifecycle_status)}
+            >
+              {resourceLifecycleStatusLabel(resource.lifecycle_status)}
+              {lifecycleSince ? ` · ${formatRelativeTime(lifecycleSince)}` : ""}
+            </StatusBadge>
+          ) : null}
           <StatusBadge status={resourceStatusTone(resource.status)}>
             {resource.status}
           </StatusBadge>
@@ -160,17 +221,21 @@ export function ResourcePanel({
   const [resources, setResources] = useState(initialResources);
   const [total, setTotal] = useState(initialTotal);
   const [category, setCategory] = useState<string | null>(null);
+  // Mirrors the backend's own default (PR #6): the common view is "what exists
+  // right now" — `missing`/`out_of_scope` history is opt-in, never the default.
+  const [lifecycleStatus, setLifecycleStatus] = useState<string>("active");
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  function reload(nextCategory: string | null) {
+  function reload(nextCategory: string | null, nextLifecycleStatus: string) {
     setRefreshing(true);
     startTransition(async () => {
       const result = await listResourcesAction(connectionId, {
         limit: RESOURCES_PAGE_SIZE,
         offset: 0,
         category: nextCategory,
+        lifecycleStatus: nextLifecycleStatus,
       });
       setRefreshing(false);
       if (result.data) {
@@ -182,7 +247,12 @@ export function ResourcePanel({
 
   function selectCategory(next: string | null) {
     setCategory(next);
-    reload(next);
+    reload(next, lifecycleStatus);
+  }
+
+  function selectLifecycleStatus(next: string) {
+    setLifecycleStatus(next);
+    reload(category, next);
   }
 
   function loadMore() {
@@ -192,6 +262,7 @@ export function ResourcePanel({
         limit: RESOURCES_PAGE_SIZE,
         offset: resources.length,
         category,
+        lifecycleStatus,
       });
       setLoadingMore(false);
       if (result.data) {
@@ -202,36 +273,42 @@ export function ResourcePanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => selectCategory(null)}
-            className={cn(
-              "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-              category === null
-                ? "border-accent/25 bg-accent/10 text-accent"
-                : "border-foreground/10 text-muted-foreground hover:bg-foreground/5",
-            )}
-          >
-            All
-          </button>
-          {Object.keys(RESOURCE_CATEGORY_LABELS).map((key) => (
-            <button
-              key={key}
-              onClick={() => selectCategory(key)}
-              className={cn(
-                "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                category === key
-                  ? "border-accent/25 bg-accent/10 text-accent"
-                  : "border-foreground/10 text-muted-foreground hover:bg-foreground/5",
-              )}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <FilterGroup label="Category">
+            <FilterChip
+              active={category === null}
+              onClick={() => selectCategory(null)}
             >
-              {resourceCategoryLabel(key)}
-            </button>
-          ))}
+              All
+            </FilterChip>
+            {Object.keys(RESOURCE_CATEGORY_LABELS).map((key) => (
+              <FilterChip
+                key={key}
+                active={category === key}
+                onClick={() => selectCategory(key)}
+              >
+                {resourceCategoryLabel(key)}
+              </FilterChip>
+            ))}
+          </FilterGroup>
+          <div className="bg-foreground/10 hidden h-5 w-px sm:block" />
+          <FilterGroup label="Status">
+            {Object.entries(RESOURCE_LIFECYCLE_STATUS_LABELS).map(
+              ([key, label]) => (
+                <FilterChip
+                  key={key}
+                  active={lifecycleStatus === key}
+                  onClick={() => selectLifecycleStatus(key)}
+                >
+                  {label}
+                </FilterChip>
+              ),
+            )}
+          </FilterGroup>
         </div>
         <button
-          onClick={() => reload(category)}
+          onClick={() => reload(category, lifecycleStatus)}
           disabled={refreshing}
           className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
         >
@@ -245,8 +322,16 @@ export function ResourcePanel({
 
       {resources.length === 0 ? (
         <EmptyState
-          title="No resources discovered yet"
-          description="Run an inventory sync for this connection to discover resources here."
+          title={
+            lifecycleStatus === "active"
+              ? "No resources discovered yet"
+              : `No ${resourceLifecycleStatusLabel(lifecycleStatus).toLowerCase()} resources`
+          }
+          description={
+            lifecycleStatus === "active"
+              ? "Run an inventory sync for this connection to discover resources here."
+              : "Nothing currently matches this filter."
+          }
         />
       ) : (
         <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">

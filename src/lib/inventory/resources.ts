@@ -35,6 +35,31 @@ export function resourceStatusTone(
 /** Page size used for both the initial server fetch and client-side "Load more". */
 export const RESOURCES_PAGE_SIZE = 20;
 
+/**
+ * `lifecycle_status` (`CoreResource.lifecycle_status`) is Dilanix's own view of
+ * whether a resource still authoritatively exists — independent from the
+ * provider's own `status` above (an EC2 instance the provider reports as
+ * `terminated` is still `active` here until a complete snapshot fails to observe
+ * it). Values mirror `modules.inventory.models.ResourceLifecycleStatus` in Core.
+ */
+export const RESOURCE_LIFECYCLE_STATUS_LABELS: Record<string, string> = {
+  active: "Active",
+  missing: "Missing",
+  out_of_scope: "Out of scope",
+};
+
+export function resourceLifecycleStatusLabel(lifecycleStatus: string): string {
+  return RESOURCE_LIFECYCLE_STATUS_LABELS[lifecycleStatus] ?? lifecycleStatus;
+}
+
+export function resourceLifecycleStatusTone(
+  lifecycleStatus: string,
+): "success" | "neutral" | "warning" {
+  if (lifecycleStatus === "missing") return "warning";
+  if (lifecycleStatus === "out_of_scope") return "neutral";
+  return "success";
+}
+
 const BYTES_PER_KIB = 1024;
 const BYTES_PER_MIB = BYTES_PER_KIB * 1024;
 const BYTES_PER_GIB = BYTES_PER_MIB * 1024;

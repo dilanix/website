@@ -235,6 +235,25 @@ describe("resources", () => {
     expect(calledUrl).toContain("limit=20&offset=0");
     expect(calledUrl).not.toContain("category=");
   });
+
+  it("sends lifecycleStatus as a lifecycle_status query param", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResources } = await import("./api");
+    await listResources("org-123", "conn-1", "test-token", {
+      limit: 20,
+      offset: 0,
+      lifecycleStatus: "missing",
+    });
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).toContain("lifecycle_status=missing");
+  });
 });
 
 describe("submitContactMessage", () => {
