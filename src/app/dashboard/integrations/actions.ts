@@ -16,6 +16,9 @@ import {
   startSync,
   listSyncRuns,
   getSyncRun,
+  setSyncPolicy,
+  listSyncPolicies,
+  deleteSyncPolicy,
   listResources,
   listResourceFilters,
   CoreApiError,
@@ -28,6 +31,9 @@ import {
   type CoreSyncRun,
   type CoreSyncRunDetail,
   type CoreSyncRunListResponse,
+  type CoreSyncPolicy,
+  type CoreSyncPolicyListResponse,
+  type SetSyncPolicyInput,
   type CoreResourceListResponse,
   type CoreResourceFilterOptions,
   type ListResourcesParams,
@@ -272,6 +278,51 @@ export async function getSyncRunAction(
       token,
     );
     return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function setSyncPolicyAction(
+  connectionId: string,
+  input: SetSyncPolicyInput,
+): Promise<ActionResult<CoreSyncPolicy>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await setSyncPolicy(
+      organizationId,
+      connectionId,
+      token,
+      input,
+    );
+    revalidatePath(`/dashboard/integrations/${connectionId}`);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function listSyncPoliciesAction(
+  connectionId: string,
+): Promise<ActionResult<CoreSyncPolicyListResponse>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await listSyncPolicies(organizationId, connectionId, token);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function deleteSyncPolicyAction(
+  connectionId: string,
+  syncPolicyId: string,
+): Promise<ActionResult> {
+  try {
+    const { token, organizationId } = await context();
+    await deleteSyncPolicy(organizationId, connectionId, syncPolicyId, token);
+    revalidatePath(`/dashboard/integrations/${connectionId}`);
+    return {};
   } catch (error) {
     return { error: message(error) };
   }

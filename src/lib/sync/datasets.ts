@@ -43,3 +43,21 @@ export function eligibleSyncDatasets(
     enabled.has(dataset.requiredCapability),
   );
 }
+
+/**
+ * Interval presets for the automatic-sync dropdown. Mirrors the floor Dilanix
+ * Core enforces on an enabled `SyncPolicy` (`Settings.sync_policy_minimum_interval_seconds`,
+ * default 3600s/1h) — every preset here is at or above that floor, so the backend
+ * never rejects a value this dropdown offers. `interval_seconds` accepts any
+ * positive integer, not just these presets; this list exists purely as frontend
+ * convenience.
+ */
+export const SYNC_INTERVAL_PRESETS = [
+  { label: "Every hour", seconds: 3600 },
+  { label: "Every 3 hours", seconds: 3 * 3600 },
+  { label: "Every 7 hours", seconds: 7 * 3600 },
+  { label: "Every 12 hours", seconds: 12 * 3600 },
+  { label: "Every 24 hours", seconds: 24 * 3600 },
+] as const;
+
+export const DEFAULT_SYNC_INTERVAL_SECONDS = SYNC_INTERVAL_PRESETS[0].seconds;

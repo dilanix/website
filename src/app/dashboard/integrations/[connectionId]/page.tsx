@@ -11,6 +11,7 @@ import {
   listConnectionCapabilities,
   listConnectionScopes,
   listSyncRuns,
+  listSyncPolicies,
   listResources,
   listResourceFilters,
 } from "@/lib/core/api";
@@ -51,6 +52,7 @@ export default async function ConnectionDetailPage({
     scopes,
     awsSetup,
     syncRuns,
+    syncPolicies,
     resources,
     resourceFilters,
   ] = await Promise.all([
@@ -68,6 +70,7 @@ export default async function ConnectionDetailPage({
       limit: SYNC_RUNS_PAGE_SIZE,
       offset: 0,
     }),
+    listSyncPolicies(organization.organization_id, connectionId, token),
     listResources(organization.organization_id, connectionId, token, {
       limit: RESOURCES_PAGE_SIZE,
       offset: 0,
@@ -95,6 +98,7 @@ export default async function ConnectionDetailPage({
         awsSetup={awsSetup}
         initialSyncRuns={syncRuns.items}
         initialSyncTotal={syncRuns.total}
+        initialSyncPolicies={syncPolicies.items}
         initialResources={resources.items}
         initialResourceTotal={resources.total}
         initialResourceFilters={resourceFilters}

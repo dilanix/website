@@ -1,8 +1,16 @@
 "use client";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { AlertCircle, ChevronRight, Loader2, RefreshCw, X } from "lucide-react";
+import {
+  AlertCircle,
+  Clock,
+  ChevronRight,
+  Loader2,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import type {
   CoreSyncJob,
+  CoreSyncPolicy,
   CoreSyncRun,
   SyncJobStatus,
   SyncRunStatus,
@@ -10,9 +18,14 @@ import type {
 import {
   getSyncRunAction,
   listSyncRunsAction,
+  setSyncPolicyAction,
   startSyncAction,
 } from "@/app/dashboard/integrations/actions";
-import { eligibleSyncDatasets, SYNC_RUNS_PAGE_SIZE } from "@/lib/sync/datasets";
+import {
+  eligibleSyncDatasets,
+  SYNC_INTERVAL_PRESETS,
+  SYNC_RUNS_PAGE_SIZE,
+} from "@/lib/sync/datasets";
 import { EmptyState, StatusBadge } from "./primitives";
 import { Toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -73,6 +86,20 @@ function formatDuration(
   return `${hours}h ${minutes % 60}m`;
 }
 
+/** For a future timestamp such as `SyncPolicy.next_run_at` — `formatRelativeTime`
+ * above is "ago" phrasing only and would misread a future date as "just now". */
+function formatNextRun(iso: string | null): string {
+  if (!iso) return "not scheduled";
+  const diffMs = new Date(iso).getTime() - Date.now();
+  if (diffMs <= 30_000) return "due now";
+  const minutes = Math.round(diffMs / 60_000);
+  if (minutes < 60) return `in ${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `in ${hours}h`;
+  const days = Math.round(hours / 24);
+  return `in ${days}d`;
+}
+
 /** Merges a freshly-polled first page into the currently-held list, keeping any
  * additional pages loaded via "Load more" untouched (and de-duplicated). */
 function mergeFirstPage(
@@ -107,6 +134,12 @@ function JobRow({ job }: { job: CoreSyncJob }) {
         <span>deleted {job.records_deleted}</span>
         {job.attempt > 1 ? <span>attempt {job.attempt}</span> : null}
       </div>
+      {job.status === "running" && job.heartbeat_at ? (
+        <div className="text-accent flex items-center gap-1.5 font-mono">
+          <span className="bg-accent inline-block h-1.5 w-1.5 animate-pulse rounded-full" />
+          <span>progress updated {formatRelativeTime(job.heartbeat_at)}</span>
+        </div>
+      ) : null}
       {job.status === "failed" && job.error_message ? (
         <p className="flex items-start gap-1.5 text-red-500/90">
           <AlertCircle size={13} className="mt-0.5 shrink-0" />
@@ -139,11 +172,13 @@ export function SyncPanel({
   enabledCapabilitySlugs,
   initialRuns,
   initialTotal,
+  initialPolicies,
 }: {
   connectionId: string;
   enabledCapabilitySlugs: string[];
   initialRuns: CoreSyncRun[];
   initialTotal: number;
+  initialPolicies: CoreSyncPolicy[];
 }) {
   const [runs, setRuns] = useState(initialRuns);
   const [total, setTotal] = useState(initialTotal);
@@ -162,12 +197,63 @@ export function SyncPanel({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
+  const [policies, setPolicies] = useState(initialPolicies);
+  const [savingPolicyDataset, setSavingPolicyDataset] = useState<string | null>(
+    null,
+  );
+  const [policyError, setPolicyError] = useState("");
 
   const eligibleDatasets = useMemo(
     () => eligibleSyncDatasets(enabledCapabilitySlugs),
     [enabledCapabilitySlugs],
   );
   const canSync = eligibleDatasets.length > 0;
+
+  // Connection-wide policies only (`target_id: null`) — matching "Sync now",
+  // which fans a manual run out across every verified target rather than asking
+  // which one, automatic sync applies the same way per dataset.
+  const policyByDataset = useMemo(() => {
+    const map = new Map<string, CoreSyncPolicy>();
+    for (const policy of policies) {
+      if (policy.target_id === null) map.set(policy.dataset, policy);
+    }
+    return map;
+  }, [policies]);
+
+  function applyPolicy(
+    datasetSlug: string,
+    patch: { enabled?: boolean; intervalSeconds?: number },
+  ) {
+    const existing = policyByDataset.get(datasetSlug);
+    const enabled = patch.enabled ?? existing?.enabled ?? false;
+    const intervalSeconds =
+      patch.intervalSeconds ??
+      existing?.interval_seconds ??
+      SYNC_INTERVAL_PRESETS[0].seconds;
+    setPolicyError("");
+    setSavingPolicyDataset(datasetSlug);
+    startTransition(async () => {
+      const result = await setSyncPolicyAction(connectionId, {
+        dataset: datasetSlug,
+        enabled,
+        interval_seconds: intervalSeconds,
+      });
+      setSavingPolicyDataset(null);
+      if (result.error) {
+        setPolicyError(result.error);
+        return;
+      }
+      if (result.data) {
+        setPolicies((current) => [
+          ...current.filter(
+            (policy) =>
+              !(policy.dataset === datasetSlug && policy.target_id === null),
+          ),
+          result.data!,
+        ]);
+      }
+    });
+  }
 
   const hasActiveRun = runs
     .slice(0, SYNC_RUNS_PAGE_SIZE)
@@ -185,10 +271,26 @@ export function SyncPanel({
           setTotal(result.data.total);
           setRuns((current) => mergeFirstPage(current, result.data!.items));
         }
+        // Also refresh the expanded run's own job rows while it's active — this
+        // is what makes progress (records read/created/updated/deleted,
+        // "progress updated Ns ago") exact and continuously updating rather than
+        // only reflecting the run's start/done state.
+        const expandedRun = result.data?.items.find(
+          (run) => run.id === expandedRunId,
+        );
+        if (expandedRun && ACTIVE_RUN_STATUSES.has(expandedRun.status)) {
+          const detail = await getSyncRunAction(connectionId, expandedRun.id);
+          if (detail.data) {
+            setJobsByRunId((current) => ({
+              ...current,
+              [expandedRun.id]: detail.data!.jobs,
+            }));
+          }
+        }
       })();
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [hasActiveRun, connectionId]);
+  }, [hasActiveRun, connectionId, expandedRunId]);
 
   function openDialog() {
     setDialogError("");
@@ -263,6 +365,92 @@ export function SyncPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      {canSync ? (
+        <div className="border-foreground/10 flex flex-col gap-3 rounded-xl border p-4">
+          <div>
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+              <Clock size={14} className="text-muted-foreground" />
+              Automatic sync
+            </h3>
+            <p className="text-muted-foreground mt-1 text-xs leading-5">
+              Keep a dataset fresh on a schedule instead of syncing it by hand
+              every time.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            {eligibleDatasets.map((dataset) => {
+              const policy = policyByDataset.get(dataset.slug);
+              const enabled = policy?.enabled ?? false;
+              const intervalSeconds =
+                policy?.interval_seconds ?? SYNC_INTERVAL_PRESETS[0].seconds;
+              const saving = savingPolicyDataset === dataset.slug;
+              return (
+                <div
+                  key={dataset.slug}
+                  className="border-foreground/10 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm"
+                >
+                  <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      disabled={saving}
+                      onChange={(event) =>
+                        applyPolicy(dataset.slug, {
+                          enabled: event.target.checked,
+                        })
+                      }
+                      className="border-foreground/20 text-accent focus:ring-accent rounded disabled:opacity-50"
+                    />
+                    <span className="min-w-0">
+                      <span className="font-medium">{dataset.label}</span>
+                      <span className="text-muted-foreground ml-2 font-mono text-xs">
+                        {dataset.slug}
+                      </span>
+                    </span>
+                  </label>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <select
+                      value={intervalSeconds}
+                      disabled={!enabled || saving}
+                      onChange={(event) =>
+                        applyPolicy(dataset.slug, {
+                          intervalSeconds: Number(event.target.value),
+                        })
+                      }
+                      className="border-foreground/15 bg-background h-8 rounded-lg border px-2 text-xs disabled:opacity-50"
+                    >
+                      {SYNC_INTERVAL_PRESETS.map((preset) => (
+                        <option key={preset.seconds} value={preset.seconds}>
+                          {preset.label}
+                        </option>
+                      ))}
+                    </select>
+                    {saving ? (
+                      <Loader2
+                        size={13}
+                        className="text-muted-foreground animate-spin"
+                      />
+                    ) : enabled ? (
+                      <span
+                        className="text-muted-foreground font-mono text-xs whitespace-nowrap"
+                        title={policy?.next_run_at ?? undefined}
+                      >
+                        next: {formatNextRun(policy?.next_run_at ?? null)}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {policyError ? (
+            <p role="alert" className="text-sm text-red-500">
+              {policyError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between gap-4">
         <p className="text-muted-foreground max-w-md text-sm leading-6">
           Start a manual sync to pull the latest data for this connection.

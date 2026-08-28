@@ -550,6 +550,11 @@ export interface CoreSyncJob {
   error_code: string | null;
   error_message: string | null;
   started_at: string | null;
+  /** Bumped every time the job durably persists one bounded unit of work (e.g.
+   * one AWS resource family/region) while still `running` — not just at
+   * completion. Lets the UI show the job is actively progressing, not stalled,
+   * long before `finished_at` exists. */
+  heartbeat_at: string | null;
   finished_at: string | null;
 }
 
@@ -616,6 +621,78 @@ export function getSyncRun(
   return coreRequest<CoreSyncRunDetail>(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/syncs/${syncRunId}`,
     token,
+  );
+}
+
+/**
+ * Mirrors Dilanix Core's `SyncPolicyRead` (`modules/sync/schemas/policy.py`) — a
+ * per-dataset automatic sync schedule. `target_id: null` means the policy applies
+ * across every verified target under the connection, matching `StartSyncInput`.
+ * `next_run_at: null` means either disabled, or not yet claimed by the scheduler.
+ */
+export interface CoreSyncPolicy {
+  id: string;
+  connection_id: string;
+  target_id: string | null;
+  dataset: string;
+  enabled: boolean;
+  interval_seconds: number | null;
+  next_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreSyncPolicyListResponse {
+  items: CoreSyncPolicy[];
+}
+
+/** Create-or-update, addressed by (connection, target, dataset) — never a policy
+ * id — mirroring the backend's `PUT .../sync-policies` upsert semantics. */
+export interface SetSyncPolicyInput {
+  dataset: string;
+  enabled: boolean;
+  interval_seconds: number | null;
+  target_id?: string | null;
+}
+
+export function setSyncPolicy(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  input: SetSyncPolicyInput,
+) {
+  return coreRequest<CoreSyncPolicy>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync-policies`,
+    token,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function listSyncPolicies(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CoreSyncPolicyListResponse>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync-policies`,
+    token,
+  );
+}
+
+export function deleteSyncPolicy(
+  organizationId: string,
+  connectionId: string,
+  syncPolicyId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync-policies/${syncPolicyId}`,
+    token,
+    { method: "DELETE" },
   );
 }
 

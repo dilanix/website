@@ -21,6 +21,7 @@ import type {
   CoreIntegrationConnection,
   CoreResource,
   CoreResourceFilterOptions,
+  CoreSyncPolicy,
   CoreSyncRun,
   IntegrationConnectionStatus,
 } from "@/lib/core/api";
@@ -63,6 +64,7 @@ export function ConnectionDetailClient({
   awsSetup,
   initialSyncRuns,
   initialSyncTotal,
+  initialSyncPolicies,
   initialResources,
   initialResourceTotal,
   initialResourceFilters,
@@ -74,6 +76,7 @@ export function ConnectionDetailClient({
   awsSetup: CoreAWSConnectionSetup;
   initialSyncRuns: CoreSyncRun[];
   initialSyncTotal: number;
+  initialSyncPolicies: CoreSyncPolicy[];
   initialResources: CoreResource[];
   initialResourceTotal: number;
   initialResourceFilters: CoreResourceFilterOptions;
@@ -458,6 +461,7 @@ export function ConnectionDetailClient({
               enabledCapabilitySlugs={enabledCapabilitySlugs}
               initialRuns={initialSyncRuns}
               initialTotal={initialSyncTotal}
+              initialPolicies={initialSyncPolicies}
             />
           </Section>
         )}

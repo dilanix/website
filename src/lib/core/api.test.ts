@@ -186,6 +186,93 @@ describe("sync", () => {
     );
     expect(result).toEqual(mockDetail);
   });
+
+  it("upserts a sync policy by dataset, addressed without a policy id", async () => {
+    const mockPolicy = {
+      id: "policy-1",
+      connection_id: "conn-1",
+      target_id: null,
+      dataset: "inventory.resources",
+      enabled: true,
+      interval_seconds: 3600,
+      next_run_at: "2026-08-27T11:00:00Z",
+      created_at: "2026-08-27T10:00:00Z",
+      updated_at: "2026-08-27T10:00:00Z",
+    };
+    const response = new Response(JSON.stringify(mockPolicy), { status: 200 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { setSyncPolicy } = await import("./api");
+    const result = await setSyncPolicy("org-123", "conn-1", "test-token", {
+      dataset: "inventory.resources",
+      enabled: true,
+      interval_seconds: 3600,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/sync-policies",
+      ),
+      expect.objectContaining({
+        method: "PUT",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+        body: JSON.stringify({
+          dataset: "inventory.resources",
+          enabled: true,
+          interval_seconds: 3600,
+        }),
+      }),
+    );
+    expect(result).toEqual(mockPolicy);
+  });
+
+  it("lists sync policies for a connection", async () => {
+    const mockResponse = { items: [] };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listSyncPolicies } = await import("./api");
+    const result = await listSyncPolicies("org-123", "conn-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/sync-policies",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("deletes a sync policy by id", async () => {
+    const response = new Response(null, { status: 204 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { deleteSyncPolicy } = await import("./api");
+    await deleteSyncPolicy("org-123", "conn-1", "policy-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/sync-policies/policy-1",
+      ),
+      expect.objectContaining({
+        method: "DELETE",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+  });
 });
 
 describe("resources", () => {
