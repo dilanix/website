@@ -547,6 +547,18 @@ export interface CoreSyncJob {
   records_created: number;
   records_updated: number;
   records_deleted: number;
+  /** Bounded unit-of-work count known upfront by a collector that reports one
+   * (e.g. AWS inventory's family x region fan-out) — `null` means "unknown",
+   * never zero, so a progress bar must not render until this is non-null. */
+  total_stages: number | null;
+  /** Bumped alongside `heartbeat_at` for each completed unit of work; the
+   * numerator matching `total_stages`. */
+  completed_stages: number;
+  /** Human-readable label of the most recently completed unit of work (e.g.
+   * "ec2.instance (us-east-1)") — the last *completed* stage, not one in
+   * flight, since progress only becomes visible once a unit is durably
+   * persisted. */
+  current_stage: string | null;
   error_code: string | null;
   error_message: string | null;
   started_at: string | null;
@@ -556,6 +568,10 @@ export interface CoreSyncJob {
    * long before `finished_at` exists. */
   heartbeat_at: string | null;
   finished_at: string | null;
+  /** Set once cancellation is requested for this job — independent of
+   * whether the collector executing it ever checks for it (cancellation is
+   * cooperative; a job may still finish normally after this is set). */
+  cancel_requested_at: string | null;
 }
 
 export interface CoreSyncRun {
@@ -621,6 +637,25 @@ export function getSyncRun(
   return coreRequest<CoreSyncRunDetail>(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/syncs/${syncRunId}`,
     token,
+  );
+}
+
+/**
+ * Requests cooperative cancellation of an in-flight run (`SyncService.request_cancel`
+ * on Core): a `queued` job is cancelled outright, a `running` job is asked to stop
+ * at its next safe boundary and may finish anyway. Idempotent while the run is
+ * still non-terminal; Core returns `409` once it has already finished.
+ */
+export function cancelSync(
+  organizationId: string,
+  connectionId: string,
+  syncRunId: string,
+  token: string,
+) {
+  return coreRequest<CoreSyncRun>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/syncs/${syncRunId}/cancel`,
+    token,
+    { method: "POST" },
   );
 }
 

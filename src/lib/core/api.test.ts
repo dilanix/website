@@ -253,6 +253,38 @@ describe("sync", () => {
     expect(result).toEqual(mockResponse);
   });
 
+  it("requests cancellation of a sync run", async () => {
+    const mockRun = {
+      id: "run-1",
+      organization_id: "org-123",
+      connection_id: "conn-1",
+      trigger: "manual",
+      status: "cancel_requested",
+      created_at: "2026-08-27T10:00:00Z",
+      started_at: "2026-08-27T10:00:01Z",
+      finished_at: null,
+    };
+    const response = new Response(JSON.stringify(mockRun), { status: 200 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { cancelSync } = await import("./api");
+    const result = await cancelSync("org-123", "conn-1", "run-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/syncs/run-1/cancel",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockRun);
+  });
+
   it("deletes a sync policy by id", async () => {
     const response = new Response(null, { status: 204 });
     const fetchMock = vi.fn().mockResolvedValue(response);

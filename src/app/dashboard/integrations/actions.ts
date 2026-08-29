@@ -16,6 +16,7 @@ import {
   startSync,
   listSyncRuns,
   getSyncRun,
+  cancelSync,
   setSyncPolicy,
   listSyncPolicies,
   deleteSyncPolicy,
@@ -277,6 +278,25 @@ export async function getSyncRunAction(
       syncRunId,
       token,
     );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function cancelSyncAction(
+  connectionId: string,
+  syncRunId: string,
+): Promise<ActionResult<CoreSyncRun>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await cancelSync(
+      organizationId,
+      connectionId,
+      syncRunId,
+      token,
+    );
+    revalidatePath(`/dashboard/integrations/${connectionId}`);
     return { data };
   } catch (error) {
     return { error: message(error) };

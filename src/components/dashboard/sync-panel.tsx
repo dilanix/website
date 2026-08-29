@@ -1,7 +1,14 @@
 "use client";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
 import {
   AlertCircle,
+  Ban,
   Clock,
   ChevronRight,
   Loader2,
@@ -12,10 +19,12 @@ import type {
   CoreSyncJob,
   CoreSyncPolicy,
   CoreSyncRun,
+  CoreSyncRunDetail,
   SyncJobStatus,
   SyncRunStatus,
 } from "@/lib/core/api";
 import {
+  cancelSyncAction,
   getSyncRunAction,
   listSyncRunsAction,
   setSyncPolicyAction,
@@ -26,6 +35,8 @@ import {
   SYNC_INTERVAL_PRESETS,
   SYNC_RUNS_PAGE_SIZE,
 } from "@/lib/sync/datasets";
+import { stageProgress } from "@/lib/sync/progress";
+import { useSyncRunEvents } from "@/hooks/use-sync-run-events";
 import { EmptyState, StatusBadge } from "./primitives";
 import { Toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -114,6 +125,7 @@ function mergeFirstPage(
 }
 
 function JobRow({ job }: { job: CoreSyncJob }) {
+  const progress = stageProgress(job);
   return (
     <div className="border-foreground/10 bg-background flex flex-col gap-2 rounded-lg border p-3 text-xs">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -127,6 +139,21 @@ function JobRow({ job }: { job: CoreSyncJob }) {
           target {job.target_id.slice(0, 8)}…
         </span>
       </div>
+
+      {progress && job.status === "running" ? (
+        <div className="flex items-center gap-2">
+          <div className="bg-foreground/10 h-1.5 flex-1 overflow-hidden rounded-full">
+            <div
+              className="bg-accent h-full rounded-full transition-[width] duration-500 ease-out"
+              style={{ width: `${progress.percent}%` }}
+            />
+          </div>
+          <span className="text-muted-foreground shrink-0 font-mono">
+            {progress.label}
+          </span>
+        </div>
+      ) : null}
+
       <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 font-mono">
         <span>read {job.records_read}</span>
         <span>created {job.records_created}</span>
@@ -134,12 +161,30 @@ function JobRow({ job }: { job: CoreSyncJob }) {
         <span>deleted {job.records_deleted}</span>
         {job.attempt > 1 ? <span>attempt {job.attempt}</span> : null}
       </div>
+
+      {job.status === "running" && job.current_stage ? (
+        <div
+          className="text-muted-foreground truncate font-mono"
+          title={job.current_stage}
+        >
+          last: {job.current_stage}
+        </div>
+      ) : null}
+
       {job.status === "running" && job.heartbeat_at ? (
         <div className="text-accent flex items-center gap-1.5 font-mono">
           <span className="bg-accent inline-block h-1.5 w-1.5 animate-pulse rounded-full" />
           <span>progress updated {formatRelativeTime(job.heartbeat_at)}</span>
         </div>
       ) : null}
+
+      {job.status === "cancel_requested" ? (
+        <div className="text-muted-foreground flex items-center gap-1.5 font-mono">
+          <Loader2 size={12} className="animate-spin" />
+          <span>cancellation requested — waiting for a safe point to stop</span>
+        </div>
+      ) : null}
+
       {job.status === "failed" && job.error_message ? (
         <p className="flex items-start gap-1.5 text-red-500/90">
           <AlertCircle size={13} className="mt-0.5 shrink-0" />
@@ -156,15 +201,42 @@ function JobRow({ job }: { job: CoreSyncJob }) {
 }
 
 function RunStatusIndicator({ status }: { status: SyncRunStatus }) {
-  if (status === "running") {
+  if (status === "running" || status === "cancel_requested") {
     return (
       <span className="border-accent/25 bg-accent/10 text-accent inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium">
         <Loader2 size={12} className="animate-spin" />
-        running
+        {status === "cancel_requested" ? "cancelling" : "running"}
       </span>
     );
   }
   return <StatusBadge status={runStatusTone(status)}>{status}</StatusBadge>;
+}
+
+function CancelRunButton({
+  status,
+  pending,
+  onCancel,
+}: {
+  status: SyncRunStatus;
+  pending: boolean;
+  onCancel: (event: React.MouseEvent) => void;
+}) {
+  if (status !== "queued" && status !== "running") return null;
+  return (
+    <button
+      onClick={onCancel}
+      disabled={pending}
+      title="Cancel this sync"
+      className="text-muted-foreground inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 hover:text-red-500 disabled:opacity-50"
+    >
+      {pending ? (
+        <Loader2 size={12} className="animate-spin" />
+      ) : (
+        <Ban size={12} />
+      )}
+      Cancel
+    </button>
+  );
 }
 
 export function SyncPanel({
@@ -194,7 +266,10 @@ export function SyncPanel({
     new Set(),
   );
   const [dialogError, setDialogError] = useState("");
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    variant: "success" | "error";
+  } | null>(null);
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
   const [policies, setPolicies] = useState(initialPolicies);
@@ -202,6 +277,7 @@ export function SyncPanel({
     null,
   );
   const [policyError, setPolicyError] = useState("");
+  const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
 
   const eligibleDatasets = useMemo(
     () => eligibleSyncDatasets(enabledCapabilitySlugs),
@@ -259,6 +335,9 @@ export function SyncPanel({
     .slice(0, SYNC_RUNS_PAGE_SIZE)
     .some((run) => ACTIVE_RUN_STATUSES.has(run.status));
 
+  // Keeps the run list itself (status badges, duration, "Load more" totals)
+  // fresh. Per-job progress for the *expanded* run is handled below by a live
+  // SSE stream instead — see `useSyncRunEvents`.
   useEffect(() => {
     if (!hasActiveRun) return;
     const interval = setInterval(() => {
@@ -271,26 +350,72 @@ export function SyncPanel({
           setTotal(result.data.total);
           setRuns((current) => mergeFirstPage(current, result.data!.items));
         }
-        // Also refresh the expanded run's own job rows while it's active — this
-        // is what makes progress (records read/created/updated/deleted,
-        // "progress updated Ns ago") exact and continuously updating rather than
-        // only reflecting the run's start/done state.
-        const expandedRun = result.data?.items.find(
-          (run) => run.id === expandedRunId,
-        );
-        if (expandedRun && ACTIVE_RUN_STATUSES.has(expandedRun.status)) {
-          const detail = await getSyncRunAction(connectionId, expandedRun.id);
-          if (detail.data) {
-            setJobsByRunId((current) => ({
-              ...current,
-              [expandedRun.id]: detail.data!.jobs,
-            }));
-          }
-        }
       })();
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [hasActiveRun, connectionId, expandedRunId]);
+  }, [hasActiveRun, connectionId]);
+
+  const expandedRun = useMemo(
+    () => runs.find((run) => run.id === expandedRunId) ?? null,
+    [runs, expandedRunId],
+  );
+  const expandedRunActive = Boolean(
+    expandedRun && ACTIVE_RUN_STATUSES.has(expandedRun.status),
+  );
+
+  // Persists every live frame — including the final one, sent just before the
+  // stream's `done` event — directly into the same state the rest of the
+  // panel already reads (`runs`, `jobsByRunId`). Doing this from the frame
+  // callback itself, rather than mirroring a "latest frame" value from the
+  // hook through a `useEffect`, is what makes the finished state stick: once
+  // a run turns terminal, `expandedRunActive` below flips to `false` and the
+  // stream tears down, so nothing would ever re-deliver that final frame for
+  // an effect to react to later.
+  const handleLiveFrame = useCallback((frame: CoreSyncRunDetail) => {
+    setJobsByRunId((current) => ({ ...current, [frame.id]: frame.jobs }));
+    setRuns((current) =>
+      current.map((run) =>
+        run.id === frame.id
+          ? {
+              ...run,
+              status: frame.status,
+              started_at: frame.started_at,
+              finished_at: frame.finished_at,
+            }
+          : run,
+      ),
+    );
+  }, []);
+
+  // Live progress for the expanded run — same `SyncRunDetailRead` shape as
+  // `GET .../syncs/{id}`, pushed roughly once a second while the run is in
+  // flight instead of the 4s list-poll cadence above.
+  const { failed: liveStreamFailed } = useSyncRunEvents(
+    connectionId,
+    expandedRunId,
+    expandedRunActive,
+    handleLiveFrame,
+  );
+
+  // Fallback only — if the live stream can't connect (e.g. a proxy blocking
+  // SSE), poll the expanded run's job detail the same way the panel did
+  // before the live stream existed, so progress still updates eventually.
+  useEffect(() => {
+    if (!expandedRunActive || !liveStreamFailed || !expandedRunId) return;
+    const interval = setInterval(() => {
+      void (async () => {
+        const detail = await getSyncRunAction(connectionId, expandedRunId);
+        if (detail.data) handleLiveFrame(detail.data);
+      })();
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [
+    expandedRunActive,
+    liveStreamFailed,
+    expandedRunId,
+    connectionId,
+    handleLiveFrame,
+  ]);
 
   function openDialog() {
     setDialogError("");
@@ -324,7 +449,33 @@ export function SyncPanel({
         setRuns((current) => [result.data!, ...current]);
         setTotal((current) => current + 1);
         setDialogOpen(false);
-        setToastMessage("Sync started");
+        setToast({ message: "Sync started", variant: "success" });
+      }
+    });
+  }
+
+  function cancelRun(runId: string, event: React.MouseEvent) {
+    event.stopPropagation(); // don't also toggle the row's expand/collapse
+    setCancellingRunId(runId);
+    startTransition(async () => {
+      const result = await cancelSyncAction(connectionId, runId);
+      setCancellingRunId(null);
+      if (result.error) {
+        setToast({ message: result.error, variant: "error" });
+        return;
+      }
+      if (result.data) {
+        const cancelled = result.data;
+        setRuns((current) =>
+          current.map((run) => (run.id === cancelled.id ? cancelled : run)),
+        );
+        setToast({
+          message:
+            cancelled.status === "cancelled"
+              ? "Sync cancelled"
+              : "Cancellation requested",
+          variant: "success",
+        });
       }
     });
   }
@@ -340,12 +491,7 @@ export function SyncPanel({
     startTransition(async () => {
       const result = await getSyncRunAction(connectionId, run.id);
       setLoadingJobsForRunId(null);
-      if (result.data) {
-        setJobsByRunId((current) => ({
-          ...current,
-          [run.id]: result.data!.jobs,
-        }));
-      }
+      if (result.data) handleLiveFrame(result.data);
     });
   }
 
@@ -494,9 +640,18 @@ export function SyncPanel({
             const duration = formatDuration(run.started_at, run.finished_at);
             return (
               <div key={run.id}>
-                <button
+                {/* A `div` (not `button`) — it needs to contain the Cancel
+                    button below, and a `<button>` cannot nest another one. */}
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => toggleExpand(run)}
-                  className="hover:bg-foreground/[0.02] flex w-full items-center justify-between gap-3 p-4 text-left text-sm transition-colors"
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    toggleExpand(run);
+                  }}
+                  className="hover:bg-foreground/[0.02] flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left text-sm transition-colors"
                   aria-expanded={expanded}
                 >
                   <div className="flex min-w-0 items-center gap-3">
@@ -517,8 +672,13 @@ export function SyncPanel({
                       <span className="font-mono">{duration}</span>
                     ) : null}
                     <span>{formatRelativeTime(run.created_at)}</span>
+                    <CancelRunButton
+                      status={run.status}
+                      pending={cancellingRunId === run.id}
+                      onCancel={(event) => cancelRun(run.id, event)}
+                    />
                   </div>
-                </button>
+                </div>
                 {expanded ? (
                   <div className="border-foreground/10 bg-foreground/[0.015] flex flex-col gap-2 border-t p-4">
                     {loadingJobsForRunId === run.id ? (
@@ -628,11 +788,11 @@ export function SyncPanel({
         </div>
       ) : null}
 
-      {toastMessage ? (
+      {toast ? (
         <Toast
-          message={toastMessage}
-          variant="success"
-          onDismiss={() => setToastMessage(null)}
+          message={toast.message}
+          variant={toast.variant}
+          onDismiss={() => setToast(null)}
         />
       ) : null}
     </div>
