@@ -115,28 +115,6 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * Renders a short "2 vCPU · 4 GiB" summary from a `CoreResourceSpecification`'s
- * canonical `attributes` (`compute.vcpu`, `memory.bytes` — the same vocabulary
- * Dilanix Core's catalog providers normalize into,
- * `src/modules/catalog/providers/aws/{ec2,rds}.py` in the Core repo). Reads only
- * the attributes it knows how to render and silently skips anything else — a new
- * canonical attribute must never require a frontend change just to keep resources
- * displaying. Returns `null` when there's nothing (yet) to show, e.g. specification
- * resolution hasn't completed.
- */
-export function resourceSpecificationSummary(
-  specification: { attributes: Record<string, unknown> } | null,
-): string | null {
-  if (!specification) return null;
-  const parts: string[] = [];
-  const vcpu = specification.attributes["compute.vcpu"];
-  if (typeof vcpu === "number") parts.push(`${vcpu} vCPU`);
-  const memoryBytes = specification.attributes["memory.bytes"];
-  if (typeof memoryBytes === "number") parts.push(formatBytes(memoryBytes));
-  return parts.length > 0 ? parts.join(" · ") : null;
-}
-
-/**
  * Human labels for the canonical attribute vocabulary Dilanix Core's catalog
  * providers normalize into (`src/modules/catalog/providers/aws/{ec2,rds}.py`).
  * Deliberately not exhaustive/authoritative — an attribute missing here still
@@ -159,6 +137,14 @@ const ATTRIBUTE_LABELS: Record<string, string> = {
   "storage.ebs_optimized_support": "EBS optimized",
   "storage.ebs_baseline_bandwidth_mbps": "EBS baseline bandwidth",
   "storage.ebs_baseline_throughput_mb_per_sec": "EBS baseline throughput",
+  // `Resource.capacity`'s vocabulary (Core's `modules.inventory.summary`) —
+  // this resource's own configured/provisioned capacity, distinct from the
+  // specification attributes above but rendered through the same table.
+  "storage.size_bytes": "Size",
+  "storage.iops": "IOPS",
+  "storage.throughput_mib_per_sec": "Throughput",
+  "dynamodb.read_capacity_units": "Read capacity",
+  "dynamodb.write_capacity_units": "Write capacity",
 };
 
 /** Display order for the attributes above; anything else is appended after, alphabetically. */
@@ -182,10 +168,18 @@ export function formatSpecificationAttributeValue(
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (Array.isArray(value)) return value.map(String).join(", ");
   if (typeof value === "number") {
-    if (key.endsWith(".bytes")) return formatBytes(value);
+    // Broad "ends with bytes" (not just ".bytes") so both "memory.bytes" and
+    // "storage.size_bytes"/"storage.instance_store_bytes" get formatted —
+    // every current key ending in "bytes" genuinely means a byte count, so
+    // this has no false-positive risk.
+    if (key.endsWith("bytes")) return formatBytes(value);
     if (key.endsWith("_mbps")) return `${value} Mbps`;
     if (key.endsWith("_mb_per_sec")) return `${value} MB/s`;
+    if (key.endsWith("_mib_per_sec")) return `${value} MiB/s`;
     if (key.endsWith("_ghz")) return `${value} GHz`;
+    if (key === "storage.iops") return `${value} IOPS`;
+    if (key === "dynamodb.read_capacity_units") return `${value} RCU`;
+    if (key === "dynamodb.write_capacity_units") return `${value} WCU`;
     return String(value);
   }
   return String(value);
@@ -198,17 +192,17 @@ export interface FormattedSpecificationAttribute {
 }
 
 /**
- * The full attribute list for a resolved `CoreResourceSpecification`, labeled,
- * unit-formatted, and ordered for display (known attributes first in a fixed
- * order, then anything else alphabetically by raw key) — what
- * `ResourceRow`'s expanded detail view actually renders instead of the raw
- * `attributes` object.
+ * Labels, unit-formats, and orders a canonical attribute record for display
+ * (known attributes first in a fixed order, then anything else alphabetically
+ * by raw key) — the shared implementation behind `formatSpecificationAttributes`
+ * (`specification.attributes`) and `formatCapacityAttributes`
+ * (`Resource.capacity`): the same dotted-key vocabulary, just two different
+ * sources on `CoreResource`.
  */
-export function formatSpecificationAttributes(
-  specification: { attributes: Record<string, unknown> } | null,
+function formatAttributeEntries(
+  attributes: Record<string, unknown>,
 ): FormattedSpecificationAttribute[] {
-  if (!specification) return [];
-  return Object.entries(specification.attributes)
+  return Object.entries(attributes)
     .sort(([a], [b]) => {
       const indexA = ATTRIBUTE_ORDER.indexOf(a);
       const indexB = ATTRIBUTE_ORDER.indexOf(b);
@@ -222,4 +216,29 @@ export function formatSpecificationAttributes(
       label: formatSpecificationAttributeLabel(key),
       value: formatSpecificationAttributeValue(key, value),
     }));
+}
+
+/**
+ * The full attribute list for a resolved `CoreResourceSpecification` — what
+ * `ResourceRow`'s expanded "Specification" detail view renders instead of the
+ * raw `attributes` object.
+ */
+export function formatSpecificationAttributes(
+  specification: { attributes: Record<string, unknown> } | null,
+): FormattedSpecificationAttribute[] {
+  if (!specification) return [];
+  return formatAttributeEntries(specification.attributes);
+}
+
+/**
+ * The full attribute list for `Resource.capacity` — what `ResourceRow`'s
+ * expanded "Capacity" detail view renders. Unlike `specification`, `capacity`
+ * is never `null` on `CoreResource` (an empty object, not null, means "no
+ * capacity concept for this resource type"), so this takes the record
+ * directly.
+ */
+export function formatCapacityAttributes(
+  capacity: Record<string, unknown>,
+): FormattedSpecificationAttribute[] {
+  return formatAttributeEntries(capacity);
 }

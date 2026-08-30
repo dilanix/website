@@ -773,10 +773,28 @@ export interface CoreResource {
   out_of_scope_since: string | null;
   tags: Record<string, string>;
   extra: Record<string, unknown>;
+  /**
+   * This resource's own configured/provisioned capacity (an ECS task's
+   * vCPU/memory, an EBS volume's size/IOPS/throughput, a provisioned DynamoDB
+   * table's read/write capacity units) — the same canonical dotted-key
+   * vocabulary as `specification.attributes` (`compute.vcpu`, `memory.bytes`,
+   * ...), but never the same data: a resource whose size comes from a
+   * provider SKU (EC2/RDS/ElastiCache) gets it via `specification` instead,
+   * never duplicated here. Empty for resource types with no capacity concept
+   * at all (S3, VPC, security group, EKS cluster, ...) — never a fake `0`.
+   */
+  capacity: Record<string, unknown>;
   first_seen_at: string;
   last_seen_at: string;
   /** Null until `modules.catalog` resolves it asynchronously — a resource with a `provider_sku` and no `specification` yet is normal, not an error. */
   specification: CoreResourceSpecification | null;
+  /**
+   * Server-computed `"2 vCPU · 4 GiB"` / `"500 GiB · 12K IOPS"` / ... —
+   * checks `specification.attributes` first, then `capacity`
+   * (`modules.inventory.summary.technical_summary` in Core). `null` when
+   * this resource type has no capacity concept — never a placeholder.
+   */
+  technical_summary: string | null;
 }
 
 export interface CoreResourceListResponse {

@@ -19,13 +19,13 @@ import {
   listResourceFiltersAction,
 } from "@/app/dashboard/integrations/actions";
 import {
+  formatCapacityAttributes,
   formatSpecificationAttributes,
   RESOURCE_LIFECYCLE_STATUS_LABELS,
   RESOURCES_PAGE_SIZE,
   resourceCategoryLabel,
   resourceLifecycleStatusLabel,
   resourceLifecycleStatusTone,
-  resourceSpecificationSummary,
   resourceStatusTone,
   resourceTypeLabel,
 } from "@/lib/inventory/resources";
@@ -134,6 +134,38 @@ function FilterSelect({
   );
 }
 
+/** `extra`/`capacity` entries are filtered against this before rendering — an
+ * empty array/object (e.g. `attachments: []` on an unattached volume,
+ * `listeners: []` on a load balancer whose listener lookup failed) carries no
+ * information worth a row, the same "don't show nothing as if it were
+ * something" spirit as Core's own "no fake capacity" rule. */
+function hasContent(value: unknown): boolean {
+  if (value === null || value === undefined || value === "") return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+/** Renders one `extra` field's raw value. Most values are still plain
+ * scalars/arrays-of-scalars (`String()` already reads fine for those — a
+ * boolean as "true"/"false", an array joined by commas). A growing number of
+ * AWS-inventory-enrichment fields are nested (`attachments`,
+ * `container_definitions`, `runtime_platform`, `health_check`,
+ * `default_encryption`, ...) — `JSON.stringify` for anything object-shaped is
+ * the generic fallback so a new nested field never renders as the useless
+ * literal string "[object Object]", without hardcoding per-field layouts. */
+function formatExtraValue(value: unknown): string {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) {
+    if (value.every((item) => item === null || typeof item !== "object")) {
+      return value.join(", ");
+    }
+    return JSON.stringify(value);
+  }
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
 function formatRelativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const seconds = Math.round(diffMs / 1000);
@@ -151,15 +183,15 @@ function formatRelativeTime(iso: string): string {
 function ResourceRow({ resource }: { resource: CoreResource }) {
   const [expanded, setExpanded] = useState(false);
   const tagEntries = Object.entries(resource.tags);
-  const extraEntries = Object.entries(resource.extra).filter(
-    ([, value]) => value !== null && value !== undefined && value !== "",
-  );
-  const specificationSummary = resourceSpecificationSummary(
-    resource.specification,
+  const extraEntries = Object.entries(resource.extra).filter(([, value]) =>
+    hasContent(value),
   );
   const specificationAttributes = formatSpecificationAttributes(
     resource.specification,
   );
+  const capacityAttributes = hasContent(resource.capacity)
+    ? formatCapacityAttributes(resource.capacity)
+    : [];
   const lifecycleSince =
     resource.lifecycle_status === "missing"
       ? resource.missing_since
@@ -196,9 +228,9 @@ function ResourceRow({ resource }: { resource: CoreResource }) {
           </div>
         </div>
         <div className="text-muted-foreground flex shrink-0 items-center gap-4 text-xs">
-          {specificationSummary ? (
+          {resource.technical_summary ? (
             <span className="hidden font-mono md:inline">
-              {specificationSummary}
+              {resource.technical_summary}
             </span>
           ) : null}
           <span className="hidden font-mono sm:inline">{resource.region}</span>
@@ -246,6 +278,21 @@ function ResourceRow({ resource }: { resource: CoreResource }) {
               </p>
             )
           ) : null}
+          {capacityAttributes.length > 0 ? (
+            <div>
+              <p className="text-muted-foreground mb-1.5 font-medium">
+                Capacity
+              </p>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+                {capacityAttributes.map(({ key, label, value }) => (
+                  <div key={key} className="min-w-0">
+                    <dt className="text-muted-foreground truncate">{label}</dt>
+                    <dd className="truncate font-mono">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ) : null}
           {tagEntries.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
               {tagEntries.map(([key, value]) => (
@@ -260,12 +307,17 @@ function ResourceRow({ resource }: { resource: CoreResource }) {
           ) : null}
           {extraEntries.length > 0 ? (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
-              {extraEntries.map(([key, value]) => (
-                <div key={key} className="min-w-0">
-                  <dt className="text-muted-foreground truncate">{key}</dt>
-                  <dd className="truncate font-mono">{String(value)}</dd>
-                </div>
-              ))}
+              {extraEntries.map(([key, value]) => {
+                const formatted = formatExtraValue(value);
+                return (
+                  <div key={key} className="min-w-0">
+                    <dt className="text-muted-foreground truncate">{key}</dt>
+                    <dd className="truncate font-mono" title={formatted}>
+                      {formatted}
+                    </dd>
+                  </div>
+                );
+              })}
             </dl>
           ) : null}
         </div>

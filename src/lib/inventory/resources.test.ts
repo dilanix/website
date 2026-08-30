@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatCapacityAttributes,
   formatSpecificationAttributeLabel,
   formatSpecificationAttributeValue,
   formatSpecificationAttributes,
   resourceCategoryLabel,
   resourceLifecycleStatusLabel,
   resourceLifecycleStatusTone,
-  resourceSpecificationSummary,
   resourceStatusTone,
   resourceTypeLabel,
 } from "./resources";
@@ -59,53 +59,6 @@ describe("resourceStatusTone", () => {
   it("falls back to neutral for anything else", () => {
     expect(resourceStatusTone("stopped")).toBe("neutral");
     expect(resourceStatusTone("pending")).toBe("neutral");
-  });
-});
-
-describe("resourceSpecificationSummary", () => {
-  it("returns null when no specification has resolved yet", () => {
-    expect(resourceSpecificationSummary(null)).toBeNull();
-  });
-
-  it("combines vCPU and memory when both are present", () => {
-    const summary = resourceSpecificationSummary({
-      attributes: { "compute.vcpu": 2, "memory.bytes": 4 * 1024 ** 3 },
-    });
-    expect(summary).toBe("2 vCPU · 4 GiB");
-  });
-
-  it("renders a fractional GiB value with one decimal place", () => {
-    const summary = resourceSpecificationSummary({
-      attributes: { "memory.bytes": 1.5 * 1024 ** 3 },
-    });
-    expect(summary).toBe("1.5 GiB");
-  });
-
-  it("falls back to MiB below one GiB", () => {
-    const summary = resourceSpecificationSummary({
-      attributes: { "memory.bytes": 512 * 1024 ** 2 },
-    });
-    expect(summary).toBe("512 MiB");
-  });
-
-  it("renders only what's present, e.g. vCPU with memory still unresolved", () => {
-    expect(
-      resourceSpecificationSummary({ attributes: { "compute.vcpu": 8 } }),
-    ).toBe("8 vCPU");
-  });
-
-  it("returns null when attributes contain nothing this summary knows how to render", () => {
-    const summary = resourceSpecificationSummary({
-      attributes: { "network.performance": "Up to 5 Gigabit" },
-    });
-    expect(summary).toBeNull();
-  });
-
-  it("ignores non-numeric values instead of rendering them raw", () => {
-    const summary = resourceSpecificationSummary({
-      attributes: { "compute.vcpu": "unknown" },
-    });
-    expect(summary).toBeNull();
   });
 });
 
@@ -189,6 +142,35 @@ describe("formatSpecificationAttributeValue", () => {
   it("renders an unrecognized numeric attribute as a plain number", () => {
     expect(formatSpecificationAttributeValue("compute.vcpu", 2)).toBe("2");
   });
+
+  it("formats a byte count ending in '_bytes' (not just '.bytes'), e.g. Resource.capacity's storage.size_bytes", () => {
+    expect(
+      formatSpecificationAttributeValue("storage.size_bytes", 500 * 1024 ** 3),
+    ).toBe("500 GiB");
+    // Also fixes the pre-existing gap where this specification attribute
+    // never got byte-formatted despite ending in "_bytes".
+    expect(
+      formatSpecificationAttributeValue(
+        "storage.instance_store_bytes",
+        2 * 1024 ** 3,
+      ),
+    ).toBe("2 GiB");
+  });
+
+  it("labels IOPS, throughput, and DynamoDB capacity units explicitly", () => {
+    expect(formatSpecificationAttributeValue("storage.iops", 12000)).toBe(
+      "12000 IOPS",
+    );
+    expect(
+      formatSpecificationAttributeValue("storage.throughput_mib_per_sec", 500),
+    ).toBe("500 MiB/s");
+    expect(
+      formatSpecificationAttributeValue("dynamodb.read_capacity_units", 25),
+    ).toBe("25 RCU");
+    expect(
+      formatSpecificationAttributeValue("dynamodb.write_capacity_units", 10),
+    ).toBe("10 WCU");
+  });
 });
 
 describe("formatSpecificationAttributes", () => {
@@ -224,6 +206,59 @@ describe("formatSpecificationAttributes", () => {
       "compute.vcpu",
       "aaa.unknown",
       "zzz.unknown",
+    ]);
+  });
+});
+
+describe("formatCapacityAttributes", () => {
+  it("returns an empty list for an empty capacity object", () => {
+    expect(formatCapacityAttributes({})).toEqual([]);
+  });
+
+  it("labels and formats an ECS task's capacity (compute.vcpu + memory.bytes)", () => {
+    const attributes = formatCapacityAttributes({
+      "compute.vcpu": 2,
+      "memory.bytes": 4 * 1024 ** 3,
+    });
+    expect(attributes).toEqual([
+      { key: "compute.vcpu", label: "vCPU", value: "2" },
+      { key: "memory.bytes", label: "Memory", value: "4 GiB" },
+    ]);
+  });
+
+  it("labels and formats an EBS volume's capacity", () => {
+    const attributes = formatCapacityAttributes({
+      "storage.size_bytes": 500 * 1024 ** 3,
+      "storage.iops": 12000,
+      "storage.throughput_mib_per_sec": 500,
+    });
+    expect(attributes).toEqual([
+      { key: "storage.size_bytes", label: "Size", value: "500 GiB" },
+      { key: "storage.iops", label: "IOPS", value: "12000 IOPS" },
+      {
+        key: "storage.throughput_mib_per_sec",
+        label: "Throughput",
+        value: "500 MiB/s",
+      },
+    ]);
+  });
+
+  it("labels and formats a provisioned DynamoDB table's capacity", () => {
+    const attributes = formatCapacityAttributes({
+      "dynamodb.read_capacity_units": 25,
+      "dynamodb.write_capacity_units": 10,
+    });
+    expect(attributes).toEqual([
+      {
+        key: "dynamodb.read_capacity_units",
+        label: "Read capacity",
+        value: "25 RCU",
+      },
+      {
+        key: "dynamodb.write_capacity_units",
+        label: "Write capacity",
+        value: "10 WCU",
+      },
     ]);
   });
 });
