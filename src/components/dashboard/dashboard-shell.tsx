@@ -12,7 +12,6 @@ import {
   Menu,
   X,
   Boxes,
-  ChevronsUpDown,
   Plug,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -22,11 +21,36 @@ import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
 import { BrandLogo } from "@/components/layout/brand-logo";
 
 const navItems = [
-  { label: "Products", href: "/dashboard/products", icon: LayoutGrid },
-  { label: "Integrations", href: "/dashboard/integrations", icon: Plug },
-  { label: "API Keys", href: "/dashboard/api-keys", icon: KeyRound },
-  { label: "Billing", href: "/dashboard/billing", icon: CreditCard },
-  { label: "Settings", href: "/dashboard/settings", icon: Settings },
+  {
+    label: "Products",
+    href: "/dashboard/products",
+    icon: LayoutGrid,
+    organizationRequired: true,
+  },
+  {
+    label: "Integrations",
+    href: "/dashboard/integrations",
+    icon: Plug,
+    organizationRequired: true,
+  },
+  {
+    label: "API Keys",
+    href: "/dashboard/api-keys",
+    icon: KeyRound,
+    organizationRequired: true,
+  },
+  {
+    label: "Billing",
+    href: "/dashboard/billing",
+    icon: CreditCard,
+    organizationRequired: true,
+  },
+  {
+    label: "Settings",
+    href: "/dashboard/settings",
+    icon: Settings,
+    organizationRequired: false,
+  },
 ] as const;
 
 function isActiveItem(pathname: string, href: string) {
@@ -44,16 +68,22 @@ export function DashboardShell({
   children,
 }: {
   user: { firstName: string; lastName: string; email: string };
-  organization: { id: string; name: string } | null;
+  organization: { name: string } | null;
   products: DashboardProduct[];
   children: ReactNode;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const availableNavItems = navItems.filter(
+    (item) => organization || !item.organizationRequired,
+  );
+  const activeProducts = organization
+    ? products.filter((product) => product.status === "active")
+    : [];
 
   const nav = (
     <nav aria-label="Dashboard navigation" className="flex flex-col gap-1">
-      {navItems.map((item) => {
+      {availableNavItems.map((item) => {
         const active = isActiveItem(pathname, item.href);
         const Icon = item.icon;
         return (
@@ -65,7 +95,7 @@ export function DashboardShell({
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
               active
-                ? "bg-[linear-gradient(135deg,color-mix(in_oklab,var(--accent)_16%,transparent),color-mix(in_oklab,var(--accent-secondary)_18%,transparent))] text-accent"
+                ? "text-accent bg-[linear-gradient(135deg,color-mix(in_oklab,var(--accent)_16%,transparent),color-mix(in_oklab,var(--accent-secondary)_18%,transparent))]"
                 : "text-muted-foreground hover:bg-surface hover:text-foreground",
             )}
           >
@@ -74,38 +104,38 @@ export function DashboardShell({
           </Link>
         );
       })}
-      <div className="border-foreground/10 my-4 border-t" />
-      {products
-        .filter((product) => product.status === "active")
-        .map((product) => (
-          <div key={product.id} className="mb-3">
-            <div className="text-muted-foreground mb-1 flex items-center gap-2 px-3 text-[10px] font-semibold tracking-[0.16em] uppercase">
-              <Boxes size={12} /> {product.name}
-            </div>
-            {product.navigation.map((item) => {
-              const active =
-                pathname === item.href ||
-                (item.href !== `/dashboard/products/${product.slug}` &&
-                  pathname.startsWith(item.href));
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "ml-3 flex items-center rounded-lg border-l px-4 py-2 text-sm transition-colors",
-                    active
-                      ? "border-accent bg-accent/8 text-foreground"
-                      : "border-border-soft text-muted-foreground hover:border-accent/30 hover:text-foreground",
-                  )}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+      {activeProducts.length ? (
+        <div className="border-foreground/10 my-4 border-t" />
+      ) : null}
+      {activeProducts.map((product) => (
+        <div key={product.id} className="mb-3">
+          <div className="text-muted-foreground mb-1 flex items-center gap-2 px-3 text-[10px] font-semibold tracking-[0.16em] uppercase">
+            <Boxes size={12} /> {product.name}
           </div>
-        ))}
+          {product.navigation.map((item) => {
+            const active =
+              pathname === item.href ||
+              (item.href !== `/dashboard/products/${product.slug}` &&
+                pathname.startsWith(item.href));
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "ml-3 flex items-center rounded-lg border-l px-4 py-2 text-sm transition-colors",
+                  active
+                    ? "border-accent bg-accent/8 text-foreground"
+                    : "border-border-soft text-muted-foreground hover:border-accent/30 hover:text-foreground",
+                )}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 
@@ -115,21 +145,16 @@ export function DashboardShell({
         <div className="px-3">
           <BrandLogo href="/dashboard" className="h-7 w-auto" />
         </div>
-        <button
-          type="button"
-          aria-label="Switch organization"
-          className="border-border-soft bg-surface/72 hover:border-accent/22 hover:bg-surface-strong mt-6 flex w-full items-center justify-between rounded-2xl border px-3 py-2.5 text-left shadow-[0_12px_28px_var(--shadow-card)] transition-colors"
-        >
-          <span>
+        {organization ? (
+          <div className="border-border-soft bg-surface/72 mt-6 rounded-2xl border px-3 py-2.5 shadow-[0_12px_28px_var(--shadow-card)]">
             <span className="text-muted-foreground block text-[10px] tracking-wider uppercase">
               Organization
             </span>
             <span className="mt-0.5 block truncate text-sm font-medium">
-              {organization?.name ?? "No organization"}
+              {organization.name}
             </span>
-          </span>
-          <ChevronsUpDown className="text-muted-foreground" size={14} />
-        </button>
+          </div>
+        ) : null}
         <div className="mt-5">{nav}</div>
       </aside>
 

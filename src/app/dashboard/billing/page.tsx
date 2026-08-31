@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CreditCard } from "lucide-react";
 import { getBilling } from "@/lib/data/dashboard-mocks";
+import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import {
   Metric,
   PageHeader,
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 export default async function BillingPage() {
+  await requireDashboardOrganization();
   const billing = await getBilling();
   return (
     <div className="flex flex-col gap-9">

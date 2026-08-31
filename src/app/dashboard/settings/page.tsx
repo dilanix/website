@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getMe, AuthApiError } from "@/lib/auth/api";
-import { getAccessToken } from "@/lib/auth/session";
+import { getDashboardSession } from "@/lib/dashboard/session";
 import {
   PageHeader,
   Section,
@@ -15,20 +13,16 @@ export const metadata: Metadata = {
 const inputClass =
   "border-foreground/15 bg-background mt-2 h-10 w-full rounded-lg border px-3 text-sm outline-none focus:border-accent";
 export default async function SettingsPage() {
-  const token = await getAccessToken();
-  if (!token) redirect("/sign-in");
-  let me;
-  try {
-    me = await getMe(token);
-  } catch (error) {
-    if (error instanceof AuthApiError) redirect("/api/auth/logout");
-    throw error;
-  }
+  const { me, organization } = await getDashboardSession();
   return (
     <div className="flex max-w-4xl flex-col gap-9">
       <PageHeader
         title="Settings"
-        description="Manage your personal profile, organization, and security."
+        description={
+          organization
+            ? "Manage your personal profile, organization, and security."
+            : "Manage your personal profile and security."
+        }
       />
       <Section title="Personal">
         <form className="border-foreground/10 grid gap-4 rounded-xl border p-5 sm:grid-cols-2">
@@ -56,45 +50,25 @@ export default async function SettingsPage() {
           </button>
         </form>
       </Section>
-      <Section title="Organization">
-        <div className="border-foreground/10 rounded-xl border p-5">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm">
-              Organization name
-              <input className={inputClass} defaultValue="Dilanix" />
-            </label>
-            <label className="text-sm">
-              Slug
-              <input className={inputClass} defaultValue="dilanix" />
-            </label>
-          </div>
-          <div className="border-foreground/10 mt-6 border-t pt-5">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium">Members</h3>
-              <button className="border-foreground/15 rounded-lg border px-3 py-2 text-xs font-medium">
-                Invite member
-              </button>
-            </div>
-            <div className="divide-foreground/10 mt-3 divide-y">
-              {[
-                [`${me.first_name} ${me.last_name}`, me.email, "Owner"],
-                ["John", "john@example.com", "Member"],
-              ].map(([name, email, role]) => (
-                <div
-                  key={email}
-                  className="flex items-center justify-between gap-4 py-3"
-                >
-                  <div>
-                    <p className="text-sm">{name}</p>
-                    <p className="text-muted-foreground text-xs">{email}</p>
-                  </div>
-                  <StatusBadge>{role}</StatusBadge>
-                </div>
-              ))}
+      {organization ? (
+        <Section title="Organization">
+          <div className="border-foreground/10 rounded-xl border p-5">
+            <p className="text-sm font-medium">
+              {organization.organization_name}
+            </p>
+            <div className="border-foreground/10 mt-5 flex items-center justify-between gap-4 border-t pt-5">
+              <div>
+                <p className="text-sm">{`${me.first_name} ${me.last_name}`}</p>
+                <p className="text-muted-foreground text-xs">{me.email}</p>
+              </div>
+              <StatusBadge>
+                {organization.role.charAt(0).toUpperCase() +
+                  organization.role.slice(1)}
+              </StatusBadge>
             </div>
           </div>
-        </div>
-      </Section>
+        </Section>
+      ) : null}
       <Section title="Security">
         <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
           {[

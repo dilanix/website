@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getProductBySlug } from "@/lib/data/products";
+import { listOrganizationProducts } from "@/lib/core/api";
+import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { Badge } from "@/components/ui/badge";
 import { ProductTabs } from "@/components/dashboard/product-tabs";
 
@@ -10,6 +12,17 @@ export default async function ProductDashboardLayout({
   params,
 }: LayoutProps<"/dashboard/products/[slug]">) {
   const { slug } = await params;
+  const { token, organization } = await requireDashboardOrganization();
+  const availableProducts = await listOrganizationProducts(
+    organization.organization_id,
+    token,
+  );
+  const hasActiveAccess = availableProducts.some(
+    (item) => item.slug === slug && item.access_status === "active",
+  );
+  if (!hasActiveAccess) {
+    notFound();
+  }
   const product = await getProductBySlug(slug);
   if (!product) {
     notFound();

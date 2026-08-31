@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
-import { getAccessToken } from "@/lib/auth/session";
-import { getMe } from "@/lib/auth/api";
-import { getProductDocumentation } from "@/lib/core/api";
+import { notFound } from "next/navigation";
+import { CoreApiError, getProductDocumentation } from "@/lib/core/api";
+import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { ProductDocsView } from "@/components/dashboard/product-docs-view";
 
 export async function generateMetadata({
@@ -19,11 +18,7 @@ export default async function ProductDocsPage({
   params,
 }: PageProps<"/dashboard/products/[slug]">) {
   const { slug } = await params;
-  const token = await getAccessToken();
-  if (!token) redirect("/sign-in");
-  const me = await getMe(token);
-  const organization = me.organizations[0];
-  if (!organization) notFound();
+  const { token, organization } = await requireDashboardOrganization();
 
   let docs;
   try {
@@ -32,15 +27,11 @@ export default async function ProductDocsPage({
       slug,
       token,
     );
-  } catch {
-    docs = {
-      product_id: slug,
-      product_name: slug.charAt(0).toUpperCase() + slug.slice(1),
-      product_slug: slug,
-      documentation: "",
-      access_status: "active" as const,
-      updated_at: null,
-    };
+  } catch (error) {
+    if (error instanceof CoreApiError && error.status === 404) {
+      notFound();
+    }
+    throw error;
   }
 
   return <ProductDocsView docs={docs} />;

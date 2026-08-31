@@ -1,37 +1,15 @@
-import { redirect } from "next/navigation";
-import { getMe, AuthApiError } from "@/lib/auth/api";
-import { getAccessToken } from "@/lib/auth/session";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { listOrganizationProducts } from "@/lib/core/api";
 import { toDashboardProduct } from "@/lib/dashboard/products";
+import { getDashboardSession } from "@/lib/dashboard/session";
 
 export default async function DashboardLayout({
   children,
 }: LayoutProps<"/dashboard">) {
-  const accessToken = await getAccessToken();
-  if (!accessToken) {
-    redirect("/sign-in");
-  }
-
-  let me;
-  try {
-    me = await getMe(accessToken);
-  } catch (error) {
-    if (error instanceof AuthApiError) {
-      redirect("/api/auth/logout");
-    }
-    throw error;
-  }
-
-  const organization = me.organizations[0];
+  const { token, me, organization } = await getDashboardSession();
   const products = organization
-    ? (
-        await listOrganizationProducts(
-          organization.organization_id,
-          accessToken,
-        )
-      ).map((product) =>
-        toDashboardProduct(product),
+    ? (await listOrganizationProducts(organization.organization_id, token)).map(
+        (product) => toDashboardProduct(product),
       )
     : [];
 
@@ -45,7 +23,6 @@ export default async function DashboardLayout({
       organization={
         organization
           ? {
-              id: organization.organization_id,
               name: organization.organization_name,
             }
           : null

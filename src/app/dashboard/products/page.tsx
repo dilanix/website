@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Boxes } from "lucide-react";
-import { redirect } from "next/navigation";
-import { getAccessToken } from "@/lib/auth/session";
-import { getMe } from "@/lib/auth/api";
 import { listOrganizationProducts } from "@/lib/core/api";
 import { toDashboardProduct } from "@/lib/dashboard/products";
+import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import {
   PageHeader,
   StatusBadge,
@@ -18,15 +16,10 @@ export const metadata: Metadata = {
 };
 
 export default async function ProductsPage() {
-  const token = await getAccessToken();
-  if (!token) redirect("/sign-in");
-  const me = await getMe(token);
-  const organization = me.organizations[0];
-  const products = organization
-    ? (await listOrganizationProducts(organization.organization_id, token)).map(
-        (product) => toDashboardProduct(product),
-      )
-    : [];
+  const { token, organization } = await requireDashboardOrganization();
+  const products = (
+    await listOrganizationProducts(organization.organization_id, token)
+  ).map((product) => toDashboardProduct(product));
   return (
     <div className="flex flex-col gap-8">
       <PageHeader

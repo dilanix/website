@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
-import { getAccessToken } from "@/lib/auth/session";
-import { getMe } from "@/lib/auth/api";
+import { notFound } from "next/navigation";
+import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import {
   CoreApiError,
   getConnection,
@@ -29,11 +28,7 @@ export default async function ConnectionDetailPage({
   params,
 }: PageProps<"/dashboard/integrations/[connectionId]">) {
   const { connectionId } = await params;
-  const token = await getAccessToken();
-  if (!token) redirect("/sign-in");
-  const me = await getMe(token);
-  const organization = me.organizations[0];
-  if (!organization) redirect("/dashboard/integrations");
+  const { token, organization } = await requireDashboardOrganization();
 
   const connection = await getConnection(
     organization.organization_id,

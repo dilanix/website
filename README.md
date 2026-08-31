@@ -16,6 +16,13 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+The authenticated dashboard treats `/v1/auth/me` as the source of truth for effective
+organization access. When the user has no active, non-deleted organization, the UI
+shows only personal settings: organization-scoped navigation and entry points such as
+Products, Integrations, API Keys, and Billing are omitted, and direct requests to those
+routes redirect to Settings. Product dashboard routes additionally require an active
+organization-product entitlement.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
