@@ -84,11 +84,18 @@ export function IntegrationsClient({
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setConnectTo(integration)}
-                  className="border-foreground/15 hover:bg-foreground/5 inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium"
+                  disabled={!integration.connection_supported}
+                  title={
+                    integration.connection_supported
+                      ? `Connect ${integration.name}`
+                      : `${integration.name} connection support is coming soon`
+                  }
+                  className="border-foreground/15 hover:bg-foreground/5 inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                 >
-                  <Plus size={13} />
-                  Connect
+                  {integration.connection_supported ? <Plus size={13} /> : null}
+                  {integration.connection_supported ? "Connect" : "Coming soon"}
                 </button>
               </div>
               {integration.description ? (

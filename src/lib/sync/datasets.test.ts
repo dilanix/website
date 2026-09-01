@@ -12,7 +12,6 @@ describe("eligibleSyncDatasets", () => {
 
     expect(result.map((dataset) => dataset.slug)).toEqual([
       "inventory.resources",
-      "billing.cost_usage",
     ]);
   });
 
@@ -28,6 +27,12 @@ describe("eligibleSyncDatasets", () => {
     expect(eligibleSyncDatasets(allCapabilities)).toHaveLength(
       SYNC_DATASETS.length,
     );
+  });
+
+  it("contains only datasets executable by the current Core registry", () => {
+    expect(SYNC_DATASETS.map((dataset) => dataset.slug)).toEqual([
+      "inventory.resources",
+    ]);
   });
 });
 

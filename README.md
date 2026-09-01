@@ -23,6 +23,12 @@ Products, Integrations, API Keys, and Billing are omitted, and direct requests t
 routes redirect to Settings. Product dashboard routes additionally require an active
 organization-product entitlement.
 
+The Integrations dashboard treats Core's `connection_supported` response field as
+the source of truth for executable provider onboarding. Planned catalog providers
+remain visible with a disabled “Coming soon” action; provider slugs are never used as
+a frontend availability allowlist. The static sync dataset list mirrors only Core's
+currently runnable `DEFAULT_DATASETS` entries (`inventory.resources` today).
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

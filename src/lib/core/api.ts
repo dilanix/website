@@ -217,6 +217,9 @@ export interface CoreIntegration {
   category: string | null;
   status: IntegrationStatus;
   icon_key: string | null;
+  /** Runtime capability reported by Core's provider registry. Catalog lifecycle
+   * remains in `status`; clients must not infer adapter support from the slug. */
+  connection_supported: boolean;
 }
 
 export type IntegrationCapabilityStatus = "active" | "disabled" | "deprecated";

@@ -2,30 +2,15 @@
  * Mirrors Dilanix Core's `DatasetRegistry` defaults
  * (`src/modules/sync/datasets.py` in the Core repo). The backend has no dataset
  * catalog endpoint yet — that's the still-unbuilt product-requirement planner — so
- * this static list is the only source of truth the frontend has for which datasets
- * can be synced and which capability each one requires. Update this alongside any
- * change to `DEFAULT_DATASETS` on the backend.
+ * this static allowlist mirrors only datasets Core can execute now. Planned dataset
+ * names must not appear here before their backend collector and persistence path are
+ * runnable. Update this alongside any change to `DEFAULT_DATASETS` on the backend.
  */
 export const SYNC_DATASETS = [
   {
     slug: "inventory.resources",
     label: "Inventory Resources",
     requiredCapability: "inventory.read",
-  },
-  {
-    slug: "billing.cost_usage",
-    label: "Cost & Usage",
-    requiredCapability: "billing.read",
-  },
-  {
-    slug: "metrics.utilization",
-    label: "Utilization Metrics",
-    requiredCapability: "metrics.read",
-  },
-  {
-    slug: "security.findings",
-    label: "Security Findings",
-    requiredCapability: "security.read",
   },
 ] as const;
 
