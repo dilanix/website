@@ -11,9 +11,10 @@ import {
   formatCostPeriod,
 } from "@/lib/billing/cost-summaries";
 import { EmptyState, StatusBadge } from "./primitives";
+import { CostSummaryTotals } from "./cost-summary-totals";
 import { cn } from "@/lib/utils";
 
-function FilterChip({
+export function FilterChip({
   active,
   onClick,
   children,
@@ -152,7 +153,9 @@ export function CostSummaryPanel({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
+      <CostSummaryTotals connectionId={connectionId} />
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <div className="flex flex-wrap items-center gap-2">

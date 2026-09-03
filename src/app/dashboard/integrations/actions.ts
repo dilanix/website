@@ -27,6 +27,7 @@ import {
   listResources,
   listResourceFilters,
   listCostSummaries,
+  getCostSummaryTotals,
   CoreApiError,
   type CoreIntegrationConnection,
   type UpdateConnectionInput,
@@ -47,6 +48,8 @@ import {
   type ListResourcesParams,
   type CoreCostSummaryListResponse,
   type ListCostSummariesParams,
+  type CoreCostSummaryTotals,
+  type GetCostSummaryTotalsParams,
 } from "@/lib/core/api";
 
 type ActionResult<T = undefined> = { data?: T; error?: string };
@@ -467,6 +470,24 @@ export async function listCostSummariesAction(
   try {
     const { token, organizationId } = await context();
     const data = await listCostSummaries(
+      organizationId,
+      connectionId,
+      token,
+      params,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getCostSummaryTotalsAction(
+  connectionId: string,
+  params: GetCostSummaryTotalsParams,
+): Promise<ActionResult<CoreCostSummaryTotals>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await getCostSummaryTotals(
       organizationId,
       connectionId,
       token,

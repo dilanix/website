@@ -1070,3 +1070,67 @@ export function listCostSummaries(
     token,
   );
 }
+
+/** One day's cross-service sum for a single `cost_basis` — mirrors Core's
+ * `CostSummaryDailyTotal`. */
+export interface CoreCostSummaryDailyTotal {
+  period_start: string;
+  period_end: string;
+  amount: string;
+  currency: string;
+  is_estimated: boolean;
+}
+
+/**
+ * Mirrors Core's `CostSummaryTotalsResponse` — one `cost_basis`'s cross-service
+ * total for a caller-chosen period, summed in the database
+ * (`CostSummaryRepository.sum_daily_by_connection`), never paginated
+ * client-side. `currency` is `null` and `daily` is empty when the period has no
+ * rows — a real, empty result, not an error.
+ */
+export interface CoreCostSummaryTotals {
+  cost_basis: CostBasis;
+  period_start: string;
+  period_end: string;
+  total_amount: string;
+  currency: string | null;
+  is_estimated: boolean;
+  daily: CoreCostSummaryDailyTotal[];
+}
+
+export interface GetCostSummaryTotalsParams {
+  /** UTC day boundary, inclusive — an ISO datetime string. */
+  periodStart: string;
+  /** UTC day boundary, exclusive — an ISO datetime string. */
+  periodEnd: string;
+  /** Defaults server-side to `net_unblended` — the basis that (combined with
+   * Core's `Refund`/`Credit` exclusion) matches the AWS Cost Explorer console's
+   * own default total. */
+  costBasis?: CostBasis | null;
+  targetId?: string | null;
+  serviceName?: string | null;
+}
+
+/**
+ * Requires `billing.read`, exactly like `listCostSummaries` — cost totals are
+ * exactly as sensitive as the raw rows they're computed from
+ * (`CostSummaryService.get_cost_totals` in Core).
+ */
+export function getCostSummaryTotals(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  params: GetCostSummaryTotalsParams,
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  if (params.costBasis) query.set("cost_basis", params.costBasis);
+  if (params.targetId) query.set("target_id", params.targetId);
+  if (params.serviceName) query.set("service_name", params.serviceName);
+  return coreRequest<CoreCostSummaryTotals>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-summaries/totals?${query.toString()}`,
+    token,
+  );
+}

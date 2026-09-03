@@ -56,6 +56,91 @@ export function formatCostAmount(amount: string, currency: string): string {
   }
 }
 
+/** A `[start, end)` UTC day-boundary range — matches Core's own `period_start`/
+ * `period_end` convention (`end` exclusive), so the range sent to
+ * `.../cost-summaries/totals` lines up exactly with the daily buckets it sums.
+ */
+export interface DateRange {
+  start: Date;
+  end: Date;
+}
+
+function utcMidnight(date: Date): Date {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
+}
+
+/**
+ * Rolling day-count presets for the cost totals filter — "1 day", "3 days",
+ * "week", "month" — deliberately rolling windows, not calendar periods,
+ * mirroring the backend's own `WINDOWED` rolling-refresh design
+ * (`Settings.billing_cost_summary_lookback_days`) rather than introducing a
+ * second, calendar-aligned notion of "month" the UI alone would own.
+ */
+export const PERIOD_PRESETS = [
+  { id: "1d", label: "1 day", days: 1 },
+  { id: "3d", label: "3 days", days: 3 },
+  { id: "7d", label: "Week", days: 7 },
+  { id: "30d", label: "Month", days: 30 },
+] as const;
+
+export type PeriodPresetId = (typeof PERIOD_PRESETS)[number]["id"];
+
+/** `end` is exclusive tomorrow's UTC midnight — today's still-accumulating,
+ * `is_estimated=true` data is included, matching the collector's own window
+ * convention (`AwsCostSummaryCollector`'s `_window`). */
+export function presetRange(
+  presetId: PeriodPresetId,
+  now: Date = new Date(),
+): DateRange {
+  const preset = PERIOD_PRESETS.find((candidate) => candidate.id === presetId);
+  const days = preset?.days ?? 1;
+  const end = new Date(utcMidnight(now).getTime() + 24 * 60 * 60 * 1000);
+  const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
+  return { start, end };
+}
+
+/** The immediately preceding range of the same length — `[start - length, start)`
+ * — used to compute a "vs previous period" comparison for any selected range,
+ * preset or custom. */
+export function previousRange({ start, end }: DateRange): DateRange {
+  const length = end.getTime() - start.getTime();
+  return { start: new Date(start.getTime() - length), end: start };
+}
+
+/** A custom calendar-picked `[startDate, endDate]` (both inclusive, `"YYYY-MM-DD"`
+ * from a native `<input type="date">`) converted to Core's `[start, end)`
+ * convention — `endDate` itself must be included, so `end` is midnight the day
+ * *after* it. */
+export function customRange(startDate: string, endDate: string): DateRange {
+  const start = new Date(`${startDate}T00:00:00.000Z`);
+  const endDayStart = new Date(`${endDate}T00:00:00.000Z`);
+  const end = new Date(endDayStart.getTime() + 24 * 60 * 60 * 1000);
+  return { start, end };
+}
+
+/** Absolute + percent change from `previous` to `current`, both `Decimal` strings
+ * off the wire — parsed only for this display-only comparison, never fed back
+ * into anything persisted (matches `formatCostAmount`'s own "display only" rule).
+ */
+export function costDiff(
+  current: string,
+  previous: string,
+): {
+  absolute: number;
+  percent: number | null;
+  direction: "up" | "down" | "flat";
+} {
+  const currentValue = Number(current);
+  const previousValue = Number(previous);
+  const absolute = currentValue - previousValue;
+  const percent =
+    previousValue !== 0 ? (absolute / Math.abs(previousValue)) * 100 : null;
+  const direction = absolute > 0 ? "up" : absolute < 0 ? "down" : "flat";
+  return { absolute, percent, direction };
+}
+
 /**
  * `"Aug 1 – Aug 2, 2026"` for a daily period; collapses to one date when
  * start/end land on the same calendar day (never expected for `DAILY`
