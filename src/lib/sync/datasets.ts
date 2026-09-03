@@ -12,6 +12,11 @@ export const SYNC_DATASETS = [
     label: "Inventory Resources",
     requiredCapability: "inventory.read",
   },
+  {
+    slug: "billing.cost_summary",
+    label: "Cost Summary (AWS Cost Explorer)",
+    requiredCapability: "billing.read",
+  },
 ] as const;
 
 export type SyncDataset = (typeof SYNC_DATASETS)[number];

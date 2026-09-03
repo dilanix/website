@@ -9,13 +9,16 @@ import {
   listIntegrationCapabilities,
   listConnectionCapabilities,
   listConnectionScopes,
+  listTargets,
   listSyncRuns,
   listSyncPolicies,
   listResources,
   listResourceFilters,
+  listCostSummaries,
 } from "@/lib/core/api";
 import { SYNC_RUNS_PAGE_SIZE } from "@/lib/sync/datasets";
 import { RESOURCES_PAGE_SIZE } from "@/lib/inventory/resources";
+import { COST_SUMMARIES_PAGE_SIZE } from "@/lib/billing/cost-summaries";
 import { PageHeader } from "@/components/dashboard/primitives";
 import { ConnectionDetailClient } from "@/components/dashboard/connection-detail-client";
 
@@ -46,6 +49,7 @@ export default async function ConnectionDetailPage({
     connectionCapabilities,
     scopes,
     awsSetup,
+    targets,
     syncRuns,
     syncPolicies,
     resources,
@@ -61,6 +65,7 @@ export default async function ConnectionDetailPage({
     ),
     listConnectionScopes(organization.organization_id, connectionId, token),
     getConnectionAwsSetup(organization.organization_id, connectionId, token),
+    listTargets(organization.organization_id, connectionId, token),
     listSyncRuns(organization.organization_id, connectionId, token, {
       limit: SYNC_RUNS_PAGE_SIZE,
       offset: 0,
@@ -74,6 +79,24 @@ export default async function ConnectionDetailPage({
   ]);
   const integration =
     integrations.find((item) => item.id === connection.integration_id) ?? null;
+
+  // Core's cost-summaries read 403s when `billing.read` isn't enabled on this
+  // connection (unlike `listResources`, which just returns an empty page) —
+  // only attempt the fetch once we already know it will succeed.
+  const billingReadEnabled = connectionCapabilities.some(
+    (row) => row.enabled && row.capability.slug === "billing.read",
+  );
+  const costSummaries = billingReadEnabled
+    ? await listCostSummaries(
+        organization.organization_id,
+        connectionId,
+        token,
+        {
+          limit: COST_SUMMARIES_PAGE_SIZE,
+          offset: 0,
+        },
+      )
+    : { items: [], total: 0 };
 
   return (
     <div className="flex flex-col gap-5">
@@ -91,12 +114,15 @@ export default async function ConnectionDetailPage({
         initialConnectionCapabilities={connectionCapabilities}
         initialScopes={scopes}
         awsSetup={awsSetup}
+        initialTargets={targets}
         initialSyncRuns={syncRuns.items}
         initialSyncTotal={syncRuns.total}
         initialSyncPolicies={syncPolicies.items}
         initialResources={resources.items}
         initialResourceTotal={resources.total}
         initialResourceFilters={resourceFilters}
+        initialCostSummaries={costSummaries.items}
+        initialCostSummaryTotal={costSummaries.total}
       />
     </div>
   );

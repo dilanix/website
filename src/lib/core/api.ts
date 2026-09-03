@@ -519,6 +519,78 @@ export function verifyAwsConnection(
   );
 }
 
+export type IntegrationTargetStatus = "verified" | "invalid" | "disabled";
+
+/**
+ * Mirrors Core's `IntegrationTargetRead` — the actual provider-side identity
+ * (AWS account, Azure subscription, GCP project, ...) a connection resolves
+ * to. A connection still only ever has one *live* (`verified`) target per
+ * `target_type` at a time; `replaceTargetIdentity` is the supported way to
+ * change which one that is.
+ */
+export interface CoreIntegrationTarget {
+  id: string;
+  organization_id: string;
+  connection_id: string;
+  target_type: string;
+  external_id: string;
+  display_name: string | null;
+  parent_target_id: string | null;
+  status: IntegrationTargetStatus;
+  provider_metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export function listTargets(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CoreIntegrationTarget[]>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/targets`,
+    token,
+  );
+}
+
+export function disableTarget(
+  organizationId: string,
+  connectionId: string,
+  targetId: string,
+  token: string,
+) {
+  return coreRequest<CoreIntegrationTarget>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/targets/${targetId}/disable`,
+    token,
+    { method: "POST" },
+  );
+}
+
+/**
+ * Retires `targetId` and verifies `requestedExternalId` in its place —
+ * changes which account/subscription/project the connection is bound to
+ * without creating a new connection. Runs the same provider verification
+ * `verifyAwsConnection` does, so it can fail the same ways (e.g. the provider
+ * rejecting the new identity).
+ */
+export function replaceTargetIdentity(
+  organizationId: string,
+  connectionId: string,
+  targetId: string,
+  token: string,
+  requestedExternalId: string,
+) {
+  return coreRequest<CoreIntegrationTarget>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/targets/${targetId}/replace`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requested_external_id: requestedExternalId }),
+    },
+  );
+}
+
 export type SyncTrigger =
   "bootstrap" | "manual" | "scheduled" | "backfill" | "reconciliation";
 export type SyncRunStatus =
@@ -913,6 +985,88 @@ export function listResourceFilters(
 ) {
   return coreRequest<CoreResourceFilterOptions>(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/resources/filters`,
+    token,
+  );
+}
+
+/**
+ * AWS Cost Explorer's supported cost metrics (`modules.billing.models.CostBasis`
+ * in Core). Persisted and rendered as separate rows, never summed — they measure
+ * different, non-additive views of the same spend (a discount-amortized view
+ * versus a pre-discount view).
+ */
+export type CostBasis =
+  "unblended" | "net_unblended" | "amortized" | "net_amortized";
+
+/**
+ * Mirrors Core's `CostSummaryRead` (`modules/billing/schemas/cost_summary.py`) —
+ * one AWS Cost Explorer cost observation for one connection/target, one
+ * `(service, period, granularity, cost_basis)` combination. Deliberately a
+ * narrower, Cost-Explorer-API-sourced sibling of the still-planned FOCUS/CUR
+ * export-sourced `billing.cost_usage` dataset — never the same numbers, never
+ * summed against it.
+ */
+export interface CoreCostSummary {
+  id: string;
+  organization_id: string;
+  connection_id: string;
+  target_id: string;
+  billing_authority: string;
+  service_provider: string;
+  service_name: string;
+  period_start: string;
+  period_end: string;
+  granularity: "daily";
+  cost_basis: CostBasis;
+  /** `NUMERIC(20, 6)` on the backend — a decimal string, never parsed as a
+   * JS `number` for arithmetic; only for display. */
+  amount: string;
+  currency: string;
+  /** Preserves AWS's own `Estimated` flag on the containing time window
+   * verbatim — a still-accumulating recent day is `true`. */
+  is_estimated: boolean;
+  source_type: string;
+  sync_job_id: string;
+  collector_version: string | null;
+  normalizer_version: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreCostSummaryListResponse {
+  items: CoreCostSummary[];
+  total: number;
+}
+
+export interface ListCostSummariesParams {
+  limit: number;
+  offset: number;
+  targetId?: string | null;
+  serviceName?: string | null;
+  costBasis?: CostBasis | null;
+}
+
+/**
+ * Requires `billing.read` to be enabled on the connection — unlike
+ * `listResources`, this 403s (`CoreApiError`) rather than silently returning an
+ * empty page when the capability isn't enabled, since cost data is sensitive
+ * financial information (`CostSummaryService.list_cost_summaries` in Core).
+ */
+export function listCostSummaries(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  params: ListCostSummariesParams,
+) {
+  const query = new URLSearchParams({
+    limit: String(params.limit),
+    offset: String(params.offset),
+  });
+  if (params.targetId) query.set("target_id", params.targetId);
+  if (params.serviceName) query.set("service_name", params.serviceName);
+  if (params.costBasis) query.set("cost_basis", params.costBasis);
+  return coreRequest<CoreCostSummaryListResponse>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-summaries?${query.toString()}`,
     token,
   );
 }

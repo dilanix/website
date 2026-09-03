@@ -4,8 +4,10 @@ import { useRouter } from "next/navigation";
 import {
   Boxes,
   CheckCircle2,
+  DollarSign,
   Edit2,
   Filter,
+  Fingerprint,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -17,8 +19,10 @@ import type {
   CoreAWSConnectionSetup,
   CoreConnectionCapability,
   CoreConnectionScope,
+  CoreCostSummary,
   CoreIntegrationCapability,
   CoreIntegrationConnection,
+  CoreIntegrationTarget,
   CoreResource,
   CoreResourceFilterOptions,
   CoreSyncPolicy,
@@ -39,6 +43,8 @@ import { EmptyState, Section, StatusBadge } from "./primitives";
 import { AwsSetupPanel } from "./integrations/aws-setup-panel";
 import { SyncPanel } from "./sync-panel";
 import { ResourcePanel } from "./resource-panel";
+import { CostSummaryPanel } from "./cost-summary-panel";
+import { TargetsPanel } from "./targets-panel";
 import { cn } from "@/lib/utils";
 
 function statusTone(
@@ -54,7 +60,8 @@ const REMOVABLE_STATUSES = new Set<IntegrationConnectionStatus>([
   "disabled",
 ]);
 
-type TabType = "capabilities" | "scopes" | "sync" | "resources";
+type TabType =
+  "capabilities" | "scopes" | "targets" | "sync" | "resources" | "billing";
 
 export function ConnectionDetailClient({
   connection: initialConnection,
@@ -62,24 +69,34 @@ export function ConnectionDetailClient({
   initialConnectionCapabilities,
   initialScopes,
   awsSetup,
+  initialTargets,
   initialSyncRuns,
   initialSyncTotal,
   initialSyncPolicies,
   initialResources,
   initialResourceTotal,
   initialResourceFilters,
+  initialCostSummaries,
+  initialCostSummaryTotal,
 }: {
   connection: CoreIntegrationConnection;
   capabilities: CoreIntegrationCapability[];
   initialConnectionCapabilities: CoreConnectionCapability[];
   initialScopes: CoreConnectionScope[];
   awsSetup: CoreAWSConnectionSetup;
+  initialTargets: CoreIntegrationTarget[];
   initialSyncRuns: CoreSyncRun[];
   initialSyncTotal: number;
   initialSyncPolicies: CoreSyncPolicy[];
   initialResources: CoreResource[];
   initialResourceTotal: number;
   initialResourceFilters: CoreResourceFilterOptions;
+  /** Fetched server-side only when `billing.read` was already enabled at page
+   * load (`ConnectionDetailPage`) — Core's read API 403s otherwise. Empty when
+   * it wasn't; the panel itself explains why rather than attempting a fetch
+   * that would just fail. */
+  initialCostSummaries: CoreCostSummary[];
+  initialCostSummaryTotal: number;
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("capabilities");
@@ -210,6 +227,11 @@ export function ConnectionDetailClient({
       count: scopes.length,
     },
     {
+      id: "targets",
+      label: "Targets",
+      icon: Fingerprint,
+    },
+    {
       id: "sync",
       label: "Sync",
       icon: RefreshCw,
@@ -218,6 +240,11 @@ export function ConnectionDetailClient({
       id: "resources",
       label: "Resources",
       icon: Boxes,
+    },
+    {
+      id: "billing",
+      label: "Billing",
+      icon: DollarSign,
     },
   ];
 
@@ -453,6 +480,16 @@ export function ConnectionDetailClient({
           </Section>
         )}
 
+        {/* Targets Tab */}
+        {activeTab === "targets" && (
+          <Section title="Provider Identity">
+            <TargetsPanel
+              connectionId={connection.id}
+              initialTargets={initialTargets}
+            />
+          </Section>
+        )}
+
         {/* Sync Tab */}
         {activeTab === "sync" && (
           <Section title="Sync">
@@ -474,6 +511,20 @@ export function ConnectionDetailClient({
               initialResources={initialResources}
               initialTotal={initialResourceTotal}
               initialFilterOptions={initialResourceFilters}
+            />
+          </Section>
+        )}
+
+        {/* Billing Tab */}
+        {activeTab === "billing" && (
+          <Section title="Cost Summary">
+            <CostSummaryPanel
+              connectionId={connection.id}
+              billingReadEnabled={enabledCapabilitySlugs.includes(
+                "billing.read",
+              )}
+              initialCostSummaries={initialCostSummaries}
+              initialTotal={initialCostSummaryTotal}
             />
           </Section>
         )}

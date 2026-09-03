@@ -26,8 +26,17 @@ organization-product entitlement.
 The Integrations dashboard treats Core's `connection_supported` response field as
 the source of truth for executable provider onboarding. Planned catalog providers
 remain visible with a disabled “Coming soon” action; provider slugs are never used as
-a frontend availability allowlist. The static sync dataset list mirrors only Core's
-currently runnable `DEFAULT_DATASETS` entries (`inventory.resources` today).
+a frontend availability allowlist. The static sync dataset list (`src/lib/sync/datasets.ts`)
+mirrors only Core's currently runnable `DEFAULT_DATASETS` entries (`inventory.resources`
+and `billing.cost_summary` today).
+
+A connection detail page's Billing tab reads `GET .../cost-summaries` — Core's
+AWS Cost Explorer-sourced `billing.cost_summary` data (`src/lib/billing/cost-summaries.ts`,
+`src/components/dashboard/cost-summary-panel.tsx`), deliberately narrower than the
+still-planned FOCUS/CUR-export-sourced `billing.cost_usage`. Unlike the Resources
+tab, this read 403s when `billing.read` isn't enabled on the connection rather than
+returning an empty page, so the page only fetches it server-side once that capability
+is already known to be enabled; the panel explains the gap otherwise.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

@@ -13,6 +13,9 @@ import {
   removeConnectionScope,
   verifyAwsConnection,
   getConnectionAwsSetup,
+  listTargets,
+  disableTarget,
+  replaceTargetIdentity,
   startSync,
   listSyncRuns,
   getSyncRun,
@@ -23,6 +26,7 @@ import {
   deleteSyncPolicy,
   listResources,
   listResourceFilters,
+  listCostSummaries,
   CoreApiError,
   type CoreIntegrationConnection,
   type UpdateConnectionInput,
@@ -30,6 +34,7 @@ import {
   type CoreConnectionScope,
   type CoreAWSConnectionSetup,
   type CoreVerifyAwsConnectionResult,
+  type CoreIntegrationTarget,
   type CoreSyncRun,
   type CoreSyncRunDetail,
   type CoreSyncRunListResponse,
@@ -40,6 +45,8 @@ import {
   type CoreResourceListResponse,
   type CoreResourceFilterOptions,
   type ListResourcesParams,
+  type CoreCostSummaryListResponse,
+  type ListCostSummariesParams,
 } from "@/lib/core/api";
 
 type ActionResult<T = undefined> = { data?: T; error?: string };
@@ -204,6 +211,59 @@ export async function verifyAwsConnectionAction(
       connectionId,
       token,
       awsAccountId,
+    );
+    revalidatePath("/dashboard/integrations");
+    revalidatePath(`/dashboard/integrations/${connectionId}`);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function listTargetsAction(
+  connectionId: string,
+): Promise<ActionResult<CoreIntegrationTarget[]>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await listTargets(organizationId, connectionId, token);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function disableTargetAction(
+  connectionId: string,
+  targetId: string,
+): Promise<ActionResult<CoreIntegrationTarget>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await disableTarget(
+      organizationId,
+      connectionId,
+      targetId,
+      token,
+    );
+    revalidatePath(`/dashboard/integrations/${connectionId}`);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function replaceTargetIdentityAction(
+  connectionId: string,
+  targetId: string,
+  requestedExternalId: string,
+): Promise<ActionResult<CoreIntegrationTarget>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await replaceTargetIdentity(
+      organizationId,
+      connectionId,
+      targetId,
+      token,
+      requestedExternalId,
     );
     revalidatePath("/dashboard/integrations");
     revalidatePath(`/dashboard/integrations/${connectionId}`);
@@ -394,6 +454,24 @@ export async function listResourceFiltersAction(
   try {
     const { token, organizationId } = await context();
     const data = await listResourceFilters(organizationId, connectionId, token);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function listCostSummariesAction(
+  connectionId: string,
+  params: ListCostSummariesParams,
+): Promise<ActionResult<CoreCostSummaryListResponse>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await listCostSummaries(
+      organizationId,
+      connectionId,
+      token,
+      params,
+    );
     return { data };
   } catch (error) {
     return { error: message(error) };

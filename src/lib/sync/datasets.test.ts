@@ -8,9 +8,18 @@ import {
 
 describe("eligibleSyncDatasets", () => {
   it("returns only datasets whose required capability is enabled", () => {
-    const result = eligibleSyncDatasets(["inventory.read", "billing.read"]);
+    const result = eligibleSyncDatasets(["inventory.read"]);
 
     expect(result.map((dataset) => dataset.slug)).toEqual([
+      "inventory.resources",
+    ]);
+  });
+
+  it("returns every capability-matching dataset when multiple capabilities are enabled", () => {
+    const result = eligibleSyncDatasets(["inventory.read", "billing.read"]);
+
+    expect(result.map((dataset) => dataset.slug).sort()).toEqual([
+      "billing.cost_summary",
       "inventory.resources",
     ]);
   });
@@ -30,7 +39,8 @@ describe("eligibleSyncDatasets", () => {
   });
 
   it("contains only datasets executable by the current Core registry", () => {
-    expect(SYNC_DATASETS.map((dataset) => dataset.slug)).toEqual([
+    expect(SYNC_DATASETS.map((dataset) => dataset.slug).sort()).toEqual([
+      "billing.cost_summary",
       "inventory.resources",
     ]);
   });
