@@ -538,6 +538,8 @@ export type SyncJobStatus =
   | "cancel_requested"
   | "cancelled";
 export type SyncStrategy = "snapshot" | "incremental" | "windowed";
+export type SyncJobAttemptOutcome =
+  "succeeded" | "cancelled" | "failed" | "retry_scheduled";
 
 export interface CoreSyncJob {
   id: string;
@@ -564,6 +566,13 @@ export interface CoreSyncJob {
   current_stage: string | null;
   error_code: string | null;
   error_message: string | null;
+  /** Which version of the collector's execution logic, and which version of its
+   * provider-field-to-canonical-schema mapping, produced this job's data —
+   * `null` if the collector never reported one. Purely observational: lets a
+   * later collector/normalizer change be correlated back to which historical
+   * jobs ran under the old behavior. */
+  collector_version: string | null;
+  normalizer_version: string | null;
   started_at: string | null;
   /** Bumped every time the job durably persists one bounded unit of work (e.g.
    * one AWS resource family/region) while still `running` — not just at
@@ -575,6 +584,26 @@ export interface CoreSyncJob {
    * whether the collector executing it ever checks for it (cancellation is
    * cooperative; a job may still finish normally after this is set). */
   cancel_requested_at: string | null;
+}
+
+/**
+ * One concluded execution attempt for a `SyncJob` (Core's `SyncJobAttempt`,
+ * append-only — a retry never overwrites an earlier attempt's row). `CoreSyncJob`
+ * itself only ever shows the *current* attempt's `error_code`/`error_message`/
+ * counters; this is what shows what an earlier, superseded attempt actually did.
+ */
+export interface CoreSyncJobAttempt {
+  id: string;
+  attempt: number;
+  outcome: SyncJobAttemptOutcome;
+  started_at: string;
+  finished_at: string;
+  error_code: string | null;
+  error_message: string | null;
+  records_read: number;
+  records_created: number;
+  records_updated: number;
+  records_deleted: number;
 }
 
 export interface CoreSyncRun {
@@ -639,6 +668,24 @@ export function getSyncRun(
 ) {
   return coreRequest<CoreSyncRunDetail>(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/syncs/${syncRunId}`,
+    token,
+  );
+}
+
+/**
+ * Durable, append-only attempt history for one `SyncJob`, oldest attempt first —
+ * every concluded attempt (succeeded, cancelled, terminally failed, or superseded
+ * by a scheduled retry), not just the current one `CoreSyncJob` already shows.
+ */
+export function getSyncJobAttempts(
+  organizationId: string,
+  connectionId: string,
+  syncRunId: string,
+  syncJobId: string,
+  token: string,
+) {
+  return coreRequest<CoreSyncJobAttempt[]>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/syncs/${syncRunId}/jobs/${syncJobId}/attempts`,
     token,
   );
 }

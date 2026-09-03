@@ -19,6 +19,8 @@ function job(overrides: Partial<CoreSyncJob>): CoreSyncJob {
     current_stage: null,
     error_code: null,
     error_message: null,
+    collector_version: null,
+    normalizer_version: null,
     started_at: null,
     heartbeat_at: null,
     finished_at: null,

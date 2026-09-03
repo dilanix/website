@@ -17,14 +17,17 @@ import {
 } from "lucide-react";
 import type {
   CoreSyncJob,
+  CoreSyncJobAttempt,
   CoreSyncPolicy,
   CoreSyncRun,
   CoreSyncRunDetail,
+  SyncJobAttemptOutcome,
   SyncJobStatus,
   SyncRunStatus,
 } from "@/lib/core/api";
 import {
   cancelSyncAction,
+  getSyncJobAttemptsAction,
   getSyncRunAction,
   listSyncRunsAction,
   setSyncPolicyAction,
@@ -61,6 +64,14 @@ function jobStatusTone(
 ): "success" | "neutral" | "warning" {
   if (status === "succeeded") return "success";
   if (status === "failed") return "warning";
+  return "neutral";
+}
+
+function attemptOutcomeTone(
+  outcome: SyncJobAttemptOutcome,
+): "success" | "neutral" | "warning" {
+  if (outcome === "succeeded") return "success";
+  if (outcome === "failed") return "warning";
   return "neutral";
 }
 
@@ -124,16 +135,121 @@ function mergeFirstPage(
   return [...freshFirstPage, ...rest];
 }
 
-function JobRow({ job }: { job: CoreSyncJob }) {
+function JobAttemptHistory({
+  connectionId,
+  syncRunId,
+  syncJobId,
+}: {
+  connectionId: string;
+  syncRunId: string;
+  syncJobId: string;
+}) {
+  const [attempts, setAttempts] = useState<CoreSyncJobAttempt[] | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const result = await getSyncJobAttemptsAction(
+        connectionId,
+        syncRunId,
+        syncJobId,
+      );
+      if (cancelled) return;
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setAttempts(result.data ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionId, syncRunId, syncJobId]);
+
+  if (error) {
+    return <p className="text-xs text-red-500">{error}</p>;
+  }
+  if (!attempts) {
+    return (
+      <div className="text-muted-foreground flex items-center gap-1.5 py-1 text-xs">
+        <Loader2 size={11} className="animate-spin" />
+        Loading attempt history…
+      </div>
+    );
+  }
+  if (attempts.length === 0) {
+    return (
+      <p className="text-muted-foreground text-xs">No recorded attempts.</p>
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {attempts.map((attempt) => (
+        <li
+          key={attempt.id}
+          className="border-foreground/10 bg-foreground/[0.02] flex flex-col gap-1 rounded-md border p-2 text-xs"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-mono">attempt {attempt.attempt}</span>
+            <StatusBadge status={attemptOutcomeTone(attempt.outcome)}>
+              {attempt.outcome.replace("_", " ")}
+            </StatusBadge>
+            <span className="text-muted-foreground font-mono">
+              {formatRelativeTime(attempt.finished_at)}
+            </span>
+          </div>
+          {attempt.error_code || attempt.error_message ? (
+            <p className="flex items-start gap-1.5 text-red-500/90">
+              <AlertCircle size={12} className="mt-0.5 shrink-0" />
+              <span>
+                {attempt.error_code ? (
+                  <span className="font-medium">{attempt.error_code}: </span>
+                ) : null}
+                {attempt.error_message}
+              </span>
+            </p>
+          ) : null}
+          <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 font-mono">
+            <span>read {attempt.records_read}</span>
+            <span>created {attempt.records_created}</span>
+            <span>updated {attempt.records_updated}</span>
+            <span>deleted {attempt.records_deleted}</span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function JobRow({
+  job,
+  connectionId,
+  syncRunId,
+}: {
+  job: CoreSyncJob;
+  connectionId: string;
+  syncRunId: string;
+}) {
   const progress = stageProgress(job);
+  const [showHistory, setShowHistory] = useState(false);
   return (
     <div className="border-foreground/10 bg-background flex flex-col gap-2 rounded-lg border p-3 text-xs">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={jobStatusTone(job.status)}>
             {job.status}
           </StatusBadge>
           <span className="font-mono">{job.dataset}</span>
+          {job.collector_version || job.normalizer_version ? (
+            <span
+              className="border-foreground/10 text-muted-foreground rounded border px-1.5 py-0.5 font-mono text-[10px]"
+              title="Which version of the collector, and of its provider-field mapping, produced this job's data."
+            >
+              collector v{job.collector_version ?? "?"} · normalizer v
+              {job.normalizer_version ?? "?"}
+            </span>
+          ) : null}
         </div>
         <span className="text-muted-foreground font-mono" title={job.target_id}>
           target {job.target_id.slice(0, 8)}…
@@ -159,8 +275,25 @@ function JobRow({ job }: { job: CoreSyncJob }) {
         <span>created {job.records_created}</span>
         <span>updated {job.records_updated}</span>
         <span>deleted {job.records_deleted}</span>
-        {job.attempt > 1 ? <span>attempt {job.attempt}</span> : null}
+        <span className="flex items-center gap-1.5">
+          attempt {job.attempt}
+          <button
+            type="button"
+            onClick={() => setShowHistory((current) => !current)}
+            className="text-accent hover:underline"
+          >
+            {showHistory ? "hide history" : "history"}
+          </button>
+        </span>
       </div>
+
+      {showHistory ? (
+        <JobAttemptHistory
+          connectionId={connectionId}
+          syncRunId={syncRunId}
+          syncJobId={job.id}
+        />
+      ) : null}
 
       {job.status === "running" && job.current_stage ? (
         <div
@@ -690,7 +823,12 @@ export function SyncPanel({
                       </div>
                     ) : (
                       (jobsByRunId[run.id] ?? []).map((job) => (
-                        <JobRow key={job.id} job={job} />
+                        <JobRow
+                          key={job.id}
+                          job={job}
+                          connectionId={connectionId}
+                          syncRunId={run.id}
+                        />
                       ))
                     )}
                   </div>

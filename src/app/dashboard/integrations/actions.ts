@@ -16,6 +16,7 @@ import {
   startSync,
   listSyncRuns,
   getSyncRun,
+  getSyncJobAttempts,
   cancelSync,
   setSyncPolicy,
   listSyncPolicies,
@@ -32,6 +33,7 @@ import {
   type CoreSyncRun,
   type CoreSyncRunDetail,
   type CoreSyncRunListResponse,
+  type CoreSyncJobAttempt,
   type CoreSyncPolicy,
   type CoreSyncPolicyListResponse,
   type SetSyncPolicyInput,
@@ -276,6 +278,26 @@ export async function getSyncRunAction(
       organizationId,
       connectionId,
       syncRunId,
+      token,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getSyncJobAttemptsAction(
+  connectionId: string,
+  syncRunId: string,
+  syncJobId: string,
+): Promise<ActionResult<CoreSyncJobAttempt[]>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await getSyncJobAttempts(
+      organizationId,
+      connectionId,
+      syncRunId,
+      syncJobId,
       token,
     );
     return { data };

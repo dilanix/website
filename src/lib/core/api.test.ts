@@ -187,6 +187,50 @@ describe("sync", () => {
     expect(result).toEqual(mockDetail);
   });
 
+  it("fetches one sync job's durable attempt history", async () => {
+    const mockAttempts = [
+      {
+        id: "attempt-1",
+        attempt: 1,
+        outcome: "retry_scheduled",
+        started_at: "2026-08-27T10:00:00Z",
+        finished_at: "2026-08-27T10:00:02Z",
+        error_code: "throttled",
+        error_message: "AWS throttled the request.",
+        records_read: 7,
+        records_created: 0,
+        records_updated: 0,
+        records_deleted: 0,
+      },
+    ];
+    const response = new Response(JSON.stringify(mockAttempts), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getSyncJobAttempts } = await import("./api");
+    const result = await getSyncJobAttempts(
+      "org-123",
+      "conn-1",
+      "run-1",
+      "job-1",
+      "test-token",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/syncs/run-1/jobs/job-1/attempts",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockAttempts);
+  });
+
   it("upserts a sync policy by dataset, addressed without a policy id", async () => {
     const mockPolicy = {
       id: "policy-1",
