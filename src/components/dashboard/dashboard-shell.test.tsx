@@ -27,10 +27,11 @@ describe("DashboardShell", () => {
     );
 
     expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Products" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Overview" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Resources" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Costs" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Integrations" })).toBeNull();
     expect(screen.queryByRole("link", { name: "API Keys" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Billing" })).toBeNull();
     expect(screen.queryByText("Organization")).toBeNull();
   });
 
@@ -45,10 +46,12 @@ describe("DashboardShell", () => {
       </DashboardShell>,
     );
 
-    expect(screen.getByRole("link", { name: "Products" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Costs" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Integrations" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "API Keys" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Billing" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Billing" })).toBeNull();
     expect(screen.getByText("Analytical Engines")).toBeTruthy();
   });
 });

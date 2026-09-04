@@ -90,21 +90,6 @@ export interface UsageRow {
   trendPct: number;
 }
 
-export interface Invoice {
-  id: string;
-  date: string;
-  amountUsd: number;
-  status: "paid" | "pending" | "failed";
-}
-
-export interface BillingPlan {
-  name: string;
-  priceUsd: number;
-  interval: "month" | "year";
-  renewsOn: string;
-  seats: number;
-}
-
 export type PhilosophyIcon = "target" | "wrench" | "sparkles" | "gauge";
 
 export interface PhilosophyPrinciple {

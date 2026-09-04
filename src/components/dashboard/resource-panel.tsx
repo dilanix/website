@@ -1,16 +1,24 @@
 "use client";
-import { type ReactNode, useState, useTransition } from "react";
 import {
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
+import {
+  ArrowUpDown,
   ChevronDown,
-  ChevronRight,
   Container,
   Cpu,
   Database,
   HardDrive,
   Network,
   RefreshCw,
+  Search,
   Server,
   Workflow,
+  X,
   Zap,
 } from "lucide-react";
 import type { CoreResource, CoreResourceFilterOptions } from "@/lib/core/api";
@@ -78,6 +86,7 @@ function FilterChip({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn(
         "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
@@ -180,8 +189,22 @@ function formatRelativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-function ResourceRow({ resource }: { resource: CoreResource }) {
-  const [expanded, setExpanded] = useState(false);
+function ResourceDetailsDrawer({
+  resource,
+  onClose,
+}: {
+  resource: CoreResource;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
   const tagEntries = Object.entries(resource.tags);
   const extraEntries = Object.entries(resource.extra).filter(([, value]) =>
     hasContent(value),
@@ -200,140 +223,284 @@ function ResourceRow({ resource }: { resource: CoreResource }) {
         : null;
 
   return (
-    <div>
+    <div
+      className="fixed inset-0 z-50"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="resource-details-title"
+    >
       <button
-        onClick={() => setExpanded((current) => !current)}
-        className="hover:bg-foreground/[0.02] flex w-full items-center justify-between gap-3 p-4 text-left text-sm transition-colors"
-        aria-expanded={expanded}
-      >
-        <div className="flex min-w-0 items-center gap-3">
-          <ChevronRight
-            size={14}
-            className={cn(
-              "text-muted-foreground shrink-0 transition-transform",
-              expanded && "rotate-90",
-            )}
-          />
-          <span className="bg-foreground/5 text-muted-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-            <CategoryIcon category={resource.category} size={15} />
-          </span>
-          <div className="min-w-0">
-            <p className="truncate font-medium">
-              {resource.name ?? resource.external_id}
-            </p>
-            <p className="text-muted-foreground truncate font-mono text-xs">
-              {resource.provider_resource_type}
-              {resource.provider_sku ? ` · ${resource.provider_sku}` : ""}
-            </p>
-          </div>
-        </div>
-        <div className="text-muted-foreground flex shrink-0 items-center gap-4 text-xs">
-          {resource.technical_summary ? (
-            <span className="hidden font-mono md:inline">
-              {resource.technical_summary}
+        type="button"
+        aria-label="Close resource details"
+        onClick={onClose}
+        className="bg-background/70 absolute inset-0 backdrop-blur-sm"
+      />
+      <aside className="border-border-soft bg-background absolute top-0 right-0 flex h-full w-full max-w-xl flex-col border-l shadow-2xl">
+        <div className="border-border-soft flex items-start justify-between gap-4 border-b p-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="bg-accent/10 text-accent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+              <CategoryIcon category={resource.category} size={18} />
             </span>
-          ) : null}
-          <span className="hidden font-mono sm:inline">{resource.region}</span>
-          {resource.lifecycle_status !== "active" ? (
-            <StatusBadge
-              status={resourceLifecycleStatusTone(resource.lifecycle_status)}
-            >
-              {resourceLifecycleStatusLabel(resource.lifecycle_status)}
-              {lifecycleSince ? ` · ${formatRelativeTime(lifecycleSince)}` : ""}
-            </StatusBadge>
-          ) : null}
-          <StatusBadge status={resourceStatusTone(resource.status)}>
-            {resource.status}
-          </StatusBadge>
-          <span>{formatRelativeTime(resource.last_seen_at)}</span>
-        </div>
-      </button>
-      {expanded ? (
-        <div className="border-foreground/10 bg-foreground/[0.015] flex flex-col gap-3 border-t p-4 text-xs">
-          <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 font-mono">
-            <span>external id {resource.external_id}</span>
-            {resource.zone ? <span>zone {resource.zone}</span> : null}
-            <span>first seen {formatRelativeTime(resource.first_seen_at)}</span>
+            <div className="min-w-0">
+              <p id="resource-details-title" className="truncate font-semibold">
+                {resource.name ?? resource.external_id}
+              </p>
+              <p className="text-muted-foreground mt-0.5 truncate font-mono text-xs">
+                {resource.provider.toUpperCase()} ·{" "}
+                {resource.provider_resource_type}
+              </p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-muted-foreground hover:bg-foreground/5 hover:text-foreground rounded-lg p-2"
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5">
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge status={resourceStatusTone(resource.status)}>
+              {resource.status}
+            </StatusBadge>
+            {resource.lifecycle_status !== "active" ? (
+              <StatusBadge
+                status={resourceLifecycleStatusTone(resource.lifecycle_status)}
+              >
+                {resourceLifecycleStatusLabel(resource.lifecycle_status)}
+                {lifecycleSince
+                  ? ` · ${formatRelativeTime(lifecycleSince)}`
+                  : ""}
+              </StatusBadge>
+            ) : null}
+          </div>
+
+          <dl className="mt-6 grid grid-cols-2 gap-5 text-sm">
+            <div>
+              <dt className="text-muted-foreground text-xs">Provider</dt>
+              <dd className="mt-1 font-medium">
+                {resource.provider.toUpperCase()}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground text-xs">Region / zone</dt>
+              <dd className="mt-1 font-mono">
+                {resource.region}
+                {resource.zone ? ` / ${resource.zone}` : ""}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground text-xs">Category</dt>
+              <dd className="mt-1">
+                {resourceCategoryLabel(resource.category)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground text-xs">Type</dt>
+              <dd className="mt-1">
+                {resourceTypeLabel(resource.resource_type)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground text-xs">First seen</dt>
+              <dd className="mt-1">
+                {formatRelativeTime(resource.first_seen_at)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground text-xs">Last seen</dt>
+              <dd className="mt-1">
+                {formatRelativeTime(resource.last_seen_at)}
+              </dd>
+            </div>
+          </dl>
+
+          <div className="border-border-soft bg-card-strong/45 mt-6 rounded-xl border p-4">
+            <p className="text-muted-foreground text-xs">External ID</p>
+            <p className="mt-1 font-mono text-xs break-all">
+              {resource.external_id}
+            </p>
+          </div>
+
           {resource.provider_sku ? (
             specificationAttributes.length > 0 ? (
-              <div>
-                <p className="text-muted-foreground mb-1.5 font-medium">
-                  Specification
-                </p>
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+              <div className="mt-6">
+                <p className="mb-2 text-sm font-semibold">Specification</p>
+                <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
                   {specificationAttributes.map(({ key, label, value }) => (
-                    <div key={key} className="min-w-0">
+                    <div
+                      key={key}
+                      className="border-border-soft min-w-0 rounded-lg border p-3"
+                    >
                       <dt className="text-muted-foreground truncate">
                         {label}
                       </dt>
-                      <dd className="truncate font-mono">{value}</dd>
+                      <dd className="mt-1 truncate font-mono">{value}</dd>
                     </div>
                   ))}
                 </dl>
               </div>
             ) : (
-              <p className="text-muted-foreground italic">
+              <p className="text-muted-foreground mt-6 text-xs italic">
                 Technical specification not resolved yet.
               </p>
             )
           ) : null}
           {capacityAttributes.length > 0 ? (
-            <div>
-              <p className="text-muted-foreground mb-1.5 font-medium">
-                Capacity
-              </p>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+            <div className="mt-6">
+              <p className="mb-2 text-sm font-semibold">Capacity</p>
+              <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
                 {capacityAttributes.map(({ key, label, value }) => (
-                  <div key={key} className="min-w-0">
+                  <div
+                    key={key}
+                    className="border-border-soft min-w-0 rounded-lg border p-3"
+                  >
                     <dt className="text-muted-foreground truncate">{label}</dt>
-                    <dd className="truncate font-mono">{value}</dd>
+                    <dd className="mt-1 truncate font-mono">{value}</dd>
                   </div>
                 ))}
               </dl>
             </div>
           ) : null}
           {tagEntries.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {tagEntries.map(([key, value]) => (
-                <span
-                  key={key}
-                  className="border-foreground/10 bg-background rounded-full border px-2 py-0.5 font-mono"
-                >
-                  {key}={value}
-                </span>
-              ))}
+            <div className="mt-6">
+              <p className="mb-2 text-sm font-semibold">Tags</p>
+              <div className="flex flex-wrap gap-1.5 text-xs">
+                {tagEntries.map(([key, value]) => (
+                  <span
+                    key={key}
+                    className="border-foreground/10 bg-background rounded-full border px-2 py-1 font-mono"
+                  >
+                    {key}={value}
+                  </span>
+                ))}
+              </div>
             </div>
           ) : null}
           {extraEntries.length > 0 ? (
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
-              {extraEntries.map(([key, value]) => {
-                const formatted = formatExtraValue(value);
-                return (
-                  <div key={key} className="min-w-0">
-                    <dt className="text-muted-foreground truncate">{key}</dt>
-                    <dd className="truncate font-mono" title={formatted}>
-                      {formatted}
-                    </dd>
-                  </div>
-                );
-              })}
-            </dl>
+            <div className="mt-6">
+              <p className="mb-2 text-sm font-semibold">Provider details</p>
+              <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
+                {extraEntries.map(([key, value]) => {
+                  const formatted = formatExtraValue(value);
+                  return (
+                    <div
+                      key={key}
+                      className="border-border-soft min-w-0 rounded-lg border p-3"
+                    >
+                      <dt className="text-muted-foreground truncate">{key}</dt>
+                      <dd className="mt-1 truncate font-mono" title={formatted}>
+                        {formatted}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            </div>
           ) : null}
         </div>
-      ) : null}
+      </aside>
     </div>
+  );
+}
+
+function ResourceRow({
+  resource,
+  onSelect,
+}: {
+  resource: CoreResource;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="hover:bg-foreground/[0.025] grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)]"
+    >
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="bg-foreground/5 text-muted-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+          <CategoryIcon category={resource.category} size={15} />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium">
+            {resource.name ?? resource.external_id}
+          </span>
+          <span className="text-muted-foreground block truncate font-mono text-[11px]">
+            {resource.external_id}
+          </span>
+        </span>
+      </span>
+      <span className="text-muted-foreground hidden min-w-0 md:block">
+        <span className="text-foreground block text-xs font-medium">
+          {resource.provider.toUpperCase()}
+        </span>
+        <span className="block truncate text-[11px]">
+          {resourceTypeLabel(resource.resource_type)}
+        </span>
+      </span>
+      <span className="text-muted-foreground hidden truncate font-mono text-xs md:block">
+        {resource.region}
+      </span>
+      <span className="justify-self-end md:justify-self-start">
+        <StatusBadge status={resourceStatusTone(resource.status)}>
+          {resource.status}
+        </StatusBadge>
+      </span>
+      <span className="text-muted-foreground hidden text-xs md:block">
+        {formatRelativeTime(resource.last_seen_at)}
+      </span>
+    </button>
   );
 }
 
 /** The full set of filter dimensions this panel drives — one place to thread
  * through `reload`/`loadMore` instead of four positional parameters that would
  * only grow more error-prone to reorder as filters are added. */
-interface ResourceFilters {
+export interface ResourcePanelFilters {
   category: string | null;
   resourceType: string | null;
   region: string | null;
   lifecycleStatus: string;
+}
+
+export type ResourceSortKey =
+  "name" | "provider" | "region" | "status" | "lastSeen";
+
+function updateResourceUrl(values: Record<string, string | null>) {
+  const url = new URL(window.location.href);
+  Object.entries(values).forEach(([key, value]) => {
+    if (value) url.searchParams.set(key, value);
+    else url.searchParams.delete(key);
+  });
+  window.history.replaceState(null, "", url);
+}
+
+function SortHeader({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1 text-left text-[11px] font-semibold tracking-wide uppercase",
+        active
+          ? "text-foreground"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {label} <ArrowUpDown size={11} />
+    </button>
+  );
 }
 
 const ALL_VALUE = "all";
@@ -343,6 +510,10 @@ export function ResourcePanel({
   initialResources,
   initialTotal,
   initialFilterOptions,
+  initialFilters,
+  initialSearchQuery = "",
+  initialSort = "lastSeen",
+  initialSortDirection,
 }: {
   connectionId: string;
   initialResources: CoreResource[];
@@ -356,24 +527,39 @@ export function ResourcePanel({
    * family added mid-session (a new sync run, a newly implemented collector)
    * shows up without a reload. */
   initialFilterOptions: CoreResourceFilterOptions;
+  initialFilters?: Partial<ResourcePanelFilters>;
+  initialSearchQuery?: string;
+  initialSort?: ResourceSortKey;
+  initialSortDirection?: "asc" | "desc";
 }) {
   const [resources, setResources] = useState(initialResources);
   const [total, setTotal] = useState(initialTotal);
   const [filterOptions, setFilterOptions] = useState(initialFilterOptions);
-  const [filters, setFilters] = useState<ResourceFilters>({
-    category: null,
-    resourceType: null,
-    region: null,
+  const [filters, setFilters] = useState<ResourcePanelFilters>({
+    category: initialFilters?.category ?? null,
+    resourceType: initialFilters?.resourceType ?? null,
+    region: initialFilters?.region ?? null,
     // Mirrors the backend's own default (PR #6): the common view is "what
     // exists right now" — `missing`/`out_of_scope` history is opt-in.
-    lifecycleStatus: "active",
+    lifecycleStatus: initialFilters?.lifecycleStatus ?? "active",
   });
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
+  const [sortKey, setSortKey] = useState<ResourceSortKey>(initialSort);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">(
+    initialSortDirection ?? (initialSort === "lastSeen" ? "desc" : "asc"),
+  );
+  const [selectedResource, setSelectedResource] = useState<CoreResource | null>(
+    null,
+  );
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
 
-  function reload(next: ResourceFilters) {
+  function reload(next: ResourcePanelFilters) {
     setRefreshing(true);
+    setError("");
     startTransition(async () => {
       const [resourcesResult, filtersResult] = await Promise.all([
         listResourcesAction(connectionId, {
@@ -387,9 +573,18 @@ export function ResourcePanel({
         listResourceFiltersAction(connectionId),
       ]);
       setRefreshing(false);
+      if (resourcesResult.error || filtersResult.error) {
+        setError(
+          resourcesResult.error ??
+            filtersResult.error ??
+            "Unable to refresh resources.",
+        );
+        return;
+      }
       if (resourcesResult.data) {
         setResources(resourcesResult.data.items);
         setTotal(resourcesResult.data.total);
+        setLastRefreshedAt(new Date());
       }
       if (filtersResult.data) {
         setFilterOptions(filtersResult.data);
@@ -403,29 +598,34 @@ export function ResourcePanel({
     // a type/category combination the dropdown no longer offers.
     const nextFilters = { ...filters, category: next, resourceType: null };
     setFilters(nextFilters);
+    updateResourceUrl({ category: next, type: null });
     reload(nextFilters);
   }
 
   function selectResourceType(next: string | null) {
     const nextFilters = { ...filters, resourceType: next };
     setFilters(nextFilters);
+    updateResourceUrl({ type: next });
     reload(nextFilters);
   }
 
   function selectLifecycleStatus(next: string) {
     const nextFilters = { ...filters, lifecycleStatus: next };
     setFilters(nextFilters);
+    updateResourceUrl({ lifecycle: next === "active" ? null : next });
     reload(nextFilters);
   }
 
   function selectRegion(next: string | null) {
     const nextFilters = { ...filters, region: next };
     setFilters(nextFilters);
+    updateResourceUrl({ region: next });
     reload(nextFilters);
   }
 
   function loadMore() {
     setLoadingMore(true);
+    setError("");
     startTransition(async () => {
       const result = await listResourcesAction(connectionId, {
         limit: RESOURCES_PAGE_SIZE,
@@ -436,11 +636,60 @@ export function ResourcePanel({
         lifecycleStatus: filters.lifecycleStatus,
       });
       setLoadingMore(false);
+      if (result.error) return setError(result.error);
       if (result.data) {
         setResources((current) => [...current, ...result.data!.items]);
       }
     });
   }
+
+  function selectSort(next: ResourceSortKey) {
+    const nextDirection =
+      sortKey === next ? (sortDirection === "asc" ? "desc" : "asc") : "asc";
+    setSortKey(next);
+    setSortDirection(nextDirection);
+    updateResourceUrl({ sort: next, direction: nextDirection });
+  }
+
+  const visibleResources = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const filtered = query
+      ? resources.filter((resource) => {
+          const searchable = [
+            resource.name,
+            resource.external_id,
+            resource.provider,
+            resource.provider_resource_type,
+            resource.resource_type,
+            resource.region,
+            resource.provider_sku,
+            ...Object.entries(resource.tags).flatMap(([key, value]) => [
+              key,
+              value,
+            ]),
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return searchable.includes(query);
+        })
+      : [...resources];
+
+    const value = (resource: CoreResource) => {
+      if (sortKey === "name") return resource.name ?? resource.external_id;
+      if (sortKey === "provider")
+        return `${resource.provider} ${resource.resource_type}`;
+      if (sortKey === "region") return resource.region;
+      if (sortKey === "status") return resource.status;
+      return resource.last_seen_at;
+    };
+    return filtered.sort((left, right) => {
+      const result = value(left).localeCompare(value(right), undefined, {
+        numeric: true,
+      });
+      return sortDirection === "asc" ? result : -result;
+    });
+  }, [resources, searchQuery, sortDirection, sortKey]);
 
   // Every option below comes from `filterOptions` (`GET .../resources/filters`
   // in Core) — never a frontend-hardcoded resource-family/region list, so a
@@ -460,9 +709,51 @@ export function ResourcePanel({
     : undefined;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+    <div className="flex flex-col gap-5">
+      <div className="border-border-soft bg-card-strong/45 rounded-2xl border p-4">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <label className="relative block w-full sm:max-w-md">
+            <span className="sr-only">Search resources</span>
+            <Search
+              size={15}
+              className="text-muted-foreground pointer-events-none absolute top-2.5 left-3"
+            />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                updateResourceUrl({ q: event.target.value.trim() || null });
+              }}
+              placeholder="Search name, ID, type, tag…"
+              className="border-foreground/15 bg-background focus:border-accent h-9 w-full rounded-lg border pr-3 pl-9 text-sm outline-none"
+            />
+          </label>
+          <div className="flex items-center justify-between gap-3 sm:justify-end">
+            <span className="text-muted-foreground text-xs">
+              {searchQuery
+                ? `${visibleResources.length} matching · ${resources.length} loaded`
+                : `${resources.length} of ${total} resources`}
+              {lastRefreshedAt
+                ? ` · updated ${lastRefreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                : ""}
+            </span>
+            <button
+              type="button"
+              onClick={() => reload(filters)}
+              disabled={refreshing}
+              className="border-foreground/15 hover:bg-foreground/5 inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+            >
+              <RefreshCw
+                size={13}
+                className={refreshing ? "animate-spin" : undefined}
+              />
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <div className="border-border-soft mt-4 flex flex-wrap items-center gap-x-5 gap-y-3 border-t pt-4">
           <FilterSelect
             label="Category"
             value={filters.category ?? ALL_VALUE}
@@ -522,7 +813,7 @@ export function ResourcePanel({
             ))}
           </FilterSelect>
           <div className="bg-foreground/10 hidden h-5 w-px sm:block" />
-          <FilterGroup label="Status">
+          <FilterGroup label="Lifecycle">
             {Object.entries(RESOURCE_LIFECYCLE_STATUS_LABELS).map(
               ([key, label]) => (
                 <FilterChip
@@ -536,18 +827,23 @@ export function ResourcePanel({
             )}
           </FilterGroup>
         </div>
-        <button
-          onClick={() => reload(filters)}
-          disabled={refreshing}
-          className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-        >
-          <RefreshCw
-            size={13}
-            className={refreshing ? "animate-spin" : undefined}
-          />
-          Refresh
-        </button>
       </div>
+
+      {error ? (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-4 py-3 text-sm"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => reload(filters)}
+            className="font-medium text-amber-700 hover:underline dark:text-amber-300"
+          >
+            Try again
+          </button>
+        </div>
+      ) : null}
 
       {resources.length === 0 ? (
         <EmptyState
@@ -562,22 +858,80 @@ export function ResourcePanel({
               : "Nothing currently matches this filter."
           }
         />
+      ) : visibleResources.length === 0 ? (
+        <EmptyState
+          title="No matching resources"
+          description="Try a different search term or clear one of the filters."
+          actions={
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                updateResourceUrl({ q: null });
+              }}
+              className="border-foreground/15 hover:bg-foreground/5 rounded-lg border px-4 py-2 text-sm font-medium"
+            >
+              Clear search
+            </button>
+          }
+        />
       ) : (
-        <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
-          {resources.map((resource) => (
-            <ResourceRow key={resource.id} resource={resource} />
-          ))}
+        <div className="border-border-soft overflow-hidden rounded-2xl border">
+          <div className="border-border-soft bg-foreground/[0.025] hidden grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)] items-center gap-3 border-b px-4 py-3 md:grid">
+            <SortHeader
+              label="Resource"
+              active={sortKey === "name"}
+              onClick={() => selectSort("name")}
+            />
+            <SortHeader
+              label="Provider / type"
+              active={sortKey === "provider"}
+              onClick={() => selectSort("provider")}
+            />
+            <SortHeader
+              label="Region"
+              active={sortKey === "region"}
+              onClick={() => selectSort("region")}
+            />
+            <SortHeader
+              label="Status"
+              active={sortKey === "status"}
+              onClick={() => selectSort("status")}
+            />
+            <SortHeader
+              label="Last seen"
+              active={sortKey === "lastSeen"}
+              onClick={() => selectSort("lastSeen")}
+            />
+          </div>
+          <div className="divide-border-soft divide-y">
+            {visibleResources.map((resource) => (
+              <ResourceRow
+                key={resource.id}
+                resource={resource}
+                onSelect={() => setSelectedResource(resource)}
+              />
+            ))}
+          </div>
         </div>
       )}
 
       {resources.length < total ? (
         <button
+          type="button"
           onClick={loadMore}
           disabled={pending || loadingMore}
           className="border-foreground/15 hover:bg-foreground/5 self-center rounded-lg border px-4 py-2 text-xs font-medium disabled:opacity-50"
         >
           {loadingMore ? "Loading…" : "Load more"}
         </button>
+      ) : null}
+
+      {selectedResource ? (
+        <ResourceDetailsDrawer
+          resource={selectedResource}
+          onClose={() => setSelectedResource(null)}
+        />
       ) : null}
     </div>
   );

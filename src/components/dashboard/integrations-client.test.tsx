@@ -45,7 +45,7 @@ describe("IntegrationsClient", () => {
       />,
     );
 
-    const connect = screen.getByRole("button", { name: "Connect" });
+    const connect = screen.getByRole("button", { name: "Add connection" });
     const comingSoon = screen.getByRole("button", { name: "Coming soon" });
 
     expect((connect as HTMLButtonElement).disabled).toBe(false);

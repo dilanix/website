@@ -12,15 +12,13 @@ import {
   listTargets,
   listSyncRuns,
   listSyncPolicies,
-  listResources,
-  listResourceFilters,
-  listCostSummaries,
 } from "@/lib/core/api";
 import { SYNC_RUNS_PAGE_SIZE } from "@/lib/sync/datasets";
-import { RESOURCES_PAGE_SIZE } from "@/lib/inventory/resources";
-import { COST_SUMMARIES_PAGE_SIZE } from "@/lib/billing/cost-summaries";
 import { PageHeader } from "@/components/dashboard/primitives";
-import { ConnectionDetailClient } from "@/components/dashboard/connection-detail-client";
+import {
+  ConnectionDetailClient,
+  type ConnectionDetailTab,
+} from "@/components/dashboard/connection-detail-client";
 
 export const metadata: Metadata = {
   title: "Connection",
@@ -29,8 +27,15 @@ export const metadata: Metadata = {
 
 export default async function ConnectionDetailPage({
   params,
+  searchParams,
 }: PageProps<"/dashboard/integrations/[connectionId]">) {
   const { connectionId } = await params;
+  const requestedTab = (await searchParams).tab;
+  const initialTab: ConnectionDetailTab =
+    typeof requestedTab === "string" &&
+    ["overview", "access", "activity", "settings"].includes(requestedTab)
+      ? (requestedTab as ConnectionDetailTab)
+      : "overview";
   const { token, organization } = await requireDashboardOrganization();
 
   const connection = await getConnection(
@@ -52,8 +57,6 @@ export default async function ConnectionDetailPage({
     targets,
     syncRuns,
     syncPolicies,
-    resources,
-    resourceFilters,
   ] = await Promise.all([
     listIntegrations(token),
     listIntegrationCapabilities(connection.integration_id, token),
@@ -71,32 +74,9 @@ export default async function ConnectionDetailPage({
       offset: 0,
     }),
     listSyncPolicies(organization.organization_id, connectionId, token),
-    listResources(organization.organization_id, connectionId, token, {
-      limit: RESOURCES_PAGE_SIZE,
-      offset: 0,
-    }),
-    listResourceFilters(organization.organization_id, connectionId, token),
   ]);
   const integration =
     integrations.find((item) => item.id === connection.integration_id) ?? null;
-
-  // Core's cost-summaries read 403s when `billing.read` isn't enabled on this
-  // connection (unlike `listResources`, which just returns an empty page) —
-  // only attempt the fetch once we already know it will succeed.
-  const billingReadEnabled = connectionCapabilities.some(
-    (row) => row.enabled && row.capability.slug === "billing.read",
-  );
-  const costSummaries = billingReadEnabled
-    ? await listCostSummaries(
-        organization.organization_id,
-        connectionId,
-        token,
-        {
-          limit: COST_SUMMARIES_PAGE_SIZE,
-          offset: 0,
-        },
-      )
-    : { items: [], total: 0 };
 
   return (
     <div className="flex flex-col gap-5">
@@ -110,6 +90,8 @@ export default async function ConnectionDetailPage({
       />
       <ConnectionDetailClient
         connection={connection}
+        integrationName={integration?.name ?? "Cloud provider"}
+        initialTab={initialTab}
         capabilities={capabilities}
         initialConnectionCapabilities={connectionCapabilities}
         initialScopes={scopes}
@@ -118,11 +100,6 @@ export default async function ConnectionDetailPage({
         initialSyncRuns={syncRuns.items}
         initialSyncTotal={syncRuns.total}
         initialSyncPolicies={syncPolicies.items}
-        initialResources={resources.items}
-        initialResourceTotal={resources.total}
-        initialResourceFilters={resourceFilters}
-        initialCostSummaries={costSummaries.items}
-        initialCostSummaryTotal={costSummaries.total}
       />
     </div>
   );

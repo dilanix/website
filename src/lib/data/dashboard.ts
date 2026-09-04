@@ -1,9 +1,4 @@
-import type {
-  BillingPlan,
-  DashboardOverview,
-  Invoice,
-  UsageRow,
-} from "@/types";
+import type { DashboardOverview, UsageRow } from "@/types";
 
 const overviewBySlug: Record<string, DashboardOverview> = {
   dena: {
@@ -50,9 +45,7 @@ const overviewBySlug: Record<string, DashboardOverview> = {
     potentialSavingsUsd: 1200,
     optimizationScore: 91,
     activeAlerts: 0,
-    spendTrend: [
-      7200, 7500, 7800, 8100, 8000, 8200, 8300, 8400,
-    ],
+    spendTrend: [7200, 7500, 7800, 8100, 8000, 8200, 8300, 8400],
     breakdown: [
       { label: "Trace Ingestion", amountUsd: 4800 },
       { label: "Metric Storage", amountUsd: 2600 },
@@ -63,9 +56,7 @@ const overviewBySlug: Record<string, DashboardOverview> = {
         title: "Adaptive trace sampling enabled",
         description: "Downsample non-error traces during off-peak hours.",
         monthlySavingUsd: 1200,
-        metrics: [
-          { label: "Sampling efficiency", value: "99.8%" },
-        ],
+        metrics: [{ label: "Sampling efficiency", value: "99.8%" }],
       },
     ],
     activity: [
@@ -120,21 +111,6 @@ const usageBySlug: Record<string, UsageRow[]> = {
   ],
 };
 
-const invoices: Invoice[] = [
-  { id: "INV-2026-08", date: "2026-08-01", amountUsd: 499, status: "paid" },
-  { id: "INV-2026-07", date: "2026-07-01", amountUsd: 499, status: "paid" },
-  { id: "INV-2026-06", date: "2026-06-01", amountUsd: 499, status: "paid" },
-  { id: "INV-2026-05", date: "2026-05-01", amountUsd: 449, status: "paid" },
-];
-
-const plan: BillingPlan = {
-  name: "Growth",
-  priceUsd: 499,
-  interval: "month",
-  renewsOn: "2026-09-18",
-  seats: 12,
-};
-
 export async function getDashboardOverview(
   slug: string,
 ): Promise<DashboardOverview | undefined> {
@@ -145,12 +121,4 @@ export async function getUsageBreakdown(
   slug: string,
 ): Promise<UsageRow[] | undefined> {
   return usageBySlug[slug] ?? usageBySlug.dena;
-}
-
-export async function getInvoices(): Promise<Invoice[]> {
-  return invoices;
-}
-
-export async function getBillingPlan(): Promise<BillingPlan> {
-  return plan;
 }

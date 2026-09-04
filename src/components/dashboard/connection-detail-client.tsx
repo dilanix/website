@@ -1,30 +1,29 @@
 "use client";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import type { Route } from "next";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Activity,
   Boxes,
   CheckCircle2,
-  DollarSign,
+  CircleDollarSign,
   Edit2,
-  Filter,
-  Fingerprint,
+  Gauge,
   Plus,
-  RefreshCw,
+  Settings,
+  Shield,
   ShieldCheck,
   Trash2,
-  Zap,
   X,
 } from "lucide-react";
 import type {
   CoreAWSConnectionSetup,
   CoreConnectionCapability,
   CoreConnectionScope,
-  CoreCostSummary,
   CoreIntegrationCapability,
   CoreIntegrationConnection,
   CoreIntegrationTarget,
-  CoreResource,
-  CoreResourceFilterOptions,
   CoreSyncPolicy,
   CoreSyncRun,
   IntegrationConnectionStatus,
@@ -42,8 +41,6 @@ import {
 import { EmptyState, Section, StatusBadge } from "./primitives";
 import { AwsSetupPanel } from "./integrations/aws-setup-panel";
 import { SyncPanel } from "./sync-panel";
-import { ResourcePanel } from "./resource-panel";
-import { CostSummaryPanel } from "./cost-summary-panel";
 import { TargetsPanel } from "./targets-panel";
 import { cn } from "@/lib/utils";
 
@@ -60,11 +57,13 @@ const REMOVABLE_STATUSES = new Set<IntegrationConnectionStatus>([
   "disabled",
 ]);
 
-type TabType =
-  "capabilities" | "scopes" | "targets" | "sync" | "resources" | "billing";
+export type ConnectionDetailTab =
+  "overview" | "access" | "activity" | "settings";
 
 export function ConnectionDetailClient({
   connection: initialConnection,
+  integrationName,
+  initialTab,
   capabilities,
   initialConnectionCapabilities,
   initialScopes,
@@ -73,13 +72,10 @@ export function ConnectionDetailClient({
   initialSyncRuns,
   initialSyncTotal,
   initialSyncPolicies,
-  initialResources,
-  initialResourceTotal,
-  initialResourceFilters,
-  initialCostSummaries,
-  initialCostSummaryTotal,
 }: {
   connection: CoreIntegrationConnection;
+  integrationName: string;
+  initialTab: ConnectionDetailTab;
   capabilities: CoreIntegrationCapability[];
   initialConnectionCapabilities: CoreConnectionCapability[];
   initialScopes: CoreConnectionScope[];
@@ -88,18 +84,9 @@ export function ConnectionDetailClient({
   initialSyncRuns: CoreSyncRun[];
   initialSyncTotal: number;
   initialSyncPolicies: CoreSyncPolicy[];
-  initialResources: CoreResource[];
-  initialResourceTotal: number;
-  initialResourceFilters: CoreResourceFilterOptions;
-  /** Fetched server-side only when `billing.read` was already enabled at page
-   * load (`ConnectionDetailPage`) — Core's read API 403s otherwise. Empty when
-   * it wasn't; the panel itself explains why rather than attempting a fetch
-   * that would just fail. */
-  initialCostSummaries: CoreCostSummary[];
-  initialCostSummaryTotal: number;
 }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabType>("capabilities");
+  const [activeTab, setActiveTab] = useState<ConnectionDetailTab>(initialTab);
   const [connection, setConnection] = useState(initialConnection);
   const [connectionCapabilities, setConnectionCapabilities] = useState(
     initialConnectionCapabilities,
@@ -113,7 +100,34 @@ export function ConnectionDetailClient({
   const [removeDialog, setRemoveDialog] = useState(false);
   const [scopeDialog, setScopeDialog] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    function syncTabFromHistory() {
+      const tab = new URL(window.location.href).searchParams.get("tab");
+      if (
+        tab === "overview" ||
+        tab === "access" ||
+        tab === "activity" ||
+        tab === "settings"
+      ) {
+        setActiveTab(tab);
+      } else {
+        setActiveTab("overview");
+      }
+    }
+    window.addEventListener("popstate", syncTabFromHistory);
+    return () => window.removeEventListener("popstate", syncTabFromHistory);
+  }, []);
+
+  function selectTab(tab: ConnectionDetailTab) {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    if (tab === "overview") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", tab);
+    window.history.pushState(null, "", url);
+  }
 
   const capabilitiesDirty = useMemo(() => {
     const current = new Set(connectionCapabilities.map((c) => c.capability_id));
@@ -133,36 +147,49 @@ export function ConnectionDetailClient({
 
   function saveCapabilities() {
     setError("");
+    setNotice("");
     startTransition(async () => {
       const result = await setConnectionCapabilitiesAction(
         connection.id,
         Array.from(selectedCapabilityIds),
       );
       if (result.error) return setError(result.error);
-      if (result.data) setConnectionCapabilities(result.data);
+      if (result.data) {
+        setConnectionCapabilities(result.data);
+        setNotice("Access capabilities saved.");
+      }
     });
   }
 
   function disable() {
     setError("");
+    setNotice("");
     startTransition(async () => {
       const result = await disableConnectionAction(connection.id);
       if (result.error) return setError(result.error);
-      if (result.data) setConnection(result.data);
+      if (result.data) {
+        setConnection(result.data);
+        setNotice("Connection disabled.");
+      }
     });
   }
 
   function enable() {
     setError("");
+    setNotice("");
     startTransition(async () => {
       const result = await enableConnectionAction(connection.id);
       if (result.error) return setError(result.error);
-      if (result.data) setConnection(result.data);
+      if (result.data) {
+        setConnection(result.data);
+        setNotice("Connection enabled.");
+      }
     });
   }
 
   function verifyAws(awsAccountId: string, onSuccess?: () => void) {
     setError("");
+    setNotice("");
     startTransition(async () => {
       const result = await verifyAwsConnectionAction(
         connection.id,
@@ -171,6 +198,7 @@ export function ConnectionDetailClient({
       if (result.error) return setError(result.error);
       if (result.data) {
         setConnection(result.data.connection);
+        setNotice("Connection verified successfully.");
         if (onSuccess) onSuccess();
       }
     });
@@ -190,6 +218,7 @@ export function ConnectionDetailClient({
 
   function removeScope(scopeType: string, scopeKey: string) {
     setError("");
+    setNotice("");
     startTransition(async () => {
       const result = await removeConnectionScopeAction(
         connection.id,
@@ -203,48 +232,38 @@ export function ConnectionDetailClient({
             !(scope.scope_type === scopeType && scope.scope_key === scopeKey),
         ),
       );
+      setNotice("Scope removed.");
     });
   }
 
   const canRemove = REMOVABLE_STATUSES.has(connection.status);
 
   const tabs: {
-    id: TabType;
+    id: ConnectionDetailTab;
     label: string;
-    icon: typeof Zap;
+    icon: typeof Gauge;
     count?: number;
   }[] = [
     {
-      id: "capabilities",
-      label: "Capabilities",
-      icon: Zap,
-      count: selectedCapabilityIds.size,
+      id: "overview",
+      label: "Overview",
+      icon: Gauge,
     },
     {
-      id: "scopes",
-      label: "Scopes",
-      icon: Filter,
-      count: scopes.length,
+      id: "access",
+      label: "Access",
+      icon: Shield,
+      count: selectedCapabilityIds.size + scopes.length,
     },
     {
-      id: "targets",
-      label: "Targets",
-      icon: Fingerprint,
+      id: "activity",
+      label: "Sync & Activity",
+      icon: Activity,
     },
     {
-      id: "sync",
-      label: "Sync",
-      icon: RefreshCw,
-    },
-    {
-      id: "resources",
-      label: "Resources",
-      icon: Boxes,
-    },
-    {
-      id: "billing",
-      label: "Billing",
-      icon: DollarSign,
+      id: "settings",
+      label: "Settings",
+      icon: Settings,
     },
   ];
 
@@ -258,73 +277,35 @@ export function ConnectionDetailClient({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Connection Header Bar */}
-      <div className="border-foreground/10 flex flex-wrap items-center justify-between gap-4 rounded-xl border p-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <StatusBadge status={statusTone(connection.status)}>
-            {connection.status}
-          </StatusBadge>
-          {connection.external_reference ? (
-            <span className="text-muted-foreground font-mono text-xs">
-              Account / Ref: {connection.external_reference}
-            </span>
-          ) : null}
-          {connection.last_verified_at ? (
-            <span className="text-muted-foreground text-xs">
-              Verified:{" "}
-              {new Date(connection.last_verified_at).toLocaleDateString()}
-            </span>
-          ) : null}
+      <div className="border-border-soft bg-card-strong/50 flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-5 shadow-[0_16px_40px_var(--shadow-card)]">
+        <div className="min-w-0">
+          <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+            {integrationName}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <StatusBadge status={statusTone(connection.status)}>
+              {connection.status}
+            </StatusBadge>
+            {connection.external_reference ? (
+              <span className="text-muted-foreground font-mono text-xs">
+                Account / Ref: {connection.external_reference}
+              </span>
+            ) : null}
+            {connection.last_verified_at ? (
+              <span className="text-muted-foreground text-xs">
+                Verified:{" "}
+                {new Date(connection.last_verified_at).toLocaleDateString()}
+              </span>
+            ) : null}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setEditDialog(true)}
-            disabled={pending}
-            className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
-          >
-            <Edit2 size={14} />
-            Modify
-          </button>
-          {awsSetup.cloudformation_supported ? (
-            <button
-              onClick={() => setVerifyDialog(true)}
-              disabled={pending || connection.status === "disabled"}
-              className="bg-accent/10 text-accent hover:bg-accent/20 border-accent/30 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50"
-            >
-              <ShieldCheck size={14} />
-              Re-verify
-            </button>
-          ) : null}
-          {connection.status === "disabled" ? (
-            <button
-              onClick={enable}
-              disabled={pending}
-              className="border-foreground/15 hover:bg-foreground/5 rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
-            >
-              Enable
-            </button>
-          ) : (
-            <button
-              onClick={disable}
-              disabled={pending}
-              className="border-foreground/15 hover:bg-foreground/5 rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
-            >
-              Disable
-            </button>
-          )}
-          <button
-            onClick={() => setRemoveDialog(true)}
-            disabled={pending || !canRemove}
-            title={
-              canRemove
-                ? undefined
-                : "Disable the connection before removing it"
-            }
-            className="rounded-lg border border-red-600/30 px-3 py-2 text-sm text-red-600 disabled:opacity-40"
-          >
-            Remove
-          </button>
-        </div>
+        <button
+          onClick={() => selectTab("settings")}
+          className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm"
+        >
+          <Settings size={14} />
+          Manage connection
+        </button>
       </div>
 
       {error ? (
@@ -332,12 +313,20 @@ export function ConnectionDetailClient({
           {error}
         </p>
       ) : null}
+      {notice ? (
+        <p
+          role="status"
+          className="border-success/25 bg-success/8 text-success rounded-xl border px-4 py-3 text-sm"
+        >
+          {notice}
+        </p>
+      ) : null}
 
-      {/* Beautiful Navigation Tabs */}
       <div className="border-foreground/10 border-b">
         <nav
           className="-mb-px flex gap-1 overflow-x-auto sm:gap-2"
           aria-label="Tabs"
+          role="tablist"
         >
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -345,7 +334,12 @@ export function ConnectionDetailClient({
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                type="button"
+                role="tab"
+                id={`connection-tab-${tab.id}`}
+                aria-controls={`connection-panel-${tab.id}`}
+                aria-selected={active}
+                onClick={() => selectTab(tab.id)}
                 className={cn(
                   "inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors",
                   active
@@ -373,161 +367,307 @@ export function ConnectionDetailClient({
         </nav>
       </div>
 
-      {/* Tab Panels */}
       <div className="pt-2">
-        {/* Capabilities Tab */}
-        {activeTab === "capabilities" && (
-          <Section
-            title="Assigned Capabilities"
-            action={
-              capabilitiesDirty ? (
-                <button
-                  onClick={saveCapabilities}
-                  disabled={pending}
-                  className="bg-accent text-accent-foreground rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                >
-                  {pending ? "Saving…" : "Save changes"}
-                </button>
-              ) : undefined
-            }
+        {activeTab === "overview" ? (
+          <div
+            id="connection-panel-overview"
+            role="tabpanel"
+            aria-labelledby="connection-tab-overview"
+            className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.7fr)]"
           >
-            {capabilities.length ? (
-              <div className="space-y-2">
-                {capabilities.map((capability) => {
-                  const selected = selectedCapabilityIds.has(capability.id);
-                  return (
-                    <label
-                      key={capability.id}
-                      className="border-foreground/10 hover:bg-foreground/[0.02] flex cursor-pointer items-center gap-3 rounded-lg border p-4 text-sm transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        disabled={capability.status !== "active" && !selected}
-                        onChange={() => toggleCapability(capability.id)}
-                        className="border-foreground/20 text-accent focus:ring-accent rounded"
-                      />
-                      <span className="flex-1">
-                        <span className="font-medium">{capability.name}</span>
-                        <span className="text-muted-foreground ml-2 font-mono text-xs">
-                          {capability.slug}
-                        </span>
-                      </span>
-                      {selected ? (
-                        <CheckCircle2
-                          size={16}
-                          className="text-success shrink-0"
-                        />
-                      ) : null}
-                    </label>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm">
-                This integration has no capabilities defined yet.
+            <section className="border-border-soft rounded-2xl border p-5">
+              <h2 className="text-base font-semibold">Connection details</h2>
+              <dl className="mt-5 grid gap-5 sm:grid-cols-2">
+                <div>
+                  <dt className="text-muted-foreground text-xs">Provider</dt>
+                  <dd className="mt-1 text-sm font-medium">
+                    {integrationName}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground text-xs">
+                    Account / reference
+                  </dt>
+                  <dd className="mt-1 truncate font-mono text-sm">
+                    {connection.external_reference ?? "Not verified yet"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground text-xs">
+                    Last verified
+                  </dt>
+                  <dd className="mt-1 text-sm">
+                    {connection.last_verified_at
+                      ? new Date(connection.last_verified_at).toLocaleString()
+                      : "Never"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground text-xs">
+                    Last successful sync
+                  </dt>
+                  <dd className="mt-1 text-sm">
+                    {connection.last_success_at
+                      ? new Date(connection.last_success_at).toLocaleString()
+                      : "Never"}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            <section className="border-border-soft rounded-2xl border p-5">
+              <h2 className="text-base font-semibold">Cloud data</h2>
+              <p className="text-muted-foreground mt-1 text-sm leading-6">
+                Resource inventory and provider spend live in shared multicloud
+                workspaces.
               </p>
-            )}
-          </Section>
-        )}
-
-        {/* Scopes Tab */}
-        {activeTab === "scopes" && (
-          <Section
-            title="Configured Scopes"
-            action={
-              <button
-                onClick={() => setScopeDialog(true)}
-                className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium"
-              >
-                <Plus size={13} />
-                Add scope
-              </button>
-            }
-          >
-            {scopes.length ? (
-              <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
-                {scopes.map((scope) => (
-                  <div
-                    key={`${scope.scope_type}/${scope.scope_key}`}
-                    className="flex items-center justify-between gap-3 p-4 text-sm"
-                  >
-                    <div>
-                      <span className="text-muted-foreground text-xs tracking-wider uppercase">
-                        {scope.scope_type}
-                      </span>
-                      <p className="mt-0.5 font-mono">{scope.scope_key}</p>
-                    </div>
-                    <button
-                      onClick={() =>
-                        removeScope(scope.scope_type, scope.scope_key)
-                      }
-                      disabled={pending}
-                      aria-label={`Remove scope ${scope.scope_type}/${scope.scope_key}`}
-                      className="text-muted-foreground p-1.5 hover:text-red-500 disabled:opacity-40"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                ))}
+              <div className="mt-5 grid gap-2">
+                <Link
+                  href={
+                    `/dashboard/resources?connection=${connection.id}` as Route
+                  }
+                  className="border-foreground/10 hover:border-accent/30 hover:bg-accent/5 flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-medium transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <Boxes size={15} className="text-accent" /> Resources
+                  </span>
+                  <span className="text-muted-foreground text-xs">
+                    View all
+                  </span>
+                </Link>
+                <Link
+                  href={`/dashboard/costs?connection=${connection.id}` as Route}
+                  className="border-foreground/10 hover:border-accent/30 hover:bg-accent/5 flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-medium transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <CircleDollarSign size={15} className="text-accent" /> Costs
+                  </span>
+                  <span className="text-muted-foreground text-xs">
+                    View all
+                  </span>
+                </Link>
               </div>
-            ) : (
-              <EmptyState
-                title="No scopes configured"
-                description="Scope this connection to specific regions or services. Accounts, subscriptions, and projects are set by verification, not scopes."
-              />
-            )}
-          </Section>
-        )}
+            </section>
+          </div>
+        ) : null}
 
-        {/* Targets Tab */}
-        {activeTab === "targets" && (
-          <Section title="Provider Identity">
-            <TargetsPanel
-              connectionId={connection.id}
-              initialTargets={initialTargets}
-            />
-          </Section>
-        )}
-
-        {/* Sync Tab */}
-        {activeTab === "sync" && (
-          <Section title="Sync">
-            <SyncPanel
-              connectionId={connection.id}
-              enabledCapabilitySlugs={enabledCapabilitySlugs}
-              initialRuns={initialSyncRuns}
-              initialTotal={initialSyncTotal}
-              initialPolicies={initialSyncPolicies}
-            />
-          </Section>
-        )}
-
-        {/* Resources Tab */}
-        {activeTab === "resources" && (
-          <Section title="Resources">
-            <ResourcePanel
-              connectionId={connection.id}
-              initialResources={initialResources}
-              initialTotal={initialResourceTotal}
-              initialFilterOptions={initialResourceFilters}
-            />
-          </Section>
-        )}
-
-        {/* Billing Tab */}
-        {activeTab === "billing" && (
-          <Section title="Cost Summary">
-            <CostSummaryPanel
-              connectionId={connection.id}
-              billingReadEnabled={enabledCapabilitySlugs.includes(
-                "billing.read",
+        {activeTab === "access" ? (
+          <div
+            id="connection-panel-access"
+            role="tabpanel"
+            aria-labelledby="connection-tab-access"
+            className="space-y-5"
+          >
+            <Section
+              title="Capabilities"
+              className="border-border-soft rounded-2xl border p-5"
+              action={
+                capabilitiesDirty ? (
+                  <button
+                    onClick={saveCapabilities}
+                    disabled={pending}
+                    className="bg-accent text-accent-foreground rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                  >
+                    {pending ? "Saving…" : "Save changes"}
+                  </button>
+                ) : undefined
+              }
+            >
+              {capabilities.length ? (
+                <div className="space-y-2">
+                  {capabilities.map((capability) => {
+                    const selected = selectedCapabilityIds.has(capability.id);
+                    return (
+                      <label
+                        key={capability.id}
+                        className="border-foreground/10 hover:bg-foreground/[0.02] flex cursor-pointer items-center gap-3 rounded-xl border p-4 text-sm transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          disabled={capability.status !== "active" && !selected}
+                          onChange={() => toggleCapability(capability.id)}
+                          className="border-foreground/20 text-accent focus:ring-accent rounded"
+                        />
+                        <span className="flex-1">
+                          <span className="font-medium">{capability.name}</span>
+                          <span className="text-muted-foreground ml-2 font-mono text-xs">
+                            {capability.slug}
+                          </span>
+                        </span>
+                        {selected ? (
+                          <CheckCircle2
+                            size={16}
+                            className="text-success shrink-0"
+                          />
+                        ) : null}
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  This integration has no capabilities defined yet.
+                </p>
               )}
-              initialCostSummaries={initialCostSummaries}
-              initialTotal={initialCostSummaryTotal}
-            />
-          </Section>
-        )}
+            </Section>
+
+            <Section
+              title="Scopes"
+              className="border-border-soft rounded-2xl border p-5"
+              action={
+                <button
+                  onClick={() => setScopeDialog(true)}
+                  className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium"
+                >
+                  <Plus size={13} />
+                  Add scope
+                </button>
+              }
+            >
+              {scopes.length ? (
+                <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
+                  {scopes.map((scope) => (
+                    <div
+                      key={`${scope.scope_type}/${scope.scope_key}`}
+                      className="flex items-center justify-between gap-3 p-4 text-sm"
+                    >
+                      <div>
+                        <span className="text-muted-foreground text-xs tracking-wider uppercase">
+                          {scope.scope_type}
+                        </span>
+                        <p className="mt-0.5 font-mono">{scope.scope_key}</p>
+                      </div>
+                      <button
+                        onClick={() =>
+                          removeScope(scope.scope_type, scope.scope_key)
+                        }
+                        disabled={pending}
+                        aria-label={`Remove scope ${scope.scope_type}/${scope.scope_key}`}
+                        className="text-muted-foreground p-1.5 hover:text-red-500 disabled:opacity-40"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  title="No scopes configured"
+                  description="Limit this connection to specific regions or services. Provider accounts, subscriptions, and projects are resolved during verification."
+                />
+              )}
+            </Section>
+
+            <Section
+              title="Provider identity"
+              className="border-border-soft rounded-2xl border p-5"
+            >
+              <TargetsPanel
+                connectionId={connection.id}
+                initialTargets={initialTargets}
+              />
+            </Section>
+          </div>
+        ) : null}
+
+        {activeTab === "activity" ? (
+          <div
+            id="connection-panel-activity"
+            role="tabpanel"
+            aria-labelledby="connection-tab-activity"
+          >
+            <Section title="Sync & Activity">
+              <SyncPanel
+                connectionId={connection.id}
+                enabledCapabilitySlugs={enabledCapabilitySlugs}
+                initialRuns={initialSyncRuns}
+                initialTotal={initialSyncTotal}
+                initialPolicies={initialSyncPolicies}
+              />
+            </Section>
+          </div>
+        ) : null}
+
+        {activeTab === "settings" ? (
+          <div
+            id="connection-panel-settings"
+            role="tabpanel"
+            aria-labelledby="connection-tab-settings"
+            className="space-y-10"
+          >
+            <Section title="Connection settings">
+              <div className="border-border-soft rounded-2xl border p-5">
+                <p className="text-muted-foreground max-w-2xl text-sm leading-6">
+                  Update the connection name, provider reference, and
+                  verification configuration.
+                </p>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setEditDialog(true)}
+                    disabled={pending}
+                    className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+                  >
+                    <Edit2 size={14} />
+                    Modify
+                  </button>
+                  {awsSetup.cloudformation_supported ? (
+                    <button
+                      onClick={() => setVerifyDialog(true)}
+                      disabled={pending || connection.status === "disabled"}
+                      className="bg-accent/10 text-accent hover:bg-accent/20 border-accent/30 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50"
+                    >
+                      <ShieldCheck size={14} />
+                      Re-verify
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </Section>
+
+            <Section title="Connection lifecycle">
+              <div className="border-border-soft flex flex-col justify-between gap-5 rounded-2xl border p-5 sm:flex-row sm:items-center">
+                <div>
+                  <h3 className="text-sm font-medium">Connection status</h3>
+                  <p className="text-muted-foreground mt-1 text-sm leading-6">
+                    Disable collection temporarily, or remove this data source.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {connection.status === "disabled" ? (
+                    <button
+                      onClick={enable}
+                      disabled={pending}
+                      className="border-foreground/15 hover:bg-foreground/5 rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+                    >
+                      Enable
+                    </button>
+                  ) : (
+                    <button
+                      onClick={disable}
+                      disabled={pending}
+                      className="border-foreground/15 hover:bg-foreground/5 rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+                    >
+                      Disable
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setRemoveDialog(true)}
+                    disabled={pending || !canRemove}
+                    title={
+                      canRemove
+                        ? undefined
+                        : "Disable the connection before removing it"
+                    }
+                    className="rounded-lg border border-red-600/30 px-3 py-2 text-sm text-red-600 disabled:opacity-40"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            </Section>
+          </div>
+        ) : null}
       </div>
 
       {/* Modify Connection Dialog */}
@@ -579,6 +719,7 @@ export function ConnectionDetailClient({
                   if (result.data) {
                     setConnection(result.data);
                     setEditDialog(false);
+                    setNotice("Connection settings saved.");
                   }
                 });
               }}
@@ -826,6 +967,7 @@ export function ConnectionDetailClient({
                   if (result.data) {
                     setScopes((current) => [...current, result.data!]);
                     setScopeDialog(false);
+                    setNotice("Scope added.");
                   }
                 });
               }}

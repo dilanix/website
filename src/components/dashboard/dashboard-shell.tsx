@@ -4,9 +4,9 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutGrid,
+  LayoutDashboard,
   KeyRound,
-  CreditCard,
+  CircleDollarSign,
   Settings,
   LogOut,
   Menu,
@@ -20,40 +20,57 @@ import { signOutAction } from "@/app/dashboard/actions";
 import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
 import { BrandLogo } from "@/components/layout/brand-logo";
 
-const navItems = [
+const navGroups = [
   {
-    label: "Products",
-    href: "/dashboard/products",
-    icon: LayoutGrid,
-    organizationRequired: true,
+    label: "Workspace",
+    items: [
+      {
+        label: "Overview",
+        href: "/dashboard",
+        icon: LayoutDashboard,
+        organizationRequired: true,
+      },
+      {
+        label: "Resources",
+        href: "/dashboard/resources",
+        icon: Boxes,
+        organizationRequired: true,
+      },
+      {
+        label: "Costs",
+        href: "/dashboard/costs",
+        icon: CircleDollarSign,
+        organizationRequired: true,
+      },
+    ],
   },
   {
-    label: "Integrations",
-    href: "/dashboard/integrations",
-    icon: Plug,
-    organizationRequired: true,
-  },
-  {
-    label: "API Keys",
-    href: "/dashboard/api-keys",
-    icon: KeyRound,
-    organizationRequired: true,
-  },
-  {
-    label: "Billing",
-    href: "/dashboard/billing",
-    icon: CreditCard,
-    organizationRequired: true,
-  },
-  {
-    label: "Settings",
-    href: "/dashboard/settings",
-    icon: Settings,
-    organizationRequired: false,
+    label: "Manage",
+    items: [
+      {
+        label: "Integrations",
+        href: "/dashboard/integrations",
+        icon: Plug,
+        organizationRequired: true,
+      },
+      {
+        label: "API Keys",
+        href: "/dashboard/api-keys",
+        icon: KeyRound,
+        organizationRequired: true,
+      },
+      {
+        label: "Settings",
+        href: "/dashboard/settings",
+        icon: Settings,
+        organizationRequired: false,
+      },
+    ],
   },
 ] as const;
 
 function isActiveItem(pathname: string, href: string) {
+  if (href === "/dashboard") return pathname === href;
   return pathname.startsWith(href);
 }
 
@@ -74,43 +91,54 @@ export function DashboardShell({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const availableNavItems = navItems.filter(
-    (item) => organization || !item.organizationRequired,
-  );
+  const availableNavGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) => organization || !item.organizationRequired,
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
   const activeProducts = organization
     ? products.filter((product) => product.status === "active")
     : [];
 
   const nav = (
-    <nav aria-label="Dashboard navigation" className="flex flex-col gap-1">
-      {availableNavItems.map((item) => {
-        const active = isActiveItem(pathname, item.href);
-        const Icon = item.icon;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={() => setOpen(false)}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
-              active
-                ? "text-accent bg-[linear-gradient(135deg,color-mix(in_oklab,var(--accent)_16%,transparent),color-mix(in_oklab,var(--accent-secondary)_18%,transparent))]"
-                : "text-muted-foreground hover:bg-surface hover:text-foreground",
-            )}
-          >
-            <Icon size={16} />
-            {item.label}
-          </Link>
-        );
-      })}
-      {activeProducts.length ? (
-        <div className="border-foreground/10 my-4 border-t" />
-      ) : null}
+    <nav aria-label="Dashboard navigation" className="flex flex-col gap-5">
+      {availableNavGroups.map((group) => (
+        <div key={group.label}>
+          <p className="text-muted-foreground mb-1.5 px-3 text-[10px] font-semibold tracking-[0.16em] uppercase">
+            {group.label}
+          </p>
+          <div className="flex flex-col gap-1">
+            {group.items.map((item) => {
+              const active = isActiveItem(pathname, item.href);
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
+                    active
+                      ? "text-accent bg-[linear-gradient(135deg,color-mix(in_oklab,var(--accent)_16%,transparent),color-mix(in_oklab,var(--accent-secondary)_18%,transparent))]"
+                      : "text-muted-foreground hover:bg-surface hover:text-foreground",
+                  )}
+                >
+                  <Icon size={16} />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
       {activeProducts.map((product) => (
-        <div key={product.id} className="mb-3">
-          <div className="text-muted-foreground mb-1 flex items-center gap-2 px-3 text-[10px] font-semibold tracking-[0.16em] uppercase">
-            <Boxes size={12} /> {product.name}
+        <div key={product.id}>
+          <div className="text-muted-foreground mb-1.5 flex items-center gap-2 px-3 text-[10px] font-semibold tracking-[0.16em] uppercase">
+            <Boxes size={12} /> Product · {product.name}
           </div>
           {product.navigation.map((item) => {
             const active =

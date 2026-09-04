@@ -1,8 +1,15 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plug, Plus, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Cloud,
+  Clock3,
+  Plus,
+  X,
+} from "lucide-react";
 import type {
   CoreIntegration,
   CoreIntegrationConnection,
@@ -24,6 +31,38 @@ function statusTone(
   if (status === "connected") return "success";
   if (status === "error") return "warning";
   return "neutral";
+}
+
+function providerCode(integration: CoreIntegration) {
+  const slug = integration.slug.toLowerCase();
+  if (slug === "aws") return "AWS";
+  if (slug === "azure") return "AZ";
+  if (slug === "gcp" || slug === "google-cloud") return "GCP";
+  return integration.name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase();
+}
+
+function providerTone(slug: string) {
+  if (slug === "aws")
+    return "bg-amber-500/12 text-amber-600 dark:text-amber-300";
+  if (slug === "azure") return "bg-sky-500/12 text-sky-600 dark:text-sky-300";
+  if (slug === "gcp" || slug === "google-cloud")
+    return "bg-blue-500/12 text-blue-600 dark:text-blue-300";
+  return "bg-accent/10 text-accent";
+}
+
+function formatLastSync(value: string | null) {
+  if (!value) return "Not synced yet";
+  return `Synced ${new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value))}`;
 }
 
 export function IntegrationsClient({
@@ -48,6 +87,20 @@ export function IntegrationsClient({
     setError("");
   }
 
+  useEffect(() => {
+    if (!connectTo) return;
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setConnectTo(null);
+        setError("");
+      }
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [connectTo]);
+
   if (!integrations.length) {
     return (
       <EmptyState
@@ -59,23 +112,58 @@ export function IntegrationsClient({
 
   return (
     <>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="border-border-soft bg-card-strong/50 rounded-2xl border p-4">
+          <p className="text-muted-foreground text-xs">Providers</p>
+          <p className="mt-1 font-mono text-xl font-semibold">
+            {integrations.length}
+          </p>
+        </div>
+        <div className="border-border-soft bg-card-strong/50 rounded-2xl border p-4">
+          <p className="text-muted-foreground text-xs">Connections</p>
+          <p className="mt-1 font-mono text-xl font-semibold">
+            {connections.length}
+          </p>
+        </div>
+        <div className="border-border-soft bg-card-strong/50 rounded-2xl border p-4">
+          <p className="text-muted-foreground text-xs">Needs attention</p>
+          <p className="mt-1 font-mono text-xl font-semibold">
+            {
+              connections.filter((connection) => connection.status === "error")
+                .length
+            }
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {integrations.map((integration) => {
           const integrationConnections = connections.filter(
             (connection) => connection.integration_id === integration.id,
           );
+          const connectedCount = integrationConnections.filter(
+            (connection) => connection.status === "connected",
+          ).length;
+          const errorCount = integrationConnections.filter(
+            (connection) => connection.status === "error",
+          ).length;
           return (
-            <div
+            <article
               key={integration.id}
-              className="border-foreground/10 rounded-xl border p-5"
+              className="border-border-soft bg-card-strong/45 flex min-h-72 flex-col rounded-2xl border p-5 shadow-[0_16px_40px_var(--shadow-card)]"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <span className="bg-accent/10 text-accent flex h-9 w-9 items-center justify-center rounded-lg">
-                    <Plug size={16} />
+                  <span
+                    className={`flex h-11 w-11 items-center justify-center rounded-xl font-mono text-xs font-bold ${providerTone(integration.slug)}`}
+                    aria-hidden="true"
+                  >
+                    {providerCode(integration)}
                   </span>
                   <div>
-                    <h2 className="text-sm font-medium">{integration.name}</h2>
+                    <h2 className="text-sm font-semibold">
+                      {integration.name}
+                    </h2>
                     {integration.category ? (
                       <p className="text-muted-foreground text-xs capitalize">
                         {integration.category}
@@ -95,7 +183,9 @@ export function IntegrationsClient({
                   className="border-foreground/15 hover:bg-foreground/5 inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                 >
                   {integration.connection_supported ? <Plus size={13} /> : null}
-                  {integration.connection_supported ? "Connect" : "Coming soon"}
+                  {integration.connection_supported
+                    ? "Add connection"
+                    : "Coming soon"}
                 </button>
               </div>
               {integration.description ? (
@@ -103,6 +193,17 @@ export function IntegrationsClient({
                   {integration.description}
                 </p>
               ) : null}
+              <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 size={13} className="text-success" />
+                  {connectedCount} connected
+                </span>
+                {errorCount ? (
+                  <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-300">
+                    <AlertTriangle size={13} /> {errorCount} needs attention
+                  </span>
+                ) : null}
+              </div>
               {integrationConnections.length ? (
                 <ul className="border-foreground/10 mt-4 divide-y border-t">
                   {integrationConnections.map((connection) => (
@@ -111,8 +212,14 @@ export function IntegrationsClient({
                         href={`/dashboard/integrations/${connection.id}`}
                         className="group flex items-center justify-between gap-3"
                       >
-                        <span className="group-hover:text-foreground min-w-0 flex-1 truncate text-sm">
-                          {connection.name}
+                        <span className="min-w-0 flex-1">
+                          <span className="group-hover:text-foreground block truncate text-sm font-medium">
+                            {connection.name}
+                          </span>
+                          <span className="text-muted-foreground mt-0.5 flex items-center gap-1 text-[11px]">
+                            <Clock3 size={11} />
+                            {formatLastSync(connection.last_success_at)}
+                          </span>
                         </span>
                         <span className="flex shrink-0 items-center gap-2">
                           <StatusBadge status={statusTone(connection.status)}>
@@ -131,7 +238,7 @@ export function IntegrationsClient({
                   No connections yet.
                 </p>
               )}
-            </div>
+            </article>
           );
         })}
       </div>
@@ -147,13 +254,14 @@ export function IntegrationsClient({
             <div className="flex items-start justify-between">
               <div>
                 <span className="bg-accent/10 text-accent flex h-9 w-9 items-center justify-center rounded-lg">
-                  <Plug size={17} />
+                  <Cloud size={17} />
                 </span>
                 <h2 id="connect-title" className="mt-4 text-lg font-semibold">
                   Connect {connectTo.name}
                 </h2>
               </div>
               <button
+                type="button"
                 onClick={close}
                 aria-label="Close dialog"
                 className="text-muted-foreground p-1"
@@ -206,6 +314,7 @@ export function IntegrationsClient({
                 </p>
               ) : null}
               <button
+                type="submit"
                 disabled={pending}
                 className="bg-accent text-accent-foreground w-full rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
               >

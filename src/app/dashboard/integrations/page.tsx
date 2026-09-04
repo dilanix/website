@@ -20,7 +20,7 @@ export default async function IntegrationsPage() {
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Integrations"
-        description="Connect Dilanix to the services your organization already uses."
+        description="Connect cloud providers and manage the accounts, subscriptions, and projects that supply data to Dilanix."
       />
       <IntegrationsClient
         integrations={integrations}
