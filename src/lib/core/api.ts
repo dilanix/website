@@ -381,6 +381,32 @@ export function removeConnection(
   );
 }
 
+/** `{table_name: rows_deleted}` across every platform module's own purger —
+ * mirrors Core's `PurgeConnectionResponse`. */
+export interface CorePurgeConnectionResult {
+  purge_counts: Record<string, number>;
+}
+
+/**
+ * The explicit, audited purge lifecycle `removeConnection` deliberately never
+ * falls back to on its own `ConnectionHasHistoricalDataError` (403/409) —
+ * irreversibly deletes every dataset row this connection's targets own (sync
+ * history, inventory resources, cost data) together with the connection
+ * itself (`IntegrationConnectionService.purge_connection` in Core). Requires
+ * `DRAFT`/`DISABLED`, exactly like `removeConnection`.
+ */
+export function purgeConnection(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CorePurgeConnectionResult>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/purge`,
+    token,
+    { method: "POST" },
+  );
+}
+
 export function listConnectionCapabilities(
   organizationId: string,
   connectionId: string,
@@ -1131,6 +1157,244 @@ export function getCostSummaryTotals(
   if (params.serviceName) query.set("service_name", params.serviceName);
   return coreRequest<CoreCostSummaryTotals>(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-summaries/totals?${query.toString()}`,
+    token,
+  );
+}
+
+/**
+ * FOCUS's four parallel cost columns (`modules.billing.contracts.CostUsageMetric`
+ * in Core) — never blended; a caller sums exactly one, never mixes them.
+ */
+export type CostUsageMetric =
+  "billed_cost" | "effective_cost" | "list_cost" | "contracted_cost";
+
+/**
+ * Mirrors Core's `CostUsageRead` (`modules/billing/schemas/cost_usage.py`) — one
+ * FOCUS 1.2 (with AWS columns) charge row from the customer's AWS Data Export.
+ * The richer, provider-independent sibling of `CoreCostSummary`, sourced from a
+ * FOCUS export rather than Cost Explorer — never the same numbers, never summed
+ * against it.
+ */
+export interface CoreCostUsage {
+  id: string;
+  organization_id: string;
+  connection_id: string;
+  target_id: string;
+  billing_account_id: string;
+  billing_account_name: string | null;
+  billing_account_type: string | null;
+  sub_account_id: string | null;
+  sub_account_name: string | null;
+  sub_account_type: string | null;
+  invoice_id: string | null;
+  invoice_issuer_name: string | null;
+  billing_period_start: string;
+  billing_period_end: string;
+  charge_period_start: string;
+  charge_period_end: string;
+  provider_name: string;
+  publisher_name: string | null;
+  service_category: string | null;
+  service_name: string;
+  service_subcategory: string | null;
+  resource_id: string | null;
+  resource_name: string | null;
+  resource_type: string | null;
+  region_id: string | null;
+  region_name: string | null;
+  availability_zone: string | null;
+  sku_id: string | null;
+  sku_meter: string | null;
+  sku_price_id: string | null;
+  sku_price_details: Record<string, unknown> | null;
+  charge_category: string;
+  charge_class: string | null;
+  charge_description: string | null;
+  charge_frequency: string | null;
+  pricing_category: string | null;
+  /** `NUMERIC` decimal strings on the backend — display only, never parsed for arithmetic. */
+  pricing_quantity: string | null;
+  pricing_unit: string | null;
+  consumed_quantity: string | null;
+  consumed_unit: string | null;
+  billing_currency: string;
+  pricing_currency: string | null;
+  billed_cost: string;
+  effective_cost: string;
+  list_cost: string | null;
+  contracted_cost: string | null;
+  list_unit_price: string | null;
+  contracted_unit_price: string | null;
+  pricing_currency_effective_cost: string | null;
+  pricing_currency_list_unit_price: string | null;
+  pricing_currency_contracted_unit_price: string | null;
+  commitment_discount_id: string | null;
+  commitment_discount_type: string | null;
+  commitment_discount_category: string | null;
+  commitment_discount_status: string | null;
+  commitment_discount_name: string | null;
+  commitment_discount_quantity: string | null;
+  commitment_discount_unit: string | null;
+  capacity_reservation_id: string | null;
+  capacity_reservation_status: string | null;
+  tags: Record<string, unknown> | null;
+  provider_extra: Record<string, unknown>;
+  billing_authority: string;
+  source_type: string;
+  export_arn: string;
+  manifest_execution_id: string;
+  source_object_key: string;
+  schema_version: string;
+  collector_version: string | null;
+  normalizer_version: string | null;
+  sync_job_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreCostUsageListResponse {
+  items: CoreCostUsage[];
+  total: number;
+}
+
+export interface ListCostUsageParams {
+  limit: number;
+  offset: number;
+  targetId?: string | null;
+  serviceName?: string | null;
+  billingAccountId?: string | null;
+}
+
+/**
+ * Requires `billing.read`, exactly like `listCostSummaries` — FOCUS detail rows
+ * are exactly as sensitive as Cost-Explorer-sourced ones
+ * (`CostUsageService.list_cost_usages` in Core).
+ */
+export function listCostUsage(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  params: ListCostUsageParams,
+) {
+  const query = new URLSearchParams({
+    limit: String(params.limit),
+    offset: String(params.offset),
+  });
+  if (params.targetId) query.set("target_id", params.targetId);
+  if (params.serviceName) query.set("service_name", params.serviceName);
+  if (params.billingAccountId)
+    query.set("billing_account_id", params.billingAccountId);
+  return coreRequest<CoreCostUsageListResponse>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-usage?${query.toString()}`,
+    token,
+  );
+}
+
+/** One charge-day's cross-service sum for a single `CostUsageMetric` — mirrors
+ * Core's `CostUsageDailyTotal`. */
+export interface CoreCostUsageDailyTotal {
+  charge_period_start: string;
+  charge_period_end: string;
+  amount: string;
+  currency: string;
+}
+
+/**
+ * Mirrors Core's `CostUsageTotalsResponse` — one `CostUsageMetric`'s
+ * cross-service total for a caller-chosen period, summed in the database
+ * (`CostUsageRepository.sum_daily_by_connection`). `currency` is `null` and
+ * `daily` is empty when the period has no rows — a real, empty result, not an
+ * error.
+ */
+export interface CoreCostUsageTotals {
+  metric: CostUsageMetric;
+  period_start: string;
+  period_end: string;
+  total_amount: string;
+  currency: string | null;
+  daily: CoreCostUsageDailyTotal[];
+}
+
+export interface GetCostUsageTotalsParams {
+  /** UTC day boundary, inclusive — an ISO datetime string. */
+  periodStart: string;
+  /** UTC day boundary, exclusive — an ISO datetime string. */
+  periodEnd: string;
+  /** Defaults server-side to `effective_cost` — FOCUS's own headline "amount
+   * you'd use to understand total cost of resource use" column. */
+  metric?: CostUsageMetric | null;
+  targetId?: string | null;
+  serviceName?: string | null;
+}
+
+export function getCostUsageTotals(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  params: GetCostUsageTotalsParams,
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  if (params.metric) query.set("metric", params.metric);
+  if (params.targetId) query.set("target_id", params.targetId);
+  if (params.serviceName) query.set("service_name", params.serviceName);
+  return coreRequest<CoreCostUsageTotals>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-usage/totals?${query.toString()}`,
+    token,
+  );
+}
+
+/**
+ * Which dataset actually answered a unified totals request — mirrors Core's
+ * `BillingCostSource`. `cost_usage` (FOCUS) is used only when every expected
+ * monthly partition for every target in scope is fully synced; `cost_summary`
+ * (Cost Explorer) is the always-available fallback otherwise.
+ */
+export type BillingCostSource = "cost_usage" | "cost_summary";
+
+/**
+ * Mirrors Core's `UnifiedCostTotalsResponse` (`BillingQueryService`) — the
+ * coverage-aware, source-selecting total for a caller-chosen period. Never mixes
+ * `billing.cost_usage` and `billing.cost_summary` within one answer; `source`
+ * always discloses which one actually did.
+ */
+export interface CoreUnifiedCostTotals {
+  source: BillingCostSource;
+  period_start: string;
+  period_end: string;
+  total_amount: string;
+  currency: string | null;
+  is_estimated: boolean;
+}
+
+export interface GetUnifiedCostTotalsParams {
+  periodStart: string;
+  periodEnd: string;
+  targetId?: string | null;
+  serviceName?: string | null;
+}
+
+/**
+ * The single "best available total" read — never branches on provider/source
+ * itself (`BillingQueryService.get_cost_totals` in Core). Requires
+ * `billing.read`, exactly like the dataset-specific totals endpoints.
+ */
+export function getUnifiedCostTotals(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  params: GetUnifiedCostTotalsParams,
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  if (params.targetId) query.set("target_id", params.targetId);
+  if (params.serviceName) query.set("service_name", params.serviceName);
+  return coreRequest<CoreUnifiedCostTotals>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/costs/totals?${query.toString()}`,
     token,
   );
 }

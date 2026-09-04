@@ -32,6 +32,7 @@ import {
   addConnectionScopeAction,
   disableConnectionAction,
   enableConnectionAction,
+  purgeConnectionAction,
   removeConnectionAction,
   removeConnectionScopeAction,
   setConnectionCapabilitiesAction,
@@ -98,6 +99,8 @@ export function ConnectionDetailClient({
   const [editDialog, setEditDialog] = useState(false);
   const [verifyDialog, setVerifyDialog] = useState(false);
   const [removeDialog, setRemoveDialog] = useState(false);
+  const [purgeDialog, setPurgeDialog] = useState(false);
+  const [purgeConfirmName, setPurgeConfirmName] = useState("");
   const [scopeDialog, setScopeDialog] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -208,6 +211,18 @@ export function ConnectionDetailClient({
     setError("");
     startTransition(async () => {
       const result = await removeConnectionAction(connection.id);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      router.push("/dashboard/integrations");
+    });
+  }
+
+  function purge() {
+    setError("");
+    startTransition(async () => {
+      const result = await purgeConnectionAction(connection.id);
       if (result.error) {
         setError(result.error);
         return;
@@ -666,6 +681,37 @@ export function ConnectionDetailClient({
                 </div>
               </div>
             </Section>
+
+            <Section title="Danger zone">
+              <div className="border-border-soft flex flex-col justify-between gap-5 rounded-2xl border border-red-600/20 bg-red-600/5 p-5 sm:flex-row sm:items-center">
+                <div>
+                  <h3 className="text-sm font-medium">
+                    Delete permanently (purge)
+                  </h3>
+                  <p className="text-muted-foreground mt-1 max-w-xl text-sm leading-6">
+                    Irreversibly deletes this connection together with every
+                    sync history, inventory resource, and cost data row it
+                    owns — a separate, harder-to-undo action from Remove
+                    above, which refuses once real history exists.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setPurgeConfirmName("");
+                    setPurgeDialog(true);
+                  }}
+                  disabled={pending || !canRemove}
+                  title={
+                    canRemove
+                      ? undefined
+                      : "Disable the connection before purging it"
+                  }
+                  className="shrink-0 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+                >
+                  Delete permanently
+                </button>
+              </div>
+            </Section>
           </div>
         ) : null}
       </div>
@@ -923,6 +969,59 @@ export function ConnectionDetailClient({
                 className="rounded-lg bg-red-600 px-3 py-2 text-sm text-white disabled:opacity-50"
               >
                 {pending ? "Removing…" : "Remove connection"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Purge Connection Dialog */}
+      {purgeDialog ? (
+        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="purge-title"
+            className="bg-background border-foreground/15 w-full max-w-sm rounded-xl border p-6"
+          >
+            <h2 id="purge-title" className="font-semibold text-red-600">
+              Permanently delete {connection.name}?
+            </h2>
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
+              This irreversibly deletes the connection together with every
+              sync checkpoint, sync run, inventory resource, and cost row it
+              owns. This cannot be undone.
+            </p>
+            <label className="mt-4 block text-sm">
+              <span className="mb-1.5 block font-medium">
+                Type <span className="font-mono">{connection.name}</span> to
+                confirm
+              </span>
+              <input
+                value={purgeConfirmName}
+                onChange={(event) => setPurgeConfirmName(event.target.value)}
+                autoFocus
+                className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 text-sm outline-none"
+              />
+            </label>
+            {error ? (
+              <p role="alert" className="mt-3 text-sm text-red-500">
+                {error}
+              </p>
+            ) : null}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setPurgeDialog(false)}
+                className="border-foreground/15 rounded-lg border px-3 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={pending || purgeConfirmName !== connection.name}
+                onClick={purge}
+                className="rounded-lg bg-red-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+              >
+                {pending ? "Deleting…" : "Delete permanently"}
               </button>
             </div>
           </div>

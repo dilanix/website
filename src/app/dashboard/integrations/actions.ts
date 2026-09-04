@@ -8,6 +8,7 @@ import {
   disableConnection,
   enableConnection,
   removeConnection,
+  purgeConnection,
   setConnectionCapabilities,
   addConnectionScope,
   removeConnectionScope,
@@ -28,6 +29,9 @@ import {
   listResourceFilters,
   listCostSummaries,
   getCostSummaryTotals,
+  listCostUsage,
+  getCostUsageTotals,
+  getUnifiedCostTotals,
   CoreApiError,
   type CoreIntegrationConnection,
   type UpdateConnectionInput,
@@ -50,6 +54,13 @@ import {
   type ListCostSummariesParams,
   type CoreCostSummaryTotals,
   type GetCostSummaryTotalsParams,
+  type CoreCostUsageListResponse,
+  type ListCostUsageParams,
+  type CoreCostUsageTotals,
+  type GetCostUsageTotalsParams,
+  type CoreUnifiedCostTotals,
+  type GetUnifiedCostTotalsParams,
+  type CorePurgeConnectionResult,
 } from "@/lib/core/api";
 
 type ActionResult<T = undefined> = { data?: T; error?: string };
@@ -145,6 +156,19 @@ export async function removeConnectionAction(
     await removeConnection(organizationId, connectionId, token);
     revalidatePath("/dashboard/integrations");
     return {};
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function purgeConnectionAction(
+  connectionId: string,
+): Promise<ActionResult<CorePurgeConnectionResult>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await purgeConnection(organizationId, connectionId, token);
+    revalidatePath("/dashboard/integrations");
+    return { data };
   } catch (error) {
     return { error: message(error) };
   }
@@ -488,6 +512,60 @@ export async function getCostSummaryTotalsAction(
   try {
     const { token, organizationId } = await context();
     const data = await getCostSummaryTotals(
+      organizationId,
+      connectionId,
+      token,
+      params,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function listCostUsageAction(
+  connectionId: string,
+  params: ListCostUsageParams,
+): Promise<ActionResult<CoreCostUsageListResponse>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await listCostUsage(
+      organizationId,
+      connectionId,
+      token,
+      params,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getCostUsageTotalsAction(
+  connectionId: string,
+  params: GetCostUsageTotalsParams,
+): Promise<ActionResult<CoreCostUsageTotals>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await getCostUsageTotals(
+      organizationId,
+      connectionId,
+      token,
+      params,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getUnifiedCostTotalsAction(
+  connectionId: string,
+  params: GetUnifiedCostTotalsParams,
+): Promise<ActionResult<CoreUnifiedCostTotals>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await getUnifiedCostTotals(
       organizationId,
       connectionId,
       token,

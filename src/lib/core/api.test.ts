@@ -715,6 +715,271 @@ describe("cost summary totals", () => {
   });
 });
 
+describe("cost usage", () => {
+  it("lists cost usage rows with pagination and filter query params", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listCostUsage } = await import("./api");
+    const result = await listCostUsage("org-123", "conn-1", "test-token", {
+      limit: 25,
+      offset: 0,
+      serviceName: "Amazon EC2",
+      billingAccountId: "123456789012",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/cost-usage?limit=25&offset=0&service_name=Amazon+EC2&billing_account_id=123456789012",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("omits unset filters from the query string", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listCostUsage } = await import("./api");
+    await listCostUsage("org-123", "conn-1", "test-token", {
+      limit: 25,
+      offset: 0,
+    });
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).toContain("limit=25&offset=0");
+    expect(calledUrl).not.toContain("service_name=");
+    expect(calledUrl).not.toContain("billing_account_id=");
+    expect(calledUrl).not.toContain("target_id=");
+  });
+
+  it("surfaces a 403 as a CoreApiError when billing.read is not enabled", async () => {
+    const response = new Response(
+      JSON.stringify({
+        detail:
+          "Connection conn-1 does not have the billing.read capability enabled.",
+      }),
+      { status: 403 },
+    );
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listCostUsage, CoreApiError } = await import("./api");
+
+    await expect(
+      listCostUsage("org-123", "conn-1", "test-token", {
+        limit: 25,
+        offset: 0,
+      }),
+    ).rejects.toBeInstanceOf(CoreApiError);
+  });
+});
+
+describe("cost usage totals", () => {
+  it("requests totals with the period and metric query params", async () => {
+    const mockResponse = {
+      metric: "effective_cost",
+      period_start: "2026-08-01T00:00:00Z",
+      period_end: "2026-08-02T00:00:00Z",
+      total_amount: "12.50",
+      currency: "USD",
+      daily: [],
+    };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCostUsageTotals } = await import("./api");
+    const result = await getCostUsageTotals("org-123", "conn-1", "test-token", {
+      periodStart: "2026-08-01T00:00:00Z",
+      periodEnd: "2026-08-02T00:00:00Z",
+      metric: "effective_cost",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/cost-usage/totals?period_start=2026-08-01T00%3A00%3A00Z&period_end=2026-08-02T00%3A00%3A00Z&metric=effective_cost",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("omits metric from the query string when unset, letting Core default it", async () => {
+    const mockResponse = {
+      metric: "effective_cost",
+      period_start: "2026-08-01T00:00:00Z",
+      period_end: "2026-08-02T00:00:00Z",
+      total_amount: "0",
+      currency: null,
+      daily: [],
+    };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCostUsageTotals } = await import("./api");
+    await getCostUsageTotals("org-123", "conn-1", "test-token", {
+      periodStart: "2026-08-01T00:00:00Z",
+      periodEnd: "2026-08-02T00:00:00Z",
+    });
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).not.toContain("metric=");
+  });
+
+  it("surfaces a 403 as a CoreApiError when billing.read is not enabled", async () => {
+    const response = new Response(
+      JSON.stringify({
+        detail:
+          "Connection conn-1 does not have the billing.read capability enabled.",
+      }),
+      { status: 403 },
+    );
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCostUsageTotals, CoreApiError } = await import("./api");
+
+    await expect(
+      getCostUsageTotals("org-123", "conn-1", "test-token", {
+        periodStart: "2026-08-01T00:00:00Z",
+        periodEnd: "2026-08-02T00:00:00Z",
+      }),
+    ).rejects.toBeInstanceOf(CoreApiError);
+  });
+});
+
+describe("unified cost totals", () => {
+  it("requests totals with the period query params and no source branching", async () => {
+    const mockResponse = {
+      source: "cost_usage",
+      period_start: "2026-08-01T00:00:00Z",
+      period_end: "2026-08-02T00:00:00Z",
+      total_amount: "12.50",
+      currency: "USD",
+      is_estimated: false,
+    };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getUnifiedCostTotals } = await import("./api");
+    const result = await getUnifiedCostTotals(
+      "org-123",
+      "conn-1",
+      "test-token",
+      {
+        periodStart: "2026-08-01T00:00:00Z",
+        periodEnd: "2026-08-02T00:00:00Z",
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/costs/totals?period_start=2026-08-01T00%3A00%3A00Z&period_end=2026-08-02T00%3A00%3A00Z",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("surfaces a 403 as a CoreApiError when billing.read is not enabled", async () => {
+    const response = new Response(
+      JSON.stringify({
+        detail:
+          "Connection conn-1 does not have the billing.read capability enabled.",
+      }),
+      { status: 403 },
+    );
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getUnifiedCostTotals, CoreApiError } = await import("./api");
+
+    await expect(
+      getUnifiedCostTotals("org-123", "conn-1", "test-token", {
+        periodStart: "2026-08-01T00:00:00Z",
+        periodEnd: "2026-08-02T00:00:00Z",
+      }),
+    ).rejects.toBeInstanceOf(CoreApiError);
+  });
+});
+
+describe("purgeConnection", () => {
+  it("posts to the purge endpoint and returns per-table deletion counts", async () => {
+    const mockResponse = {
+      purge_counts: { sync_checkpoints: 3, sync_jobs: 25, resources: 152 },
+    };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { purgeConnection } = await import("./api");
+    const result = await purgeConnection("org-123", "conn-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/purge",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("surfaces a 409 as a CoreApiError when the connection still has historical data", async () => {
+    const response = new Response(
+      JSON.stringify({
+        detail:
+          "connection conn-1 cannot be removed: one or more of its targets still has historical sync/normalized data referencing it.",
+      }),
+      { status: 409 },
+    );
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { purgeConnection, CoreApiError } = await import("./api");
+
+    await expect(
+      purgeConnection("org-123", "conn-1", "test-token"),
+    ).rejects.toBeInstanceOf(CoreApiError);
+  });
+});
+
 describe("submitContactMessage", () => {
   it("posts the contact message payload without an auth header", async () => {
     const response = new Response(null, { status: 204 });

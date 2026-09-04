@@ -27,16 +27,34 @@ The Integrations dashboard treats Core's `connection_supported` response field a
 the source of truth for executable provider onboarding. Planned catalog providers
 remain visible with a disabled “Coming soon” action; provider slugs are never used as
 a frontend availability allowlist. The static sync dataset list (`src/lib/sync/datasets.ts`)
-mirrors only Core's currently runnable `DEFAULT_DATASETS` entries (`inventory.resources`
-and `billing.cost_summary` today).
+mirrors only Core's currently runnable `DEFAULT_DATASETS` entries (`inventory.resources`,
+`billing.cost_summary`, and `billing.cost_usage` today).
 
-A connection detail page's Billing tab reads `GET .../cost-summaries` — Core's
-AWS Cost Explorer-sourced `billing.cost_summary` data (`src/lib/billing/cost-summaries.ts`,
-`src/components/dashboard/cost-summary-panel.tsx`), deliberately narrower than the
-still-planned FOCUS/CUR-export-sourced `billing.cost_usage`. Unlike the Resources
-tab, this read 403s when `billing.read` isn't enabled on the connection rather than
-returning an empty page, so the page only fetches it server-side once that capability
-is already known to be enabled; the panel explains the gap otherwise.
+The `/dashboard/costs` page reads both of Core's billing datasets for the
+selected connection, deliberately narrower/richer siblings never summed against
+each other (`docs/SYNC_INGESTION_ARCHITECTURE.md` "Cost data" in the Core repo):
+
+- **Cost overview** — `GET .../costs/totals` (`src/components/dashboard/unified-cost-totals.tsx`),
+  Core's coverage-aware `BillingQueryService` read. Never branches on source
+  itself; always shows which dataset actually answered (a `FOCUS` or
+  `Cost Explorer` badge) and a rolling-30-day total plus previous-period diff.
+- **Cost Explorer breakdown** — `GET .../cost-summaries`(`/totals`) — Core's AWS
+  Cost Explorer-sourced `billing.cost_summary` data
+  (`src/lib/billing/cost-summaries.ts`, `src/components/dashboard/cost-summary-panel.tsx`):
+  period presets/custom range, per-cost-basis totals and daily chart, and raw
+  paginated rows filterable by service.
+- **FOCUS cost usage** — `GET .../cost-usage`(`/totals`) — Core's AWS FOCUS 1.2
+  Data-Export-sourced `billing.cost_usage` data (`src/lib/billing/cost-usage.ts`,
+  `src/components/dashboard/cost-usage-panel.tsx`): raw FOCUS detail rows
+  (service, resource, region, SKU, charge category) filterable by service and
+  billing account, with a `CostUsageMetric` selector (billed/effective/list/
+  contracted — all four already present per row, so switching metric never
+  re-fetches).
+
+All three read paths 403 when `billing.read` isn't enabled on the connection
+rather than returning an empty page (unlike the Resources tab), so the page only
+fetches them server-side once that capability is already known to be enabled;
+each panel explains the gap otherwise.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

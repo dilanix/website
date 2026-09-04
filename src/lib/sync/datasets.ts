@@ -17,6 +17,11 @@ export const SYNC_DATASETS = [
     label: "Cost Summary (AWS Cost Explorer)",
     requiredCapability: "billing.read",
   },
+  {
+    slug: "billing.cost_usage",
+    label: "Cost Usage (AWS FOCUS Data Export)",
+    requiredCapability: "billing.read",
+  },
 ] as const;
 
 export type SyncDataset = (typeof SYNC_DATASETS)[number];

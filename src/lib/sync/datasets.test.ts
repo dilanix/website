@@ -20,6 +20,7 @@ describe("eligibleSyncDatasets", () => {
 
     expect(result.map((dataset) => dataset.slug).sort()).toEqual([
       "billing.cost_summary",
+      "billing.cost_usage",
       "inventory.resources",
     ]);
   });
@@ -41,6 +42,7 @@ describe("eligibleSyncDatasets", () => {
   it("contains only datasets executable by the current Core registry", () => {
     expect(SYNC_DATASETS.map((dataset) => dataset.slug).sort()).toEqual([
       "billing.cost_summary",
+      "billing.cost_usage",
       "inventory.resources",
     ]);
   });
