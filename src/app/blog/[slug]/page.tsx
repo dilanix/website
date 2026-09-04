@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getBlogPosts, getBlogPostBySlug } from "@/lib/data/blog";
+import { siteConfig } from "@/config/site";
 import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Clock, ArrowRight } from "lucide-react";
@@ -35,8 +36,23 @@ export default async function BlogPostPage({
     notFound();
   }
 
+  const articleJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: post.title,
+    description: post.excerpt,
+    datePublished: post.publishedAt,
+    author: { "@type": "Organization", name: post.author?.name ?? siteConfig.name },
+    publisher: { "@type": "Organization", name: siteConfig.name },
+    mainEntityOfPage: `${siteConfig.url}/blog/${post.slug}`,
+  };
+
   return (
     <article className="py-16 sm:py-24">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }}
+      />
       <Container className="max-w-3xl">
         {/* Back navigation */}
         <Link

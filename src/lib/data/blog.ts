@@ -3,6 +3,90 @@ import type { BlogPost } from "@/types";
 
 const fallbackPosts: BlogPost[] = [
   {
+    slug: "aws-cost-explorer-vs-focus-cost-data",
+    title: "AWS Cost Explorer vs. FOCUS Cost Data: Which Should Drive Your Cost Optimization?",
+    excerpt:
+      "Cost Explorer and FOCUS 1.2 Data Export answer different questions. Here's how to tell which one you're actually looking at, and why AWS cost optimization work needs both.",
+    category: "AWS Cost Optimization",
+    readTime: "6 min read",
+    author: {
+      name: "Dilanix Engineering",
+      role: "Cost Platform Team",
+    },
+    publishedAt: "Sep 02, 2026",
+    status: "published",
+    content: `Most teams start AWS cost optimization with the AWS Cost Explorer console — and for a first pass, that's the right call. But once spend is high enough to justify a dedicated optimization effort, Cost Explorer's rolled-up totals stop being enough, and that's where FOCUS 1.2 Data Export becomes the more useful source.
+
+Here's the distinction that matters, and how to use both without confusing yourself about which number you're looking at.
+
+---
+
+### What Cost Explorer actually gives you
+
+AWS Cost Explorer aggregates billing data into service-level and account-level totals with a handful of grouping dimensions (service, linked account, usage type, tag). It's fast, it's built into the console, and it's the right tool for "is spend trending up or down this month."
+
+What it doesn't give you: consistent, resource-level detail across billed vs. effective vs. list vs. contracted cost, in one row, that you can filter by SKU or charge category. For that, you need a FOCUS export.
+
+### What FOCUS 1.2 gives you that Cost Explorer doesn't
+
+FOCUS (the FinOps Open Cost & Usage Specification) is a standardized billing export format maintained by the FinOps Foundation. AWS's FOCUS 1.2 Data Export produces resource-level rows that carry:
+
+- **Service, resource, and region** — not just a service category, but which specific resource generated the charge.
+- **SKU and charge category** — usage, purchase commitment, tax, credit, etc., broken out instead of netted into one number.
+- **Four cost metrics per row** — billed cost, effective cost, list cost, and contracted cost, so you can switch the lens (what you were actually charged vs. what a Savings Plan or Reserved Instance made it effectively cost) without re-running a query.
+
+That last point is the one that actually changes AWS cost optimization decisions. A resource that looks expensive at list cost might already be well-optimized once a commitment discount is applied at effective cost — and you can't tell the difference from a Cost Explorer total alone.
+
+---
+
+### A practical rule of thumb
+
+Use Cost Explorer to notice that something changed. Use FOCUS data to find out what, specifically, changed and whether it's worth acting on.
+
+If your organization is running AWS cost optimization purely off Cost Explorer dashboards, the fastest upgrade isn't a new tool — it's turning on a FOCUS 1.2 Data Export and asking the same questions at resource granularity. Dilanix CostOps reads both sources side by side for exactly this reason: Cost Explorer for the fast read, FOCUS for the one that holds up under scrutiny.`,
+  },
+  {
+    slug: "aws-cost-optimization-checklist-focus-data",
+    title: "A Practical AWS Cost Optimization Checklist Built Around FOCUS Data",
+    excerpt:
+      "A concrete, resource-level checklist for finding AWS cost optimization opportunities using FOCUS 1.2 billed, effective, list, and contracted cost fields.",
+    category: "AWS Cost Optimization",
+    readTime: "7 min read",
+    author: {
+      name: "Dilanix Infrastructure",
+      role: "Cloud Architecture Team",
+    },
+    publishedAt: "Aug 26, 2026",
+    status: "published",
+    content: `Generic AWS cost optimization advice ("right-size your instances," "delete unused volumes") is true but unhelpful without a way to find the specific resources it applies to. FOCUS 1.2 Data Export gives you the fields to make each of these checks concrete instead of anecdotal.
+
+---
+
+### 1. Compare list cost to effective cost, per resource
+
+If a resource's list cost and effective cost are nearly identical, it isn't covered by a Savings Plan or Reserved Instance — and depending on how consistently it runs, that's either fine (spiky, unpredictable usage) or a missed commitment-discount opportunity (steady, predictable usage). Sort by the gap between the two to find the highest-value candidates first.
+
+### 2. Group by SKU and charge category, not just service
+
+"EC2" as a line item hides the difference between on-demand compute, data transfer, and EBS volumes attached to those instances. FOCUS's charge-category field lets you separate usage charges from purchase commitments from credits, so a spend spike shows up as what it actually is instead of an undifferentiated jump in "EC2."
+
+### 3. Find resource-level cost with no matching usage signal
+
+Storage volumes, load balancers, and idle read replicas all show up as ordinary line items in a rolled-up total. At the resource level, a volume with steady billed cost and no corresponding compute activity is the pattern to flag — that's usually leftover infrastructure from a terminated instance or a finished experiment, not a workload that needs optimizing so much as deleting.
+
+### 4. Track contracted cost against actual commitment utilization
+
+Contracted cost tells you what you agreed to pay under a Savings Plan or Reserved Instance commitment. If effective cost across covered resources sits meaningfully below what the commitment was sized for, you're paying for capacity you aren't using — a different problem than resource-level waste, and one that only shows up when you can see contracted cost next to the resources it's meant to cover.
+
+### 5. Re-run the same checks per account, not just org-wide
+
+In a multi-account AWS setup, an org-wide FOCUS rollup can hide a badly optimized account behind several well-optimized ones. Scoping each of the checks above to one connected account at a time is what actually surfaces the account that needs attention.
+
+---
+
+None of this requires guesswork — it's a direct read of fields FOCUS 1.2 already exports. The gap is almost always tooling: whether your cost platform actually surfaces billed, effective, list, and contracted cost per resource, or just gives you one blended number per service. That gap is exactly what Dilanix CostOps's FOCUS cost usage view is built to close.`,
+  },
+  {
     slug: "reducing-llm-token-spend-in-production",
     title: "How to Reduce OpenAI & Anthropic Token Spend by 40% in Production",
     excerpt:

@@ -8,6 +8,7 @@ const columns = [
     title: "Products",
     links: [
       { label: "Overview", href: "/products" },
+      { label: "AWS Cost Optimization", href: "/solutions/aws-cost-optimization" },
     ],
   },
   {

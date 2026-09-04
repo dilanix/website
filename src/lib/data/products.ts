@@ -2,6 +2,54 @@ import type { Product, ProductDashboardSnapshot } from "@/types";
 
 const fallbackProducts: Product[] = [
   {
+    slug: "costops",
+    name: "Dilanix CostOps",
+    shortName: "CostOps",
+    eyebrow: "Featured Product",
+    headline: "AWS Cost Optimization & Multicloud Cost Visibility, Backed by FOCUS 1.2 Data",
+    description:
+      "Dilanix CostOps unifies AWS Cost Explorer and FOCUS 1.2 Data Export billing into one cost overview, so engineering and finance teams see where cloud spend actually goes and where AWS cost optimization opportunities are hiding — per account, per service, per resource.",
+    status: "active",
+    featured: true,
+    tag: "Live",
+    category: "Cloud Cost Optimization",
+    capabilities: [
+      { label: "AWS FOCUS 1.2 cost data export support" },
+      { label: "AWS Cost Explorer breakdown by service" },
+      { label: "Unified cost overview across billing sources" },
+      { label: "Per-connection, per-account cost visibility" },
+    ],
+    features: [
+      "AWS FOCUS 1.2 cost data export support",
+      "AWS Cost Explorer breakdown by service",
+      "Unified cost overview across billing sources",
+      "Per-connection, per-account cost visibility",
+    ],
+    highlights: [
+      { label: "Billing datasets", value: "FOCUS + Cost Explorer" },
+      { label: "Cost metrics", value: "Billed, effective, list, contracted" },
+    ],
+    faqs: [
+      {
+        question: "What is AWS FOCUS cost data, and why does it matter for cost optimization?",
+        answer:
+          "FOCUS (FinOps Open Cost & Usage Specification) is a standardized, resource-level AWS billing export. Unlike Cost Explorer's rolled-up totals, FOCUS 1.2 data exposes per-resource, per-SKU charge detail across billed, effective, list, and contracted cost — the granularity real AWS cost optimization work needs.",
+      },
+      {
+        question: "How is this different from using AWS Cost Explorer alone?",
+        answer:
+          "Cost Explorer is a great starting point but only shows one view of spend. Dilanix CostOps reads both AWS Cost Explorer and FOCUS data side by side in one cost overview, and always shows which dataset actually answered a given number, so you're never guessing which source to trust.",
+      },
+      {
+        question: "Does Dilanix CostOps support more than AWS?",
+        answer:
+          "The current focus is deep AWS cost optimization support via Cost Explorer and FOCUS 1.2 exports, with the connection model designed to extend to additional cloud providers as the product grows.",
+      },
+    ],
+    ctaLabel: "Talk to us about AWS cost optimization",
+    ctaHref: "/contact",
+  },
+  {
     slug: "dena",
     name: "Dena Cloud Storage",
     shortName: "Dena",
@@ -9,7 +57,7 @@ const fallbackProducts: Product[] = [
     headline: "High-Throughput Global Object & Block Storage for AI Datasets and Artifacts",
     description: "S3-compatible distributed object storage engineered for low-latency checkpointing and large dataset streaming.",
     status: "upcoming",
-    featured: true,
+    featured: false,
     tag: "Pipeline Q4",
     category: "Cloud Storage",
     capabilities: [
@@ -94,6 +142,29 @@ const fallbackProducts: Product[] = [
 ];
 
 const defaultDashboardSnapshots: Record<string, ProductDashboardSnapshot> = {
+  costops: {
+    monthlySpendUsd: 48600,
+    potentialSavingsUsd: 7300,
+    spendTrend: [
+      41200, 42800, 43350, 44950, 45100, 46800, 45950, 47010, 47460, 46990,
+      48610, 47280, 49150, 48600,
+    ],
+    breakdown: [
+      { label: "EC2 & Compute", amountUsd: 21400 },
+      { label: "S3 & Storage", amountUsd: 12800 },
+      { label: "RDS & Databases", amountUsd: 9600 },
+      { label: "Data Transfer", amountUsd: 4800 },
+    ],
+    recommendation: {
+      title: "AWS cost optimization opportunity detected",
+      description: "FOCUS cost data shows idle EC2 reservations and oversized RDS instances driving avoidable spend.",
+      monthlySavingUsd: 7300,
+      metrics: [
+        { label: "Optimization score", value: "72%" },
+        { label: "Cost data source", value: "FOCUS 1.2" },
+      ],
+    },
+  },
   dena: {
     monthlySpendUsd: 14200,
     potentialSavingsUsd: 2800,

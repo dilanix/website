@@ -16,7 +16,7 @@ const geistMono = localFont({
   variable: "--font-geist-mono",
 });
 
-const defaultTitle = `${siteConfig.name} — Software for problems worth solving`;
+const defaultTitle = `${siteConfig.name} — AWS Cost Optimization & Multicloud Cost Visibility`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
