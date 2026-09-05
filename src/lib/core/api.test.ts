@@ -62,6 +62,7 @@ describe("coreRequest", () => {
       last_error_at: null,
       last_error_code: null,
       created_at: "2026-08-21T10:00:00Z",
+      last_synced_at: null,
     };
     const response = new Response(JSON.stringify(mockConnection), {
       status: 201,

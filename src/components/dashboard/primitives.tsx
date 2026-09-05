@@ -47,9 +47,9 @@ export function Metric({
         {value}
       </dd>
       {detail ? (
-        <p className="text-muted-foreground mt-1.5 text-[11px] leading-4">
+        <div className="text-muted-foreground mt-1.5 text-[11px] leading-4">
           {detail}
-        </p>
+        </div>
       ) : null}
     </div>
   );

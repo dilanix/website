@@ -245,10 +245,15 @@ export interface CoreIntegrationConnection {
    * owned by the backend's IntegrationTarget, not writable here. */
   external_reference: string | null;
   last_verified_at: string | null;
+  /** Legacy field, never populated by the backend — do not render this. Use
+   * `last_synced_at` for dataset-sync freshness. */
   last_success_at: string | null;
   last_error_at: string | null;
   last_error_code: string | null;
   created_at: string;
+  /** Latest successful sync across this connection's datasets, aggregated
+   * from SyncCheckpoint. `null` if it has never completed a sync. */
+  last_synced_at: string | null;
 }
 export interface CreateConnectionInput {
   integration_id: string;

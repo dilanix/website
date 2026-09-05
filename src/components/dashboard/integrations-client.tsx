@@ -218,7 +218,7 @@ export function IntegrationsClient({
                           </span>
                           <span className="text-muted-foreground mt-0.5 flex items-center gap-1 text-[11px]">
                             <Clock3 size={11} />
-                            {formatLastSync(connection.last_success_at)}
+                            {formatLastSync(connection.last_synced_at)}
                           </span>
                         </span>
                         <span className="flex shrink-0 items-center gap-2">

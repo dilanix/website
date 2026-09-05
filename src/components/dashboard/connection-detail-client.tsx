@@ -422,8 +422,8 @@ export function ConnectionDetailClient({
                     Last successful sync
                   </dt>
                   <dd className="mt-1 text-sm">
-                    {connection.last_success_at
-                      ? new Date(connection.last_success_at).toLocaleString()
+                    {connection.last_synced_at
+                      ? new Date(connection.last_synced_at).toLocaleString()
                       : "Never"}
                   </dd>
                 </div>
