@@ -74,6 +74,23 @@ export function resourceStatusTone(
 /** Page size used for both the initial server fetch and client-side "Load more". */
 export const RESOURCES_PAGE_SIZE = 20;
 
+export function formatResourceRelativeTime(
+  iso: string,
+  now = Date.now(),
+): string {
+  const diffMs = Math.max(0, now - new Date(iso).getTime());
+  const seconds = Math.round(diffMs / 1000);
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
 /**
  * `lifecycle_status` (`CoreResource.lifecycle_status`) is Dilanix's own view of
  * whether a resource still authoritatively exists — independent from the

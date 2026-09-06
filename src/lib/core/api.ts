@@ -988,6 +988,80 @@ export function listResources(
   );
 }
 
+const RESOURCE_LOOKUP_LIFECYCLE_STATUSES = [
+  "active",
+  "missing",
+  "out_of_scope",
+] as const;
+
+export interface FindResourceParams {
+  category?: string | null;
+  resourceType?: string | null;
+  region?: string | null;
+  preferredLifecycleStatus?: string | null;
+}
+
+/**
+ * Resolves a single inventory resource through Core's paginated collection
+ * endpoint. Core does not currently expose a resource-by-id endpoint, so the
+ * current list filters are used as a fast first pass and a broad pass keeps a
+ * copied detail URL resilient if those filters become stale.
+ */
+export async function findResource(
+  organizationId: string,
+  connectionId: string,
+  resourceId: string,
+  token: string,
+  params: FindResourceParams = {},
+): Promise<CoreResource | null> {
+  const preferred = RESOURCE_LOOKUP_LIFECYCLE_STATUSES.find(
+    (status) => status === params.preferredLifecycleStatus,
+  );
+  const lifecycleStatuses = [
+    ...(preferred ? [preferred] : []),
+    ...RESOURCE_LOOKUP_LIFECYCLE_STATUSES.filter(
+      (status) => status !== preferred,
+    ),
+  ];
+
+  async function search(filters: {
+    category?: string | null;
+    resourceType?: string | null;
+    region?: string | null;
+  }) {
+    for (const lifecycleStatus of lifecycleStatuses) {
+      let offset = 0;
+      while (true) {
+        const page = await listResources(organizationId, connectionId, token, {
+          limit: 20,
+          offset,
+          ...filters,
+          lifecycleStatus,
+        });
+        const resource = page.items.find((item) => item.id === resourceId);
+        if (resource) return resource;
+        if (page.items.length === 0 || offset + page.items.length >= page.total)
+          break;
+        offset += page.items.length;
+      }
+    }
+    return null;
+  }
+
+  const filtered = {
+    category: params.category,
+    resourceType: params.resourceType,
+    region: params.region,
+  };
+  const resource = await search(filtered);
+  if (resource) return resource;
+
+  const usedFilters = Boolean(
+    params.category || params.resourceType || params.region,
+  );
+  return usedFilters ? search({}) : null;
+}
+
 export interface CoreResourceCategoryType {
   category: string;
   resource_type: string;

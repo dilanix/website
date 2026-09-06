@@ -1,59 +1,25 @@
 "use client";
-import {
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useState,
-  useTransition,
-} from "react";
-import {
-  ArrowUpDown,
-  ChevronDown,
-  Container,
-  Cpu,
-  Database,
-  HardDrive,
-  Network,
-  RefreshCw,
-  Search,
-  Server,
-  Workflow,
-  X,
-  Zap,
-} from "lucide-react";
+import type { Route } from "next";
+import Link from "next/link";
+import { type ReactNode, useMemo, useState, useTransition } from "react";
+import { ArrowUpDown, ChevronDown, RefreshCw, Search } from "lucide-react";
 import type { CoreResource, CoreResourceFilterOptions } from "@/lib/core/api";
 import {
   listResourcesAction,
   listResourceFiltersAction,
 } from "@/app/dashboard/integrations/actions";
 import {
-  formatCapacityAttributes,
-  formatSpecificationAttributes,
+  formatResourceRelativeTime,
   RESOURCE_LIFECYCLE_STATUS_LABELS,
   RESOURCES_PAGE_SIZE,
   resourceCategoryLabel,
   resourceLifecycleStatusLabel,
-  resourceLifecycleStatusTone,
   resourceStatusTone,
   resourceTypeLabel,
 } from "@/lib/inventory/resources";
 import { EmptyState, StatusBadge } from "./primitives";
+import { ResourceCategoryIcon } from "./resource-category-icon";
 import { cn } from "@/lib/utils";
-
-/** Renders as a plain conditional (never a dynamically-assigned component
- * reference) so it stays a stable JSX tag across renders. Falls back to a
- * generic Server icon for a category the frontend doesn't recognize yet, so a
- * new Core resource family never breaks this row, just shows a plain icon. */
-function CategoryIcon({ category, size }: { category: string; size: number }) {
-  if (category === "compute") return <Cpu size={size} />;
-  if (category === "database") return <Database size={size} />;
-  if (category === "container") return <Container size={size} />;
-  if (category === "network") return <Network size={size} />;
-  if (category === "storage") return <HardDrive size={size} />;
-  if (category === "cache") return <Zap size={size} />;
-  if (category === "orchestration") return <Workflow size={size} />;
-  return <Server size={size} />;
-}
 
 /** One labeled cluster of filter chips (e.g. "Category" or "Status") — grouping
  * keeps unrelated filter dimensions visually distinct instead of reading as one
@@ -143,286 +109,21 @@ function FilterSelect({
   );
 }
 
-/** `extra`/`capacity` entries are filtered against this before rendering — an
- * empty array/object (e.g. `attachments: []` on an unattached volume,
- * `listeners: []` on a load balancer whose listener lookup failed) carries no
- * information worth a row, the same "don't show nothing as if it were
- * something" spirit as Core's own "no fake capacity" rule. */
-function hasContent(value: unknown): boolean {
-  if (value === null || value === undefined || value === "") return false;
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === "object") return Object.keys(value).length > 0;
-  return true;
-}
-
-/** Renders one `extra` field's raw value. Most values are still plain
- * scalars/arrays-of-scalars (`String()` already reads fine for those — a
- * boolean as "true"/"false", an array joined by commas). A growing number of
- * AWS-inventory-enrichment fields are nested (`attachments`,
- * `container_definitions`, `runtime_platform`, `health_check`,
- * `default_encryption`, ...) — `JSON.stringify` for anything object-shaped is
- * the generic fallback so a new nested field never renders as the useless
- * literal string "[object Object]", without hardcoding per-field layouts. */
-function formatExtraValue(value: unknown): string {
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (Array.isArray(value)) {
-    if (value.every((item) => item === null || typeof item !== "object")) {
-      return value.join(", ");
-    }
-    return JSON.stringify(value);
-  }
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
-function formatRelativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const seconds = Math.round(diffMs / 1000);
-  if (seconds < 5) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
-
-function ResourceDetailsDrawer({
-  resource,
-  onClose,
-}: {
-  resource: CoreResource;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
-
-  const tagEntries = Object.entries(resource.tags);
-  const extraEntries = Object.entries(resource.extra).filter(([, value]) =>
-    hasContent(value),
-  );
-  const specificationAttributes = formatSpecificationAttributes(
-    resource.specification,
-  );
-  const capacityAttributes = hasContent(resource.capacity)
-    ? formatCapacityAttributes(resource.capacity)
-    : [];
-  const lifecycleSince =
-    resource.lifecycle_status === "missing"
-      ? resource.missing_since
-      : resource.lifecycle_status === "out_of_scope"
-        ? resource.out_of_scope_since
-        : null;
-
-  return (
-    <div
-      className="fixed inset-0 z-50"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="resource-details-title"
-    >
-      <button
-        type="button"
-        aria-label="Close resource details"
-        onClick={onClose}
-        className="bg-background/70 absolute inset-0 backdrop-blur-sm"
-      />
-      <aside className="border-border-soft bg-background absolute top-0 right-0 flex h-full w-full max-w-xl flex-col border-l shadow-2xl">
-        <div className="border-border-soft flex items-start justify-between gap-4 border-b p-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="bg-accent/10 text-accent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
-              <CategoryIcon category={resource.category} size={18} />
-            </span>
-            <div className="min-w-0">
-              <p id="resource-details-title" className="truncate font-semibold">
-                {resource.name ?? resource.external_id}
-              </p>
-              <p className="text-muted-foreground mt-0.5 truncate font-mono text-xs">
-                {resource.provider.toUpperCase()} ·{" "}
-                {resource.provider_resource_type}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-muted-foreground hover:bg-foreground/5 hover:text-foreground rounded-lg p-2"
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5">
-          <div className="flex flex-wrap gap-2">
-            <StatusBadge status={resourceStatusTone(resource.status)}>
-              {resource.status}
-            </StatusBadge>
-            {resource.lifecycle_status !== "active" ? (
-              <StatusBadge
-                status={resourceLifecycleStatusTone(resource.lifecycle_status)}
-              >
-                {resourceLifecycleStatusLabel(resource.lifecycle_status)}
-                {lifecycleSince
-                  ? ` · ${formatRelativeTime(lifecycleSince)}`
-                  : ""}
-              </StatusBadge>
-            ) : null}
-          </div>
-
-          <dl className="mt-6 grid grid-cols-2 gap-5 text-sm">
-            <div>
-              <dt className="text-muted-foreground text-xs">Provider</dt>
-              <dd className="mt-1 font-medium">
-                {resource.provider.toUpperCase()}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground text-xs">Region / zone</dt>
-              <dd className="mt-1 font-mono">
-                {resource.region}
-                {resource.zone ? ` / ${resource.zone}` : ""}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground text-xs">Category</dt>
-              <dd className="mt-1">
-                {resourceCategoryLabel(resource.category)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground text-xs">Type</dt>
-              <dd className="mt-1">
-                {resourceTypeLabel(resource.resource_type)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground text-xs">First seen</dt>
-              <dd className="mt-1">
-                {formatRelativeTime(resource.first_seen_at)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground text-xs">Last seen</dt>
-              <dd className="mt-1">
-                {formatRelativeTime(resource.last_seen_at)}
-              </dd>
-            </div>
-          </dl>
-
-          <div className="border-border-soft bg-card-strong/45 mt-6 rounded-xl border p-4">
-            <p className="text-muted-foreground text-xs">External ID</p>
-            <p className="mt-1 font-mono text-xs break-all">
-              {resource.external_id}
-            </p>
-          </div>
-
-          {resource.provider_sku ? (
-            specificationAttributes.length > 0 ? (
-              <div className="mt-6">
-                <p className="mb-2 text-sm font-semibold">Specification</p>
-                <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
-                  {specificationAttributes.map(({ key, label, value }) => (
-                    <div
-                      key={key}
-                      className="border-border-soft min-w-0 rounded-lg border p-3"
-                    >
-                      <dt className="text-muted-foreground truncate">
-                        {label}
-                      </dt>
-                      <dd className="mt-1 truncate font-mono">{value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            ) : (
-              <p className="text-muted-foreground mt-6 text-xs italic">
-                Technical specification not resolved yet.
-              </p>
-            )
-          ) : null}
-          {capacityAttributes.length > 0 ? (
-            <div className="mt-6">
-              <p className="mb-2 text-sm font-semibold">Capacity</p>
-              <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
-                {capacityAttributes.map(({ key, label, value }) => (
-                  <div
-                    key={key}
-                    className="border-border-soft min-w-0 rounded-lg border p-3"
-                  >
-                    <dt className="text-muted-foreground truncate">{label}</dt>
-                    <dd className="mt-1 truncate font-mono">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          ) : null}
-          {tagEntries.length > 0 ? (
-            <div className="mt-6">
-              <p className="mb-2 text-sm font-semibold">Tags</p>
-              <div className="flex flex-wrap gap-1.5 text-xs">
-                {tagEntries.map(([key, value]) => (
-                  <span
-                    key={key}
-                    className="border-foreground/10 bg-background rounded-full border px-2 py-1 font-mono"
-                  >
-                    {key}={value}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {extraEntries.length > 0 ? (
-            <div className="mt-6">
-              <p className="mb-2 text-sm font-semibold">Provider details</p>
-              <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
-                {extraEntries.map(([key, value]) => {
-                  const formatted = formatExtraValue(value);
-                  return (
-                    <div
-                      key={key}
-                      className="border-border-soft min-w-0 rounded-lg border p-3"
-                    >
-                      <dt className="text-muted-foreground truncate">{key}</dt>
-                      <dd className="mt-1 truncate font-mono" title={formatted}>
-                        {formatted}
-                      </dd>
-                    </div>
-                  );
-                })}
-              </dl>
-            </div>
-          ) : null}
-        </div>
-      </aside>
-    </div>
-  );
-}
-
 function ResourceRow({
   resource,
-  onSelect,
+  href,
 }: {
   resource: CoreResource;
-  onSelect: () => void;
+  href: Route;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
+    <Link
+      href={href}
       className="hover:bg-foreground/[0.025] grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)]"
     >
       <span className="flex min-w-0 items-center gap-3">
         <span className="bg-foreground/5 text-muted-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-          <CategoryIcon category={resource.category} size={15} />
+          <ResourceCategoryIcon category={resource.category} size={15} />
         </span>
         <span className="min-w-0">
           <span className="block truncate text-sm font-medium">
@@ -450,9 +151,9 @@ function ResourceRow({
         </StatusBadge>
       </span>
       <span className="text-muted-foreground hidden text-xs md:block">
-        {formatRelativeTime(resource.last_seen_at)}
+        {formatResourceRelativeTime(resource.last_seen_at)}
       </span>
-    </button>
+    </Link>
   );
 }
 
@@ -547,9 +248,6 @@ export function ResourcePanel({
   const [sortKey, setSortKey] = useState<ResourceSortKey>(initialSort);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">(
     initialSortDirection ?? (initialSort === "lastSeen" ? "desc" : "asc"),
-  );
-  const [selectedResource, setSelectedResource] = useState<CoreResource | null>(
-    null,
   );
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
@@ -909,7 +607,20 @@ export function ResourcePanel({
               <ResourceRow
                 key={resource.id}
                 resource={resource}
-                onSelect={() => setSelectedResource(resource)}
+                href={
+                  `/dashboard/resources/${resource.id}?${new URLSearchParams({
+                    connection: connectionId,
+                    ...(filters.category ? { category: filters.category } : {}),
+                    ...(filters.resourceType
+                      ? { type: filters.resourceType }
+                      : {}),
+                    ...(filters.region ? { region: filters.region } : {}),
+                    lifecycle: resource.lifecycle_status,
+                    ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
+                    sort: sortKey,
+                    direction: sortDirection,
+                  }).toString()}` as Route
+                }
               />
             ))}
           </div>
@@ -925,13 +636,6 @@ export function ResourcePanel({
         >
           {loadingMore ? "Loading…" : "Load more"}
         </button>
-      ) : null}
-
-      {selectedResource ? (
-        <ResourceDetailsDrawer
-          resource={selectedResource}
-          onClose={() => setSelectedResource(null)}
-        />
       ) : null}
     </div>
   );

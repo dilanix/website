@@ -523,6 +523,48 @@ describe("resources", () => {
     expect(calledUrl).toContain("lifecycle_status=missing");
   });
 
+  it("finds a resource across paginated collection results", async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index) => ({
+      id: `resource-${index}`,
+    }));
+    const requestedResource = { id: "resource-requested", name: "Production" };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: firstPage, total: 21 }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ items: [requestedResource], total: 21 }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { findResource } = await import("./api");
+    const result = await findResource(
+      "org-123",
+      "conn-1",
+      "resource-requested",
+      "test-token",
+      {
+        category: "compute",
+        resourceType: "compute.instance",
+        region: "us-east-1",
+        preferredLifecycleStatus: "active",
+      },
+    );
+
+    expect(result).toEqual(requestedResource);
+    const calledUrls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(calledUrls[0]).toContain(
+      "limit=20&offset=0&category=compute&resource_type=compute.instance&region=us-east-1&lifecycle_status=active",
+    );
+    expect(calledUrls[1]).toContain("limit=20&offset=20");
+  });
+
   it("fetches the distinct category/type/region filter options for a connection", async () => {
     const mockResponse = {
       category_types: [
