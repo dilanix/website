@@ -3,16 +3,18 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
 } from "react";
 import {
   AlertCircle,
   Ban,
-  Clock,
+  CalendarClock,
   ChevronRight,
   Loader2,
   RefreshCw,
+  Settings2,
   X,
 } from "lucide-react";
 import type {
@@ -406,6 +408,9 @@ export function SyncPanel({
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
   const [policies, setPolicies] = useState(initialPolicies);
+  const [policyDialogOpen, setPolicyDialogOpen] = useState(false);
+  const policyDialogTriggerRef = useRef<HTMLButtonElement>(null);
+  const policyDialogCloseRef = useRef<HTMLButtonElement>(null);
   const [savingPolicyDataset, setSavingPolicyDataset] = useState<string | null>(
     null,
   );
@@ -428,6 +433,31 @@ export function SyncPanel({
     }
     return map;
   }, [policies]);
+
+  const enabledPolicies = eligibleDatasets
+    .map((dataset) => policyByDataset.get(dataset.slug))
+    .filter((policy): policy is CoreSyncPolicy => Boolean(policy?.enabled));
+  const nextAutomaticRunAt = enabledPolicies
+    .map((policy) => policy.next_run_at)
+    .filter((value): value is string => Boolean(value))
+    .sort((left, right) => Date.parse(left) - Date.parse(right))[0];
+
+  useEffect(() => {
+    if (!policyDialogOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const trigger = policyDialogTriggerRef.current;
+    document.body.style.overflow = "hidden";
+    policyDialogCloseRef.current?.focus();
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setPolicyDialogOpen(false);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+      trigger?.focus();
+    };
+  }, [policyDialogOpen]);
 
   function applyPolicy(
     datasetSlug: string,
@@ -462,6 +492,11 @@ export function SyncPanel({
         ]);
       }
     });
+  }
+
+  function openPolicyDialog() {
+    setPolicyError("");
+    setPolicyDialogOpen(true);
   }
 
   const hasActiveRun = runs
@@ -645,88 +680,54 @@ export function SyncPanel({
   return (
     <div className="flex flex-col gap-4">
       {canSync ? (
-        <div className="border-foreground/10 flex flex-col gap-3 rounded-xl border p-4">
-          <div>
-            <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-              <Clock size={14} className="text-muted-foreground" />
-              Automatic sync
-            </h3>
-            <p className="text-muted-foreground mt-1 text-xs leading-5">
-              Keep a dataset fresh on a schedule instead of syncing it by hand
-              every time.
-            </p>
+        <div className="border-border-soft bg-card-strong/55 flex flex-col justify-between gap-4 rounded-xl border px-4 py-3.5 shadow-[0_10px_30px_var(--shadow-card)] sm:flex-row sm:items-center">
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              className={cn(
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                enabledPolicies.length > 0
+                  ? "bg-success/10 text-success"
+                  : "bg-foreground/5 text-muted-foreground",
+              )}
+            >
+              <CalendarClock size={17} />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <h3 className="text-sm font-semibold">Automatic sync</h3>
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    enabledPolicies.length > 0
+                      ? "bg-success"
+                      : "bg-muted-foreground/50",
+                  )}
+                  aria-hidden="true"
+                />
+                <span className="text-muted-foreground text-xs">
+                  {enabledPolicies.length === 0
+                    ? "No schedules enabled"
+                    : `${enabledPolicies.length} of ${eligibleDatasets.length} ${enabledPolicies.length === 1 ? "schedule" : "schedules"} enabled`}
+                </span>
+              </div>
+              <p className="text-muted-foreground mt-0.5 truncate text-xs">
+                {enabledPolicies.length === 0
+                  ? "Set a recurring schedule for each dataset."
+                  : nextAutomaticRunAt
+                    ? `Next sync ${formatNextRun(nextAutomaticRunAt)}`
+                    : "The scheduler is preparing the next run."}
+              </p>
+            </div>
           </div>
-          <div className="flex flex-col gap-2">
-            {eligibleDatasets.map((dataset) => {
-              const policy = policyByDataset.get(dataset.slug);
-              const enabled = policy?.enabled ?? false;
-              const intervalSeconds =
-                policy?.interval_seconds ?? SYNC_INTERVAL_PRESETS[0].seconds;
-              const saving = savingPolicyDataset === dataset.slug;
-              return (
-                <div
-                  key={dataset.slug}
-                  className="border-foreground/10 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm"
-                >
-                  <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={enabled}
-                      disabled={saving}
-                      onChange={(event) =>
-                        applyPolicy(dataset.slug, {
-                          enabled: event.target.checked,
-                        })
-                      }
-                      className="border-foreground/20 text-accent focus:ring-accent rounded disabled:opacity-50"
-                    />
-                    <span className="min-w-0">
-                      <span className="font-medium">{dataset.label}</span>
-                      <span className="text-muted-foreground ml-2 font-mono text-xs">
-                        {dataset.slug}
-                      </span>
-                    </span>
-                  </label>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <select
-                      value={intervalSeconds}
-                      disabled={!enabled || saving}
-                      onChange={(event) =>
-                        applyPolicy(dataset.slug, {
-                          intervalSeconds: Number(event.target.value),
-                        })
-                      }
-                      className="border-foreground/15 bg-background h-8 rounded-lg border px-2 text-xs disabled:opacity-50"
-                    >
-                      {SYNC_INTERVAL_PRESETS.map((preset) => (
-                        <option key={preset.seconds} value={preset.seconds}>
-                          {preset.label}
-                        </option>
-                      ))}
-                    </select>
-                    {saving ? (
-                      <Loader2
-                        size={13}
-                        className="text-muted-foreground animate-spin"
-                      />
-                    ) : enabled ? (
-                      <span
-                        className="text-muted-foreground font-mono text-xs whitespace-nowrap"
-                        title={policy?.next_run_at ?? undefined}
-                      >
-                        next: {formatNextRun(policy?.next_run_at ?? null)}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {policyError ? (
-            <p role="alert" className="text-sm text-red-500">
-              {policyError}
-            </p>
-          ) : null}
+          <button
+            ref={policyDialogTriggerRef}
+            type="button"
+            onClick={openPolicyDialog}
+            className="border-foreground/15 bg-background/70 hover:bg-foreground/5 inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium"
+          >
+            <Settings2 size={14} />
+            Configure
+          </button>
         </div>
       ) : null}
 
@@ -847,6 +848,175 @@ export function SyncPanel({
         >
           {loadingMore ? "Loading…" : "Load more"}
         </button>
+      ) : null}
+
+      {policyDialogOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+          <button
+            type="button"
+            aria-label="Close automatic sync settings"
+            onClick={() => setPolicyDialogOpen(false)}
+            className="bg-background/75 absolute inset-0 backdrop-blur-sm"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="automatic-sync-title"
+            aria-describedby="automatic-sync-description"
+            className="border-border-soft bg-background relative flex max-h-[min(46rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border shadow-2xl"
+          >
+            <div className="border-border-soft flex items-start justify-between gap-4 border-b px-5 py-4 sm:px-6 sm:py-5">
+              <div className="flex items-start gap-3">
+                <span className="bg-accent/10 text-accent mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+                  <CalendarClock size={17} />
+                </span>
+                <div>
+                  <h2
+                    id="automatic-sync-title"
+                    className="text-lg font-semibold tracking-tight"
+                  >
+                    Configure automatic sync
+                  </h2>
+                  <p
+                    id="automatic-sync-description"
+                    className="text-muted-foreground mt-1 text-xs leading-5"
+                  >
+                    Choose which datasets stay fresh automatically and how often
+                    each one runs.
+                  </p>
+                </div>
+              </div>
+              <button
+                ref={policyDialogCloseRef}
+                type="button"
+                onClick={() => setPolicyDialogOpen(false)}
+                aria-label="Close dialog"
+                className="text-muted-foreground hover:bg-foreground/5 hover:text-foreground rounded-lg p-2"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-3 overflow-y-auto p-5 sm:p-6">
+              {eligibleDatasets.map((dataset) => {
+                const policy = policyByDataset.get(dataset.slug);
+                const enabled = policy?.enabled ?? false;
+                const intervalSeconds =
+                  policy?.interval_seconds ?? SYNC_INTERVAL_PRESETS[0].seconds;
+                const saving = savingPolicyDataset === dataset.slug;
+                return (
+                  <div
+                    key={dataset.slug}
+                    className={cn(
+                      "border-border-soft rounded-xl border p-4 transition-colors",
+                      enabled ? "bg-accent/[0.045]" : "bg-card-strong/45",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <label className="flex min-w-0 cursor-pointer items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={enabled}
+                          disabled={saving}
+                          onChange={(event) =>
+                            applyPolicy(dataset.slug, {
+                              enabled: event.target.checked,
+                            })
+                          }
+                          className="border-foreground/20 text-accent focus:ring-accent mt-0.5 h-4 w-4 rounded disabled:opacity-50"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium">
+                            {dataset.label}
+                          </span>
+                          <span className="text-muted-foreground mt-0.5 block font-mono text-[11px] break-all">
+                            {dataset.slug}
+                          </span>
+                        </span>
+                      </label>
+                      {saving ? (
+                        <Loader2
+                          size={15}
+                          aria-label="Saving schedule"
+                          className="text-muted-foreground mt-0.5 shrink-0 animate-spin"
+                        />
+                      ) : (
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold tracking-wide uppercase",
+                            enabled
+                              ? "bg-success/10 text-success"
+                              : "bg-foreground/5 text-muted-foreground",
+                          )}
+                        >
+                          {enabled ? "Enabled" : "Off"}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="border-border-soft mt-4 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                      <label
+                        htmlFor={`sync-interval-${dataset.slug}`}
+                        className="text-muted-foreground text-xs"
+                      >
+                        Frequency
+                      </label>
+                      <div className="flex flex-wrap items-center gap-3">
+                        {enabled ? (
+                          <span
+                            className="text-muted-foreground text-[11px]"
+                            title={policy?.next_run_at ?? undefined}
+                          >
+                            Next: {formatNextRun(policy?.next_run_at ?? null)}
+                          </span>
+                        ) : null}
+                        <select
+                          id={`sync-interval-${dataset.slug}`}
+                          value={intervalSeconds}
+                          disabled={!enabled || saving}
+                          onChange={(event) =>
+                            applyPolicy(dataset.slug, {
+                              intervalSeconds: Number(event.target.value),
+                            })
+                          }
+                          className="border-foreground/15 bg-background h-9 min-w-36 rounded-lg border px-3 text-xs outline-none disabled:opacity-45"
+                        >
+                          {SYNC_INTERVAL_PRESETS.map((preset) => (
+                            <option key={preset.seconds} value={preset.seconds}>
+                              {preset.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {policyError ? (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-red-500/20 bg-red-500/8 px-3 py-2.5 text-sm text-red-500"
+                >
+                  {policyError}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="border-border-soft bg-card-strong/45 flex items-center justify-between gap-4 border-t px-5 py-4 sm:px-6">
+              <p className="text-muted-foreground hidden text-xs sm:block">
+                Changes are saved automatically.
+              </p>
+              <button
+                type="button"
+                onClick={() => setPolicyDialogOpen(false)}
+                className="bg-accent text-accent-foreground ml-auto rounded-lg px-4 py-2 text-sm font-medium"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {dialogOpen ? (
