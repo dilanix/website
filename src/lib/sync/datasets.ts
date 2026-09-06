@@ -24,7 +24,7 @@ export const SYNC_DATASETS = [
   },
   {
     slug: "metrics.utilization",
-    label: "Utilization Metrics (AWS CloudWatch, EC2)",
+    label: "Utilization Metrics (AWS CloudWatch)",
     requiredCapability: "metrics.read",
   },
 ] as const;
