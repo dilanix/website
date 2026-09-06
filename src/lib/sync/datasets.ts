@@ -22,6 +22,11 @@ export const SYNC_DATASETS = [
     label: "Cost Usage (AWS FOCUS Data Export)",
     requiredCapability: "billing.read",
   },
+  {
+    slug: "metrics.utilization",
+    label: "Utilization Metrics (AWS CloudWatch, EC2)",
+    requiredCapability: "metrics.read",
+  },
 ] as const;
 
 export type SyncDataset = (typeof SYNC_DATASETS)[number];

@@ -25,6 +25,14 @@ describe("eligibleSyncDatasets", () => {
     ]);
   });
 
+  it("returns metrics.utilization when metrics.read is enabled", () => {
+    const result = eligibleSyncDatasets(["metrics.read"]);
+
+    expect(result.map((dataset) => dataset.slug)).toEqual([
+      "metrics.utilization",
+    ]);
+  });
+
   it("returns an empty list when no capability is enabled", () => {
     expect(eligibleSyncDatasets([])).toEqual([]);
   });
@@ -44,6 +52,7 @@ describe("eligibleSyncDatasets", () => {
       "billing.cost_summary",
       "billing.cost_usage",
       "inventory.resources",
+      "metrics.utilization",
     ]);
   });
 });
