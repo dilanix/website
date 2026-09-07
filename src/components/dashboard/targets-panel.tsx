@@ -1,6 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
-import { Loader2, RefreshCw, ShieldOff, X } from "lucide-react";
+import { ChevronDown, Loader2, RefreshCw, ShieldOff, X } from "lucide-react";
 import type {
   CoreIntegrationTarget,
   IntegrationTargetStatus,
@@ -11,6 +11,7 @@ import {
   replaceTargetIdentityAction,
 } from "@/app/dashboard/integrations/actions";
 import { EmptyState, StatusBadge } from "./primitives";
+import { hasResourceMetadata, ResourceMetadata } from "./resource-metadata";
 
 /** Core returns targets oldest-first; the live one is what a user actually
  * cares about seeing first, especially right after a replace. */
@@ -53,6 +54,7 @@ function TargetRow({
 }) {
   const [pending, startTransition] = useTransition();
   const [replaceDialog, setReplaceDialog] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [error, setError] = useState("");
 
   function disable() {
@@ -119,6 +121,27 @@ function TargetRow({
       </div>
       {target.display_name ? (
         <p className="text-muted-foreground text-xs">{target.display_name}</p>
+      ) : null}
+      {hasResourceMetadata(target.provider_metadata) ? (
+        <div className="border-border-soft mt-1 border-t pt-3">
+          <button
+            type="button"
+            aria-expanded={detailsOpen}
+            onClick={() => setDetailsOpen((current) => !current)}
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-medium"
+          >
+            <ChevronDown
+              size={13}
+              className={detailsOpen ? "rotate-180" : undefined}
+            />
+            Provider metadata
+          </button>
+          {detailsOpen ? (
+            <div className="mt-3">
+              <ResourceMetadata metadata={target.provider_metadata} />
+            </div>
+          ) : null}
+        </div>
       ) : null}
       {error && !replaceDialog ? (
         <p role="alert" className="text-xs text-red-500">

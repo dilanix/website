@@ -1477,3 +1477,404 @@ export function getUnifiedCostTotals(
     token,
   );
 }
+
+export interface CoreMetricDatapoint {
+  id: string;
+  resource_id: string;
+  namespace: string;
+  metric_name: string;
+  statistic: string;
+  unit: string | null;
+  period_seconds: number;
+  timestamp: string;
+  value: number;
+}
+
+export interface CoreMetricDatapointListResponse {
+  items: CoreMetricDatapoint[];
+  total: number;
+}
+
+export interface ListMetricDatapointsParams {
+  resourceId: string;
+  limit: number;
+  offset: number;
+  namespace?: string | null;
+  metricName?: string | null;
+  start?: string | null;
+  end?: string | null;
+}
+
+/** Tenant-safe read path for the `metrics.utilization` dataset. */
+export function listMetricDatapoints(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  params: ListMetricDatapointsParams,
+) {
+  const query = new URLSearchParams({
+    resource_id: params.resourceId,
+    limit: String(params.limit),
+    offset: String(params.offset),
+  });
+  if (params.namespace) query.set("namespace", params.namespace);
+  if (params.metricName) query.set("metric_name", params.metricName);
+  if (params.start) query.set("start", params.start);
+  if (params.end) query.set("end", params.end);
+  return coreRequest<CoreMetricDatapointListResponse>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/metrics?${query.toString()}`,
+    token,
+  );
+}
+
+export type ApplicationStatus = "active" | "archived";
+
+export interface CoreApplication {
+  id: string;
+  organization_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: ApplicationStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateApplicationInput {
+  name: string;
+  slug: string;
+  description?: string | null;
+}
+
+export interface UpdateApplicationInput {
+  name?: string | null;
+  description?: string | null;
+  status?: ApplicationStatus | null;
+}
+
+export function listApplications(organizationId: string, token: string) {
+  return coreRequest<CoreApplication[]>(
+    `/v1/organizations/${organizationId}/applications`,
+    token,
+  );
+}
+
+export function getApplication(
+  organizationId: string,
+  applicationId: string,
+  token: string,
+) {
+  return coreRequest<CoreApplication>(
+    `/v1/organizations/${organizationId}/applications/${applicationId}`,
+    token,
+  );
+}
+
+export function createApplication(
+  organizationId: string,
+  token: string,
+  input: CreateApplicationInput,
+) {
+  return coreRequest<CoreApplication>(
+    `/v1/organizations/${organizationId}/applications`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateApplication(
+  organizationId: string,
+  applicationId: string,
+  token: string,
+  input: UpdateApplicationInput,
+) {
+  return coreRequest<CoreApplication>(
+    `/v1/organizations/${organizationId}/applications/${applicationId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export type ApplicationEnvironmentStatus = "active" | "archived";
+
+export interface CoreApplicationEnvironment {
+  id: string;
+  organization_id: string;
+  application_id: string;
+  name: string;
+  slug: string;
+  status: ApplicationEnvironmentStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateApplicationEnvironmentInput {
+  name: string;
+  slug: string;
+}
+
+export interface UpdateApplicationEnvironmentInput {
+  name?: string | null;
+  status?: ApplicationEnvironmentStatus | null;
+}
+
+export function listApplicationEnvironments(
+  organizationId: string,
+  applicationId: string,
+  token: string,
+) {
+  return coreRequest<CoreApplicationEnvironment[]>(
+    `/v1/organizations/${organizationId}/applications/${applicationId}/environments`,
+    token,
+  );
+}
+
+export function getApplicationEnvironment(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+  token: string,
+) {
+  return coreRequest<CoreApplicationEnvironment>(
+    `/v1/organizations/${organizationId}/applications/${applicationId}/environments/${environmentId}`,
+    token,
+  );
+}
+
+export function createApplicationEnvironment(
+  organizationId: string,
+  applicationId: string,
+  token: string,
+  input: CreateApplicationEnvironmentInput,
+) {
+  return coreRequest<CoreApplicationEnvironment>(
+    `/v1/organizations/${organizationId}/applications/${applicationId}/environments`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateApplicationEnvironment(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+  token: string,
+  input: UpdateApplicationEnvironmentInput,
+) {
+  return coreRequest<CoreApplicationEnvironment>(
+    `/v1/organizations/${organizationId}/applications/${applicationId}/environments/${environmentId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export type TelemetrySourceType =
+  | "otlp"
+  | "dilanix_python"
+  | "dilanix_php"
+  | "dilanix_go"
+  | "dilanix_node"
+  | "custom_http"
+  | "aws_cloudwatch"
+  | "cloudflare"
+  | "kubernetes";
+
+export type TelemetrySourceStatus = "active" | "archived";
+
+export interface CoreTelemetrySource {
+  id: string;
+  organization_id: string;
+  environment_id: string;
+  integration_target_id: string | null;
+  source_type: TelemetrySourceType;
+  name: string;
+  status: TelemetrySourceStatus;
+  configuration: Record<string, unknown>;
+  last_received_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTelemetrySourceInput {
+  source_type: TelemetrySourceType;
+  name: string;
+  integration_target_id?: string | null;
+  configuration?: Record<string, unknown>;
+}
+
+export interface UpdateTelemetrySourceInput {
+  name?: string | null;
+  status?: TelemetrySourceStatus | null;
+  configuration?: Record<string, unknown> | null;
+}
+
+function telemetrySourcesPath(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+) {
+  return `/v1/organizations/${organizationId}/applications/${applicationId}/environments/${environmentId}/telemetry-sources`;
+}
+
+export function listTelemetrySources(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+  token: string,
+) {
+  return coreRequest<CoreTelemetrySource[]>(
+    telemetrySourcesPath(organizationId, applicationId, environmentId),
+    token,
+  );
+}
+
+export function getTelemetrySource(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+  sourceId: string,
+  token: string,
+) {
+  return coreRequest<CoreTelemetrySource>(
+    `${telemetrySourcesPath(organizationId, applicationId, environmentId)}/${sourceId}`,
+    token,
+  );
+}
+
+export function createTelemetrySource(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+  token: string,
+  input: CreateTelemetrySourceInput,
+) {
+  return coreRequest<CoreTelemetrySource>(
+    telemetrySourcesPath(organizationId, applicationId, environmentId),
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateTelemetrySource(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+  sourceId: string,
+  token: string,
+  input: UpdateTelemetrySourceInput,
+) {
+  return coreRequest<CoreTelemetrySource>(
+    `${telemetrySourcesPath(organizationId, applicationId, environmentId)}/${sourceId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export type TelemetryIngestionScope =
+  | "telemetry:logs:write"
+  | "telemetry:traces:write"
+  | "telemetry:metrics:write"
+  | "telemetry:events:write";
+
+export interface CoreTelemetryIngestionToken {
+  id: string;
+  organization_id: string;
+  telemetry_source_id: string;
+  token_prefix: string;
+  scopes: TelemetryIngestionScope[];
+  is_revoked: boolean;
+  expires_at: string | null;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+export interface CoreTelemetryIngestionTokenCreated extends CoreTelemetryIngestionToken {
+  /** Returned only by create; Core never persists recoverable plaintext. */
+  token: string;
+}
+
+export interface CreateTelemetryIngestionTokenInput {
+  scopes: TelemetryIngestionScope[];
+  expires_at?: string | null;
+}
+
+function telemetryTokensPath(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+  sourceId: string,
+) {
+  return `${telemetrySourcesPath(organizationId, applicationId, environmentId)}/${sourceId}/tokens`;
+}
+
+export function listTelemetryIngestionTokens(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+  sourceId: string,
+  token: string,
+) {
+  return coreRequest<CoreTelemetryIngestionToken[]>(
+    telemetryTokensPath(organizationId, applicationId, environmentId, sourceId),
+    token,
+  );
+}
+
+export function createTelemetryIngestionToken(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+  sourceId: string,
+  token: string,
+  input: CreateTelemetryIngestionTokenInput,
+) {
+  return coreRequest<CoreTelemetryIngestionTokenCreated>(
+    telemetryTokensPath(organizationId, applicationId, environmentId, sourceId),
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function revokeTelemetryIngestionToken(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+  sourceId: string,
+  ingestionTokenId: string,
+  token: string,
+) {
+  return coreRequest<CoreTelemetryIngestionToken>(
+    `${telemetryTokensPath(organizationId, applicationId, environmentId, sourceId)}/${ingestionTokenId}/revoke`,
+    token,
+    { method: "POST" },
+  );
+}

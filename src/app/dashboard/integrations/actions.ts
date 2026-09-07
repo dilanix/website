@@ -27,6 +27,7 @@ import {
   deleteSyncPolicy,
   listResources,
   listResourceFilters,
+  listMetricDatapoints,
   listCostSummaries,
   getCostSummaryTotals,
   listCostUsage,
@@ -50,6 +51,8 @@ import {
   type CoreResourceListResponse,
   type CoreResourceFilterOptions,
   type ListResourcesParams,
+  type CoreMetricDatapointListResponse,
+  type ListMetricDatapointsParams,
   type CoreCostSummaryListResponse,
   type ListCostSummariesParams,
   type CoreCostSummaryTotals,
@@ -481,6 +484,24 @@ export async function listResourceFiltersAction(
   try {
     const { token, organizationId } = await context();
     const data = await listResourceFilters(organizationId, connectionId, token);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function listMetricDatapointsAction(
+  connectionId: string,
+  params: ListMetricDatapointsParams,
+): Promise<ActionResult<CoreMetricDatapointListResponse>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await listMetricDatapoints(
+      organizationId,
+      connectionId,
+      token,
+      params,
+    );
     return { data };
   } catch (error) {
     return { error: message(error) };

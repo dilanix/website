@@ -1,7 +1,12 @@
 import type { Metadata, Route } from "next";
 import { notFound } from "next/navigation";
 import { ResourceDetailView } from "@/components/dashboard/resource-detail-view";
-import { CoreApiError, findResource, getConnection } from "@/lib/core/api";
+import {
+  CoreApiError,
+  findResource,
+  getConnection,
+  listMetricDatapoints,
+} from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
 
 export const metadata: Metadata = {
@@ -84,11 +89,19 @@ export default async function ResourceDetailPage({
   );
   if (!resource) notFound();
 
+  const initialMetrics = await listMetricDatapoints(
+    organization.organization_id,
+    connectionId,
+    token,
+    { resourceId: resource.id, limit: 100, offset: 0 },
+  );
+
   return (
     <ResourceDetailView
       resource={resource}
       connectionName={connection.name}
       backHref={resourcesHref(query)}
+      initialMetrics={initialMetrics}
     />
   );
 }

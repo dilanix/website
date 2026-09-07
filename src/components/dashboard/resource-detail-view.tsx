@@ -12,7 +12,10 @@ import {
   MapPin,
   Tag,
 } from "lucide-react";
-import type { CoreResource } from "@/lib/core/api";
+import type {
+  CoreMetricDatapointListResponse,
+  CoreResource,
+} from "@/lib/core/api";
 import {
   formatCapacityAttributes,
   formatResourceRelativeTime,
@@ -24,29 +27,9 @@ import {
   resourceTypeLabel,
 } from "@/lib/inventory/resources";
 import { ResourceCategoryIcon } from "./resource-category-icon";
+import { ResourceMetricsPanel } from "./resource-metrics-panel";
+import { hasResourceMetadata, ResourceMetadata } from "./resource-metadata";
 import { StatusBadge } from "./primitives";
-
-function hasContent(value: unknown): boolean {
-  if (value === null || value === undefined || value === "") return false;
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === "object") return Object.keys(value).length > 0;
-  return true;
-}
-
-function fieldLabel(value: string): string {
-  const words = value.split(/[._-]+/).filter(Boolean);
-  return words
-    .map((word, index) =>
-      index === 0 ? word[0].toUpperCase() + word.slice(1) : word.toLowerCase(),
-    )
-    .join(" ");
-}
-
-function formatScalar(value: unknown): string {
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (Array.isArray(value)) return value.join(", ");
-  return String(value);
-}
 
 function ResourceTime({ value }: { value: string }) {
   return (
@@ -115,10 +98,12 @@ export function ResourceDetailView({
   resource,
   connectionName,
   backHref,
+  initialMetrics,
 }: {
   resource: CoreResource;
   connectionName: string;
   backHref: Route;
+  initialMetrics: CoreMetricDatapointListResponse;
 }) {
   const specificationAttributes = formatSpecificationAttributes(
     resource.specification,
@@ -127,9 +112,7 @@ export function ResourceDetailView({
   const tagEntries = Object.entries(resource.tags).sort(([left], [right]) =>
     left.localeCompare(right),
   );
-  const extraEntries = Object.entries(resource.extra)
-    .filter(([, value]) => hasContent(value))
-    .sort(([left], [right]) => left.localeCompare(right));
+  const hasProviderDetails = hasResourceMetadata(resource.extra);
   const lifecycleSince =
     resource.lifecycle_status === "missing"
       ? resource.missing_since
@@ -206,7 +189,7 @@ export function ResourceDetailView({
             <MapPin className="text-accent mt-0.5 shrink-0" size={16} />
             <div className="min-w-0">
               <dt className="text-muted-foreground text-[11px] tracking-wide uppercase">
-                Location
+                Region
               </dt>
               <dd className="mt-1 truncate font-mono text-sm">
                 {resource.region}
@@ -253,6 +236,18 @@ export function ResourceDetailView({
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(19rem,0.7fr)]">
         <div className="flex min-w-0 flex-col gap-6">
           <DetailCard
+            icon={<Activity size={17} />}
+            title="Utilization metrics"
+            description="Provider metrics collected by the metrics.utilization dataset."
+          >
+            <ResourceMetricsPanel
+              connectionId={resource.connection_id}
+              resourceId={resource.id}
+              initialMetrics={initialMetrics}
+            />
+          </DetailCard>
+
+          <DetailCard
             icon={<Gauge size={17} />}
             title="Technical configuration"
             description="Normalized specification and provisioned capacity reported by the provider."
@@ -293,39 +288,13 @@ export function ResourceDetailView({
             </div>
           </DetailCard>
 
-          {extraEntries.length > 0 ? (
+          {hasProviderDetails ? (
             <DetailCard
               icon={<Braces size={17} />}
               title="Provider details"
               description="Provider-specific metadata retained alongside the normalized inventory record."
             >
-              <dl className="grid gap-3 sm:grid-cols-2">
-                {extraEntries.map(([key, value]) => {
-                  const structured =
-                    typeof value === "object" && value !== null;
-                  return (
-                    <div
-                      key={key}
-                      className="border-border-soft bg-surface/35 min-w-0 rounded-xl border p-4"
-                    >
-                      <dt className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-                        {fieldLabel(key)}
-                      </dt>
-                      <dd className="mt-2 min-w-0 font-mono text-xs leading-5">
-                        {structured ? (
-                          <pre className="max-h-52 overflow-auto break-words whitespace-pre-wrap">
-                            {JSON.stringify(value, null, 2)}
-                          </pre>
-                        ) : (
-                          <span className="break-words">
-                            {formatScalar(value)}
-                          </span>
-                        )}
-                      </dd>
-                    </div>
-                  );
-                })}
-              </dl>
+              <ResourceMetadata metadata={resource.extra} />
             </DetailCard>
           ) : null}
         </div>

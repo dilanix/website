@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   Boxes,
+  PanelsTopLeft,
   Plug,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -34,6 +35,12 @@ const navGroups = [
         label: "Resources",
         href: "/dashboard/resources",
         icon: Boxes,
+        organizationRequired: true,
+      },
+      {
+        label: "Applications",
+        href: "/dashboard/applications",
+        icon: PanelsTopLeft,
         organizationRequired: true,
       },
       {

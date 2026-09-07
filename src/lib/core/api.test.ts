@@ -668,6 +668,106 @@ describe("cost summaries", () => {
   });
 });
 
+describe("metrics, applications, and telemetry", () => {
+  it("lists one resource's metric datapoints with series filters", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listMetricDatapoints } = await import("./api");
+    const result = await listMetricDatapoints(
+      "org-123",
+      "conn-1",
+      "test-token",
+      {
+        resourceId: "resource-1",
+        limit: 100,
+        offset: 0,
+        namespace: "AWS/ECS",
+        metricName: "CPUUtilization",
+        start: "2026-09-01T00:00:00Z",
+      },
+    );
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(url).toContain(
+      "/v1/organizations/org-123/integrations/connections/conn-1/metrics?",
+    );
+    expect(url).toContain("resource_id=resource-1");
+    expect(url).toContain("namespace=AWS%2FECS");
+    expect(url).toContain("metric_name=CPUUtilization");
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("creates an application with the backend contract", async () => {
+    const mockApplication = { id: "app-1", name: "Payments" };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockApplication), { status: 201 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { createApplication } = await import("./api");
+    await createApplication("org-123", "test-token", {
+      name: "Payments",
+      slug: "payments",
+      description: "Payment services",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/v1/organizations/org-123/applications"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          name: "Payments",
+          slug: "payments",
+          description: "Payment services",
+        }),
+      }),
+    );
+  });
+
+  it("creates a source-scoped telemetry token at the nested endpoint", async () => {
+    const created = { id: "token-1", token: "dtx_live_secret" };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(created), { status: 201 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { createTelemetryIngestionToken } = await import("./api");
+    const result = await createTelemetryIngestionToken(
+      "org-123",
+      "app-1",
+      "env-1",
+      "source-1",
+      "test-token",
+      { scopes: ["telemetry:logs:write"], expires_at: null },
+    );
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain(
+      "/applications/app-1/environments/env-1/telemetry-sources/source-1/tokens",
+    );
+    expect(init).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          scopes: ["telemetry:logs:write"],
+          expires_at: null,
+        }),
+      }),
+    );
+    expect(result).toEqual(created);
+  });
+});
+
 describe("cost summary totals", () => {
   it("requests totals with the period and cost basis query params", async () => {
     const mockResponse = {
