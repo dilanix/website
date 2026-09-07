@@ -37,7 +37,7 @@ export default async function Home() {
   }
 
   return (
-    <>
+    <div className="home-atmosphere relative isolate overflow-hidden">
       <HeroSection calendlyUrl={settings.calendlyUrl} />
       <ProductsSection product={featuredProduct} snapshot={snapshot} />
       <ProblemSolutionSection />
@@ -46,6 +46,6 @@ export default async function Home() {
       <TechnologySection categories={categories} />
       <CompanySection company={company} />
       <FinalCtaSection />
-    </>
+    </div>
   );
 }

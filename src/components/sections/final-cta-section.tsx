@@ -4,10 +4,10 @@ import { Reveal } from "@/components/common/reveal";
 
 export function FinalCtaSection() {
   return (
-    <section className="border-border-soft border-t py-24 sm:py-32">
+    <section className="relative pt-20 pb-24 sm:pt-24 sm:pb-32">
       <Container>
         <Reveal>
-          <div className="border-border-soft bg-card-strong/88 shadow-[0_24px_60px_var(--shadow-card)] relative overflow-hidden rounded-[1.9rem] border px-6 py-16 text-center sm:px-12 sm:py-20">
+          <div className="border-accent/14 relative overflow-hidden rounded-[2rem] border bg-[linear-gradient(145deg,color-mix(in_oklab,var(--card-strong)_88%,var(--accent)_12%),color-mix(in_oklab,var(--surface)_78%,var(--accent-secondary)_22%))] px-6 py-16 text-center shadow-[0_28px_76px_var(--shadow-brand)] sm:px-12 sm:py-20">
             <div
               aria-hidden="true"
               className="absolute top-1/2 left-[35%] h-72 w-[36rem] -translate-y-1/2 rounded-full opacity-18 blur-[92px]"

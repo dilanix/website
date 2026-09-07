@@ -24,18 +24,18 @@ export function TechnologySection({
   title?: string;
 }) {
   return (
-    <section className="border-border-soft border-t py-20 sm:py-24">
+    <section className="relative py-20 sm:py-28">
       <Container>
-        <h2 className="text-accent mb-10 text-xs font-semibold tracking-[0.18em] uppercase">
+        <h2 className="text-accent mb-10 text-center text-xs font-semibold tracking-[0.18em] uppercase">
           {title}
         </h2>
-        <div className="divide-border-soft flex flex-col divide-y sm:flex-row sm:divide-x sm:divide-y-0">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {categories.map((category, index) => {
             const Icon = icons[category.icon];
             return (
               <div
                 key={category.label}
-                className="flex flex-1 flex-col gap-2 py-6 first:pt-0 sm:px-6 sm:py-0 sm:first:pl-0 sm:last:pr-0"
+                className="border-border-soft/60 bg-card-strong/68 hover:border-accent/18 hover:bg-card-strong/88 flex min-h-36 flex-col gap-2 rounded-2xl border p-5 shadow-[0_14px_36px_var(--shadow-card)] backdrop-blur-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_22px_48px_var(--shadow-brand)]"
               >
                 <div className="text-muted-foreground flex items-center gap-2">
                   <Icon size={14} />

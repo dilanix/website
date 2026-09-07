@@ -8,7 +8,10 @@ const columns = [
     title: "Products",
     links: [
       { label: "Overview", href: "/products" },
-      { label: "AWS Cost Optimization", href: "/solutions/aws-cost-optimization" },
+      {
+        label: "AWS Cost Optimization",
+        href: "/solutions/aws-cost-optimization",
+      },
     ],
   },
   {
@@ -30,7 +33,7 @@ const columns = [
 
 export function Footer({ settings }: { settings: SiteSettings }) {
   return (
-    <footer className="border-border-soft mt-8 border-t">
+    <footer className="relative mt-8 before:absolute before:inset-x-[12%] before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,var(--border-soft),transparent)]">
       <Container className="grid gap-12 py-16 md:grid-cols-[1.5fr_repeat(3,1fr)] md:py-20">
         <div className="flex flex-col gap-4">
           <BrandLogo className="h-8 w-auto" />
