@@ -10,8 +10,12 @@ import {
 import {
   AlertCircle,
   Ban,
+  Boxes,
   CalendarClock,
   ChevronRight,
+  CircleDollarSign,
+  Database,
+  Gauge,
   HeartPulse,
   Loader2,
   RefreshCw,
@@ -22,6 +26,7 @@ import type {
   CoreSyncJob,
   CoreSyncJobAttempt,
   CoreSyncDatasetHealth,
+  CoreIntegrationTarget,
   CoreSyncPolicy,
   CoreSyncRun,
   CoreSyncRunDetail,
@@ -157,6 +162,27 @@ function datasetLabel(slug: string): string {
   );
 }
 
+function DatasetIcon({ dataset }: { dataset: string }) {
+  if (dataset === "inventory.resources") return <Boxes size={15} />;
+  if (dataset.startsWith("billing.")) return <CircleDollarSign size={15} />;
+  if (dataset === "metrics.utilization") return <Gauge size={15} />;
+  return <Database size={15} />;
+}
+
+function jobScope(job: CoreSyncJob): { label: string; value: string } {
+  if (!job.scope_key) return { label: "Scope", value: "All configured scopes" };
+  if (job.dataset.startsWith("billing.")) {
+    return { label: "Billing period", value: job.scope_key };
+  }
+  if (
+    job.dataset === "inventory.resources" ||
+    job.dataset === "metrics.utilization"
+  ) {
+    return { label: "Region", value: job.scope_key };
+  }
+  return { label: "Scope", value: job.scope_key };
+}
+
 function formatInterval(seconds: number | null): string {
   if (seconds === null) return "No schedule";
   const preset = SYNC_INTERVAL_PRESETS.find(
@@ -272,112 +298,277 @@ function JobAttemptHistory({
 
 function JobRow({
   job,
+  target,
   connectionId,
   syncRunId,
 }: {
   job: CoreSyncJob;
+  target?: CoreIntegrationTarget;
   connectionId: string;
   syncRunId: string;
 }) {
   const progress = stageProgress(job);
+  const scope = jobScope(job);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const targetName =
+    target?.display_name ??
+    target?.external_id ??
+    `Target ${job.target_id.slice(0, 8)}…`;
+
   return (
-    <div className="border-foreground/10 bg-background flex flex-col gap-2 rounded-lg border p-3 text-xs">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
+    <article className="border-foreground/10 bg-background overflow-hidden rounded-lg border text-xs">
+      <button
+        type="button"
+        aria-expanded={detailsOpen}
+        onClick={() => setDetailsOpen((current) => !current)}
+        className="hover:bg-foreground/[0.025] flex w-full items-center gap-3 p-3 text-left transition-colors"
+      >
+        <ChevronRight
+          size={14}
+          className={cn(
+            "text-muted-foreground shrink-0 transition-transform",
+            detailsOpen && "rotate-90",
+          )}
+        />
+        <span className="bg-accent/10 text-accent flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+          <DatasetIcon dataset={job.dataset} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">
+            {datasetLabel(job.dataset)}
+          </span>
+          <span className="text-muted-foreground mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="truncate">{targetName}</span>
+            {target?.display_name ? (
+              <span className="font-mono">{target.external_id}</span>
+            ) : null}
+            <span aria-hidden="true">·</span>
+            <span>
+              {scope.label}: <span className="font-mono">{scope.value}</span>
+            </span>
+          </span>
+        </span>
+        <span className="shrink-0">
           <StatusBadge status={jobStatusTone(job.status)}>
             {job.status}
           </StatusBadge>
-          <span className="font-mono">{job.dataset}</span>
+        </span>
+      </button>
+
+      {detailsOpen ? (
+        <div className="border-foreground/10 bg-foreground/[0.012] space-y-4 border-t p-4">
+          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              ["Read", job.records_read],
+              ["Created", job.records_created],
+              ["Updated", job.records_updated],
+              ["Deleted", job.records_deleted],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className="border-border-soft bg-background/60 rounded-lg border px-3 py-2.5"
+              >
+                <dt className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+                  {label}
+                </dt>
+                <dd className="mt-1 font-mono text-base font-semibold">
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          {progress && job.status === "running" ? (
+            <div className="flex items-center gap-2">
+              <div className="bg-foreground/10 h-1.5 flex-1 overflow-hidden rounded-full">
+                <div
+                  className="bg-accent h-full rounded-full transition-[width] duration-500 ease-out"
+                  style={{ width: `${progress.percent}%` }}
+                />
+              </div>
+              <span className="text-muted-foreground shrink-0 font-mono">
+                {progress.label}
+              </span>
+            </div>
+          ) : null}
+
+          <dl className="grid gap-x-5 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt className="text-muted-foreground">Dataset</dt>
+              <dd className="mt-0.5 font-mono">{job.dataset}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">{scope.label}</dt>
+              <dd className="mt-0.5 font-mono">{scope.value}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Strategy</dt>
+              <dd className="mt-0.5 capitalize">{job.strategy}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Attempt</dt>
+              <dd className="mt-0.5 font-mono">{job.attempt}</dd>
+            </div>
+          </dl>
+
           {job.collector_version || job.normalizer_version ? (
-            <span
-              className="border-foreground/10 text-muted-foreground rounded border px-1.5 py-0.5 font-mono text-[10px]"
+            <p
+              className="text-muted-foreground font-mono text-[11px]"
               title="Which version of the collector, and of its provider-field mapping, produced this job's data."
             >
               collector v{job.collector_version ?? "?"} · normalizer v
               {job.normalizer_version ?? "?"}
-            </span>
+            </p>
           ) : null}
-        </div>
-        <span className="text-muted-foreground font-mono" title={job.target_id}>
-          target {job.target_id.slice(0, 8)}…
-        </span>
-      </div>
 
-      {progress && job.status === "running" ? (
-        <div className="flex items-center gap-2">
-          <div className="bg-foreground/10 h-1.5 flex-1 overflow-hidden rounded-full">
+          {job.status === "running" && job.current_stage ? (
             <div
-              className="bg-accent h-full rounded-full transition-[width] duration-500 ease-out"
-              style={{ width: `${progress.percent}%` }}
-            />
-          </div>
-          <span className="text-muted-foreground shrink-0 font-mono">
-            {progress.label}
-          </span>
-        </div>
-      ) : null}
+              className="text-muted-foreground truncate font-mono"
+              title={job.current_stage}
+            >
+              last: {job.current_stage}
+            </div>
+          ) : null}
 
-      <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 font-mono">
-        <span>read {job.records_read}</span>
-        <span>created {job.records_created}</span>
-        <span>updated {job.records_updated}</span>
-        <span>deleted {job.records_deleted}</span>
-        <span className="flex items-center gap-1.5">
-          attempt {job.attempt}
-          <button
-            type="button"
-            onClick={() => setShowHistory((current) => !current)}
-            className="text-accent hover:underline"
-          >
-            {showHistory ? "hide history" : "history"}
-          </button>
-        </span>
-      </div>
+          {job.status === "running" && job.heartbeat_at ? (
+            <div className="text-accent flex items-center gap-1.5 font-mono">
+              <span className="bg-accent inline-block h-1.5 w-1.5 animate-pulse rounded-full" />
+              <span>
+                progress updated {formatRelativeTime(job.heartbeat_at)}
+              </span>
+            </div>
+          ) : null}
 
-      {showHistory ? (
-        <JobAttemptHistory
-          connectionId={connectionId}
-          syncRunId={syncRunId}
-          syncJobId={job.id}
-        />
-      ) : null}
+          {job.status === "cancel_requested" ? (
+            <div className="text-muted-foreground flex items-center gap-1.5 font-mono">
+              <Loader2 size={12} className="animate-spin" />
+              <span>
+                cancellation requested — waiting for a safe point to stop
+              </span>
+            </div>
+          ) : null}
 
-      {job.status === "running" && job.current_stage ? (
-        <div
-          className="text-muted-foreground truncate font-mono"
-          title={job.current_stage}
-        >
-          last: {job.current_stage}
-        </div>
-      ) : null}
+          {job.status === "failed" && job.error_message ? (
+            <p className="flex items-start gap-1.5 text-red-500/90">
+              <AlertCircle size={13} className="mt-0.5 shrink-0" />
+              <span>
+                {job.error_code ? (
+                  <span className="font-medium">{job.error_code}: </span>
+                ) : null}
+                {job.error_message}
+              </span>
+            </p>
+          ) : null}
 
-      {job.status === "running" && job.heartbeat_at ? (
-        <div className="text-accent flex items-center gap-1.5 font-mono">
-          <span className="bg-accent inline-block h-1.5 w-1.5 animate-pulse rounded-full" />
-          <span>progress updated {formatRelativeTime(job.heartbeat_at)}</span>
-        </div>
-      ) : null}
-
-      {job.status === "cancel_requested" ? (
-        <div className="text-muted-foreground flex items-center gap-1.5 font-mono">
-          <Loader2 size={12} className="animate-spin" />
-          <span>cancellation requested — waiting for a safe point to stop</span>
-        </div>
-      ) : null}
-
-      {job.status === "failed" && job.error_message ? (
-        <p className="flex items-start gap-1.5 text-red-500/90">
-          <AlertCircle size={13} className="mt-0.5 shrink-0" />
-          <span>
-            {job.error_code ? (
-              <span className="font-medium">{job.error_code}: </span>
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowHistory((current) => !current)}
+              className="text-accent text-xs font-medium hover:underline"
+            >
+              {showHistory ? "Hide attempt history" : "Show attempt history"}
+            </button>
+            {showHistory ? (
+              <div className="mt-3">
+                <JobAttemptHistory
+                  connectionId={connectionId}
+                  syncRunId={syncRunId}
+                  syncJobId={job.id}
+                />
+              </div>
             ) : null}
-            {job.error_message}
-          </span>
-        </p>
+          </div>
+        </div>
       ) : null}
-    </div>
+    </article>
+  );
+}
+
+function DatasetTotals({ jobs }: { jobs: CoreSyncJob[] }) {
+  const totals = new Map<
+    string,
+    {
+      tasks: number;
+      read: number;
+      created: number;
+      updated: number;
+      deleted: number;
+    }
+  >();
+
+  for (const job of jobs) {
+    const current = totals.get(job.dataset) ?? {
+      tasks: 0,
+      read: 0,
+      created: 0,
+      updated: 0,
+      deleted: 0,
+    };
+    current.tasks += 1;
+    current.read += job.records_read;
+    current.created += job.records_created;
+    current.updated += job.records_updated;
+    current.deleted += job.records_deleted;
+    totals.set(job.dataset, current);
+  }
+
+  if (totals.size === 0) return null;
+
+  return (
+    <section
+      aria-labelledby="dataset-totals-title"
+      className="border-border-soft bg-background rounded-xl border p-4"
+    >
+      <div>
+        <h4 id="dataset-totals-title" className="text-sm font-semibold">
+          Dataset totals
+        </h4>
+        <p className="text-muted-foreground mt-0.5 text-xs">
+          Aggregated across every target and scope task in this run.
+        </p>
+      </div>
+      <div className="mt-3 grid gap-3 xl:grid-cols-2">
+        {[...totals.entries()].map(([dataset, values]) => (
+          <article
+            key={dataset}
+            aria-label={`${datasetLabel(dataset)} totals`}
+            className="border-border-soft bg-foreground/[0.015] rounded-lg border p-3"
+          >
+            <div className="flex items-center gap-2">
+              <span className="bg-accent/10 text-accent flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+                <DatasetIcon dataset={dataset} />
+              </span>
+              <div className="min-w-0">
+                <h5 className="truncate text-xs font-medium">
+                  {datasetLabel(dataset)}
+                </h5>
+                <p className="text-muted-foreground text-[10px]">
+                  {values.tasks} {values.tasks === 1 ? "task" : "tasks"}
+                </p>
+              </div>
+            </div>
+            <dl className="mt-3 grid grid-cols-4 gap-2">
+              {[
+                ["Read", values.read],
+                ["Created", values.created],
+                ["Updated", values.updated],
+                ["Deleted", values.deleted],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <dt className="text-muted-foreground truncate text-[9px] font-semibold tracking-wide uppercase">
+                    {label}
+                  </dt>
+                  <dd className="mt-0.5 truncate font-mono text-sm font-semibold">
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -427,6 +618,7 @@ export function SyncPanel({
   initialTotal,
   initialPolicies,
   initialHealth,
+  initialTargets,
 }: {
   connectionId: string;
   enabledCapabilitySlugs: string[];
@@ -434,6 +626,7 @@ export function SyncPanel({
   initialTotal: number;
   initialPolicies: CoreSyncPolicy[];
   initialHealth: CoreSyncDatasetHealth[];
+  initialTargets: CoreIntegrationTarget[];
 }) {
   const [runs, setRuns] = useState(initialRuns);
   const [total, setTotal] = useState(initialTotal);
@@ -474,6 +667,10 @@ export function SyncPanel({
     [enabledCapabilitySlugs],
   );
   const canSync = eligibleDatasets.length > 0 || health.length > 0;
+  const targetById = useMemo(
+    () => new Map(initialTargets.map((target) => [target.id, target])),
+    [initialTargets],
+  );
 
   // Connection-wide policies only (`target_id: null`) — matching "Sync now",
   // which fans a manual run out across every verified target rather than asking
@@ -950,6 +1147,7 @@ export function SyncPanel({
           {runs.map((run) => {
             const expanded = expandedRunId === run.id;
             const duration = formatDuration(run.started_at, run.finished_at);
+            const jobs = jobsByRunId[run.id] ?? [];
             return (
               <div key={run.id}>
                 {/* A `div` (not `button`) — it needs to contain the Cancel
@@ -1001,14 +1199,18 @@ export function SyncPanel({
                         />
                       </div>
                     ) : (
-                      (jobsByRunId[run.id] ?? []).map((job) => (
-                        <JobRow
-                          key={job.id}
-                          job={job}
-                          connectionId={connectionId}
-                          syncRunId={run.id}
-                        />
-                      ))
+                      <>
+                        <DatasetTotals jobs={jobs} />
+                        {jobs.map((job) => (
+                          <JobRow
+                            key={job.id}
+                            job={job}
+                            target={targetById.get(job.target_id)}
+                            connectionId={connectionId}
+                            syncRunId={run.id}
+                          />
+                        ))}
+                      </>
                     )}
                   </div>
                 ) : null}

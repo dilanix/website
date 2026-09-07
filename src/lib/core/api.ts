@@ -648,6 +648,8 @@ export interface CoreSyncJob {
   id: string;
   target_id: string;
   dataset: string;
+  /** Region, billing period, or another collector-defined shard key. */
+  scope_key: string;
   strategy: SyncStrategy;
   status: SyncJobStatus;
   attempt: number;

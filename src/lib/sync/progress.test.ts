@@ -7,6 +7,7 @@ function job(overrides: Partial<CoreSyncJob>): CoreSyncJob {
     id: "job-1",
     target_id: "target-1",
     dataset: "inventory.resources",
+    scope_key: "",
     strategy: "snapshot",
     status: "running",
     attempt: 1,

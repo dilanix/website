@@ -4,9 +4,12 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
+  CoreIntegrationTarget,
+  CoreSyncJob,
   CoreSyncDatasetHealth,
   CoreSyncPolicy,
   CoreSyncRun,
@@ -63,15 +66,103 @@ const queuedRun: CoreSyncRun = {
   finished_at: null,
 };
 
-function renderPanel() {
+const completedRun: CoreSyncRun = {
+  ...queuedRun,
+  id: "run-completed",
+  status: "succeeded",
+  started_at: "2026-09-07T10:00:00Z",
+  finished_at: "2026-09-07T10:01:00Z",
+};
+
+const inventoryJob: CoreSyncJob = {
+  id: "job-1",
+  target_id: "target-1",
+  dataset: "inventory.resources",
+  scope_key: "",
+  strategy: "snapshot",
+  status: "succeeded",
+  attempt: 1,
+  records_read: 120,
+  records_created: 30,
+  records_updated: 80,
+  records_deleted: 10,
+  total_stages: null,
+  completed_stages: 0,
+  current_stage: null,
+  error_code: null,
+  error_message: null,
+  collector_version: "1",
+  normalizer_version: "2",
+  started_at: "2026-09-07T10:00:00Z",
+  heartbeat_at: "2026-09-07T10:01:00Z",
+  finished_at: "2026-09-07T10:01:00Z",
+  cancel_requested_at: null,
+};
+
+const costSummaryJob: CoreSyncJob = {
+  ...inventoryJob,
+  id: "job-2",
+  dataset: "billing.cost_summary",
+  scope_key: "2026-09",
+  strategy: "windowed",
+};
+
+const costUsageJob: CoreSyncJob = {
+  ...inventoryJob,
+  id: "job-3",
+  dataset: "billing.cost_usage",
+  scope_key: "2026-09",
+  strategy: "windowed",
+};
+
+const utilizationJob: CoreSyncJob = {
+  ...inventoryJob,
+  id: "job-4",
+  dataset: "metrics.utilization",
+  scope_key: "eu-west-1",
+  strategy: "windowed",
+};
+
+const utilizationJobIreland: CoreSyncJob = {
+  ...utilizationJob,
+  id: "job-5",
+  scope_key: "eu-west-2",
+  records_read: 5,
+  records_created: 2,
+  records_updated: 3,
+  records_deleted: 1,
+};
+
+const target: CoreIntegrationTarget = {
+  id: "target-1",
+  organization_id: "organization-1",
+  connection_id: "connection-1",
+  target_type: "aws_account",
+  external_id: "123456789012",
+  display_name: "Production AWS",
+  parent_target_id: null,
+  status: "verified",
+  provider_metadata: {},
+  created_at: "2026-09-01T10:00:00Z",
+  updated_at: "2026-09-01T10:00:00Z",
+};
+
+function renderPanel({
+  initialRuns = [],
+  initialTotal = 0,
+}: {
+  initialRuns?: CoreSyncRun[];
+  initialTotal?: number;
+} = {}) {
   render(
     <SyncPanel
       connectionId="connection-1"
       enabledCapabilitySlugs={["inventory.read"]}
-      initialRuns={[]}
-      initialTotal={0}
+      initialRuns={initialRuns}
+      initialTotal={initialTotal}
       initialPolicies={[enabledPolicy]}
       initialHealth={initialHealth}
+      initialTargets={[target]}
     />,
   );
 }
@@ -165,5 +256,74 @@ describe("SyncPanel automatic sync", () => {
         "inventory.resources",
       ]);
     });
+  });
+
+  it("shows per-dataset totals and identifies each compact task before revealing its counters", async () => {
+    actions.getSyncRunAction.mockResolvedValue({
+      data: {
+        ...completedRun,
+        jobs: [
+          inventoryJob,
+          costSummaryJob,
+          costUsageJob,
+          utilizationJob,
+          utilizationJobIreland,
+        ],
+      },
+    });
+    renderPanel({ initialRuns: [completedRun], initialTotal: 1 });
+
+    const runTrigger = screen.getByText("manual").closest('[role="button"]');
+    expect(runTrigger).not.toBeNull();
+    fireEvent.click(runTrigger!);
+
+    const task = await screen.findByRole("button", {
+      name: /Inventory Resources.*Production AWS.*All configured scopes.*succeeded/i,
+    });
+    expect(
+      screen.getByRole("button", {
+        name: /Cost Summary.*Billing period.*2026-09/i,
+      }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: /Cost Usage.*Billing period.*2026-09/i,
+      }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: /Utilization Metrics.*Region.*eu-west-1/i,
+      }),
+    ).not.toBeNull();
+
+    const datasetTotals = screen.getByRole("region", {
+      name: "Dataset totals",
+    });
+    const utilizationTotals = within(datasetTotals).getByLabelText(
+      "Utilization Metrics (AWS CloudWatch) totals",
+    );
+    const aggregate = within(utilizationTotals);
+    expect(aggregate.getByText("2 tasks")).not.toBeNull();
+    expect(aggregate.getByText("125")).not.toBeNull();
+    expect(aggregate.getByText("32")).not.toBeNull();
+    expect(aggregate.getByText("83")).not.toBeNull();
+    expect(aggregate.getByText("11")).not.toBeNull();
+    expect(screen.queryByText("Total read")).toBeNull();
+
+    fireEvent.click(task);
+
+    const taskCard = task.closest("article");
+    expect(taskCard).not.toBeNull();
+    const details = within(taskCard!);
+    expect(details.getByText("Read")).not.toBeNull();
+    expect(details.getByText("120")).not.toBeNull();
+    expect(details.getByText("Created")).not.toBeNull();
+    expect(details.getByText("30")).not.toBeNull();
+    expect(details.getByText("Updated")).not.toBeNull();
+    expect(details.getByText("80")).not.toBeNull();
+    expect(details.getByText("Deleted")).not.toBeNull();
+    expect(details.getByText("10")).not.toBeNull();
+    expect(details.getByText("inventory.resources")).not.toBeNull();
+    expect(details.getByText("snapshot")).not.toBeNull();
   });
 });

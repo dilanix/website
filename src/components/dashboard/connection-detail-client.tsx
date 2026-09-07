@@ -603,6 +603,7 @@ export function ConnectionDetailClient({
                 initialTotal={initialSyncTotal}
                 initialPolicies={initialSyncPolicies}
                 initialHealth={initialSyncHealth}
+                initialTargets={initialTargets}
               />
             </Section>
           </div>
