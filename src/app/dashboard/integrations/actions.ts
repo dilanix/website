@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { getAccessToken } from "@/lib/auth/session";
 import { getMe } from "@/lib/auth/api";
+import { automaticSyncErrorMessage } from "@/lib/sync/errors";
 import {
   createConnection,
   updateConnection,
@@ -18,6 +19,7 @@ import {
   disableTarget,
   replaceTargetIdentity,
   startSync,
+  getSyncHealth,
   listSyncRuns,
   getSyncRun,
   getSyncJobAttempts,
@@ -42,6 +44,7 @@ import {
   type CoreVerifyAwsConnectionResult,
   type CoreIntegrationTarget,
   type CoreSyncRun,
+  type CoreSyncHealthListResponse,
   type CoreSyncRunDetail,
   type CoreSyncRunListResponse,
   type CoreSyncJobAttempt,
@@ -326,14 +329,34 @@ export async function removeConnectionScopeAction(
 
 export async function startSyncAction(
   connectionId: string,
-  datasets: string[],
+  datasets?: string[],
 ): Promise<ActionResult<CoreSyncRun>> {
   try {
     const { token, organizationId } = await context();
-    const data = await startSync(organizationId, connectionId, token, {
-      datasets,
-    });
+    const data = await startSync(
+      organizationId,
+      connectionId,
+      token,
+      datasets === undefined ? {} : { datasets },
+    );
     revalidatePath(`/dashboard/integrations/${connectionId}`);
+    return { data };
+  } catch (error) {
+    return {
+      error:
+        datasets === undefined
+          ? (automaticSyncErrorMessage(error) ?? message(error))
+          : message(error),
+    };
+  }
+}
+
+export async function getSyncHealthAction(
+  connectionId: string,
+): Promise<ActionResult<CoreSyncHealthListResponse>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await getSyncHealth(organizationId, connectionId, token);
     return { data };
   } catch (error) {
     return { error: message(error) };

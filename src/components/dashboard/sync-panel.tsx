@@ -12,6 +12,7 @@ import {
   Ban,
   CalendarClock,
   ChevronRight,
+  HeartPulse,
   Loader2,
   RefreshCw,
   Settings2,
@@ -20,16 +21,19 @@ import {
 import type {
   CoreSyncJob,
   CoreSyncJobAttempt,
+  CoreSyncDatasetHealth,
   CoreSyncPolicy,
   CoreSyncRun,
   CoreSyncRunDetail,
   SyncJobAttemptOutcome,
   SyncJobStatus,
+  SyncDatasetHealthStatus,
   SyncRunStatus,
 } from "@/lib/core/api";
 import {
   cancelSyncAction,
   getSyncJobAttemptsAction,
+  getSyncHealthAction,
   getSyncRunAction,
   listSyncRunsAction,
   setSyncPolicyAction,
@@ -37,6 +41,7 @@ import {
 } from "@/app/dashboard/integrations/actions";
 import {
   eligibleSyncDatasets,
+  SYNC_DATASETS,
   SYNC_INTERVAL_PRESETS,
   SYNC_RUNS_PAGE_SIZE,
 } from "@/lib/sync/datasets";
@@ -122,6 +127,47 @@ function formatNextRun(iso: string | null): string {
   if (hours < 48) return `in ${hours}h`;
   const days = Math.round(hours / 24);
   return `in ${days}d`;
+}
+
+function syncHealthLabel(status: SyncDatasetHealthStatus): string {
+  return {
+    healthy: "Healthy",
+    degraded: "Degraded",
+    delayed: "Delayed",
+    failing: "Failing",
+    never_synced: "Never synced",
+  }[status];
+}
+
+function syncHealthTone(
+  status: SyncDatasetHealthStatus,
+): "success" | "neutral" | "warning" {
+  if (status === "healthy") return "success";
+  if (status === "never_synced") return "neutral";
+  return "warning";
+}
+
+function datasetLabel(slug: string): string {
+  return (
+    SYNC_DATASETS.find((dataset) => dataset.slug === slug)?.label ??
+    slug
+      .split(/[._-]+/)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ")
+  );
+}
+
+function formatInterval(seconds: number | null): string {
+  if (seconds === null) return "No schedule";
+  const preset = SYNC_INTERVAL_PRESETS.find(
+    (candidate) => candidate.seconds === seconds,
+  );
+  if (preset) return preset.label;
+  if (seconds % 86_400 === 0)
+    return `Every ${seconds / 86_400} ${seconds === 86_400 ? "day" : "days"}`;
+  if (seconds % 3_600 === 0)
+    return `Every ${seconds / 3_600} ${seconds === 3_600 ? "hour" : "hours"}`;
+  return `Every ${seconds}s`;
 }
 
 /** Merges a freshly-polled first page into the currently-held list, keeping any
@@ -380,12 +426,14 @@ export function SyncPanel({
   initialRuns,
   initialTotal,
   initialPolicies,
+  initialHealth,
 }: {
   connectionId: string;
   enabledCapabilitySlugs: string[];
   initialRuns: CoreSyncRun[];
   initialTotal: number;
   initialPolicies: CoreSyncPolicy[];
+  initialHealth: CoreSyncDatasetHealth[];
 }) {
   const [runs, setRuns] = useState(initialRuns);
   const [total, setTotal] = useState(initialTotal);
@@ -397,6 +445,7 @@ export function SyncPanel({
     null,
   );
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [syncMode, setSyncMode] = useState<"auto" | "manual">("auto");
   const [selectedDatasets, setSelectedDatasets] = useState<Set<string>>(
     new Set(),
   );
@@ -416,12 +465,15 @@ export function SyncPanel({
   );
   const [policyError, setPolicyError] = useState("");
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
+  const [health, setHealth] = useState(initialHealth);
+  const [healthRefreshing, setHealthRefreshing] = useState(false);
+  const [healthError, setHealthError] = useState("");
 
   const eligibleDatasets = useMemo(
     () => eligibleSyncDatasets(enabledCapabilitySlugs),
     [enabledCapabilitySlugs],
   );
-  const canSync = eligibleDatasets.length > 0;
+  const canSync = eligibleDatasets.length > 0 || health.length > 0;
 
   // Connection-wide policies only (`target_id: null`) — matching "Sync now",
   // which fans a manual run out across every verified target rather than asking
@@ -490,6 +542,19 @@ export function SyncPanel({
           ),
           result.data!,
         ]);
+        setHealth((current) =>
+          current.map((entry) =>
+            entry.dataset === datasetSlug
+              ? {
+                  ...entry,
+                  policy_enabled: result.data!.enabled,
+                  interval_seconds: result.data!.enabled
+                    ? result.data!.interval_seconds
+                    : null,
+                }
+              : entry,
+          ),
+        );
       }
     });
   }
@@ -502,6 +567,27 @@ export function SyncPanel({
   const hasActiveRun = runs
     .slice(0, SYNC_RUNS_PAGE_SIZE)
     .some((run) => ACTIVE_RUN_STATUSES.has(run.status));
+
+  const refreshHealth = useCallback(async () => {
+    setHealthRefreshing(true);
+    setHealthError("");
+    const result = await getSyncHealthAction(connectionId);
+    setHealthRefreshing(false);
+    if (result.error) {
+      setHealthError(result.error);
+      return;
+    }
+    if (result.data) setHealth(result.data.items);
+  }, [connectionId]);
+
+  const previousHasActiveRun = useRef(hasActiveRun);
+
+  useEffect(() => {
+    if (previousHasActiveRun.current && !hasActiveRun) {
+      void refreshHealth();
+    }
+    previousHasActiveRun.current = hasActiveRun;
+  }, [hasActiveRun, refreshHealth]);
 
   // Keeps the run list itself (status badges, duration, "Load more" totals)
   // fresh. Per-job progress for the *expanded* run is handled below by a live
@@ -587,6 +673,7 @@ export function SyncPanel({
 
   function openDialog() {
     setDialogError("");
+    setSyncMode("auto");
     setSelectedDatasets(
       new Set(eligibleDatasets.length === 1 ? [eligibleDatasets[0].slug] : []),
     );
@@ -607,7 +694,7 @@ export function SyncPanel({
     startTransition(async () => {
       const result = await startSyncAction(
         connectionId,
-        Array.from(selectedDatasets),
+        syncMode === "manual" ? Array.from(selectedDatasets) : undefined,
       );
       if (result.error) {
         setDialogError(result.error);
@@ -679,6 +766,97 @@ export function SyncPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      <section
+        aria-labelledby="sync-health-heading"
+        className="border-border-soft bg-card-strong/55 rounded-xl border p-4 shadow-[0_10px_30px_var(--shadow-card)]"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="bg-accent/10 text-accent flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+              <HeartPulse size={17} />
+            </span>
+            <div>
+              <h3 id="sync-health-heading" className="text-sm font-semibold">
+                Dataset sync health
+              </h3>
+              <p className="text-muted-foreground mt-0.5 text-xs leading-5">
+                Freshness and reliability for each enabled dataset, independent
+                of connection verification.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refreshHealth()}
+            disabled={healthRefreshing}
+            aria-label="Refresh sync health"
+            className="border-foreground/15 bg-background/70 hover:bg-foreground/5 inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium disabled:opacity-50"
+          >
+            <RefreshCw
+              size={13}
+              className={healthRefreshing ? "animate-spin" : undefined}
+            />
+            Refresh
+          </button>
+        </div>
+
+        {health.length > 0 ? (
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {health.map((entry) => (
+              <article
+                key={entry.dataset}
+                className="border-border-soft bg-background/45 rounded-xl border p-3.5"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {datasetLabel(entry.dataset)}
+                    </p>
+                    <p className="text-muted-foreground mt-0.5 truncate font-mono text-[11px]">
+                      {entry.dataset}
+                    </p>
+                  </div>
+                  <StatusBadge status={syncHealthTone(entry.status)}>
+                    {syncHealthLabel(entry.status)}
+                  </StatusBadge>
+                </div>
+                <dl className="border-border-soft mt-3 grid grid-cols-2 gap-3 border-t pt-3 text-xs">
+                  <div>
+                    <dt className="text-muted-foreground">Last successful</dt>
+                    <dd
+                      className="mt-1 font-medium"
+                      title={entry.last_successful_sync_at ?? undefined}
+                    >
+                      {entry.last_successful_sync_at
+                        ? formatRelativeTime(entry.last_successful_sync_at)
+                        : "Never"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Schedule</dt>
+                    <dd className="mt-1 font-medium">
+                      {entry.policy_enabled
+                        ? formatInterval(entry.interval_seconds)
+                        : "Not enabled"}
+                    </dd>
+                  </div>
+                </dl>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="border-border-soft text-muted-foreground mt-4 rounded-xl border border-dashed px-4 py-5 text-sm">
+            No enabled datasets are available for health evaluation.
+          </p>
+        )}
+
+        {healthError ? (
+          <p role="alert" className="mt-3 text-sm text-red-500">
+            {healthError}
+          </p>
+        ) : null}
+      </section>
+
       {canSync ? (
         <div className="border-border-soft bg-card-strong/55 flex flex-col justify-between gap-4 rounded-xl border px-4 py-3.5 shadow-[0_10px_30px_var(--shadow-card)] sm:flex-row sm:items-center">
           <div className="flex min-w-0 items-center gap-3">
@@ -733,8 +911,8 @@ export function SyncPanel({
 
       <div className="flex items-center justify-between gap-4">
         <p className="text-muted-foreground max-w-md text-sm leading-6">
-          Start a manual sync to pull the latest data for this connection.
-          Datasets require a matching capability to be enabled first.
+          Start an on-demand sync to pull the latest data for this connection.
+          Core can select every eligible dataset automatically.
         </p>
         <button
           onClick={openDialog}
@@ -754,7 +932,7 @@ export function SyncPanel({
       {runs.length === 0 ? (
         <EmptyState
           title="No syncs yet"
-          description="Run a manual sync to see history and job status here."
+          description="Run an on-demand sync to see history and job status here."
           actions={
             canSync ? (
               <button
@@ -1033,7 +1211,7 @@ export function SyncPanel({
                   Start sync
                 </h2>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  Choose which datasets to sync now.
+                  Let Core plan eligible datasets or select a specific subset.
                 </p>
               </div>
               <button
@@ -1045,33 +1223,102 @@ export function SyncPanel({
               </button>
             </div>
 
-            <div className="mt-5 space-y-2">
-              {eligibleDatasets.map((dataset) => {
-                const selected = selectedDatasets.has(dataset.slug);
-                return (
-                  <label
-                    key={dataset.slug}
-                    className="border-foreground/10 hover:bg-foreground/[0.02] flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm transition-colors"
-                  >
+            <fieldset className="mt-5">
+              <legend className="text-muted-foreground mb-2 text-[11px] font-semibold tracking-wide uppercase">
+                Dataset planning
+              </legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label
+                  className={cn(
+                    "cursor-pointer rounded-xl border p-3 transition-colors",
+                    syncMode === "auto"
+                      ? "border-accent/40 bg-accent/[0.06]"
+                      : "border-foreground/10 hover:bg-foreground/[0.02]",
+                  )}
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium">
                     <input
-                      type="checkbox"
-                      checked={selected}
-                      onChange={() => toggleDataset(dataset.slug)}
-                      className="border-foreground/20 text-accent focus:ring-accent rounded"
+                      type="radio"
+                      name="sync-mode"
+                      value="auto"
+                      checked={syncMode === "auto"}
+                      onChange={() => setSyncMode("auto")}
+                      className="border-foreground/20 text-accent focus:ring-accent"
                     />
-                    <span className="flex-1">
-                      <span className="font-medium">{dataset.label}</span>
-                      <span className="text-muted-foreground ml-2 font-mono text-xs">
-                        {dataset.slug}
+                    Automatic
+                  </span>
+                  <span className="text-muted-foreground mt-1.5 block pl-6 text-xs leading-5">
+                    Core selects datasets from product access and connection
+                    capabilities.
+                  </span>
+                </label>
+                <label
+                  className={cn(
+                    "rounded-xl border p-3 transition-colors",
+                    eligibleDatasets.length === 0
+                      ? "cursor-not-allowed opacity-50"
+                      : "cursor-pointer",
+                    syncMode === "manual"
+                      ? "border-accent/40 bg-accent/[0.06]"
+                      : "border-foreground/10 hover:bg-foreground/[0.02]",
+                  )}
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <input
+                      type="radio"
+                      name="sync-mode"
+                      value="manual"
+                      checked={syncMode === "manual"}
+                      disabled={eligibleDatasets.length === 0}
+                      onChange={() => setSyncMode("manual")}
+                      className="border-foreground/20 text-accent focus:ring-accent"
+                    />
+                    Select manually
+                  </span>
+                  <span className="text-muted-foreground mt-1.5 block pl-6 text-xs leading-5">
+                    Run only the datasets selected below.
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+
+            {syncMode === "manual" ? (
+              <div className="mt-4 space-y-2">
+                {eligibleDatasets.map((dataset) => {
+                  const selected = selectedDatasets.has(dataset.slug);
+                  return (
+                    <label
+                      key={dataset.slug}
+                      className="border-foreground/10 hover:bg-foreground/[0.02] flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleDataset(dataset.slug)}
+                        className="border-foreground/20 text-accent focus:ring-accent rounded"
+                      />
+                      <span className="flex-1">
+                        <span className="font-medium">{dataset.label}</span>
+                        <span className="text-muted-foreground ml-2 font-mono text-xs">
+                          {dataset.slug}
+                        </span>
                       </span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="border-border-soft bg-foreground/[0.02] text-muted-foreground mt-4 rounded-lg border px-3 py-2.5 text-xs leading-5">
+                The request will omit the datasets field so Core can use the
+                current entitlement and capability rules.
+              </p>
+            )}
 
             {dialogError ? (
-              <p role="alert" className="mt-4 text-sm text-red-500">
+              <p
+                role="alert"
+                className="mt-4 rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2.5 text-sm leading-6 text-amber-700 dark:text-amber-300"
+              >
                 {dialogError}
               </p>
             ) : null}
@@ -1086,7 +1333,10 @@ export function SyncPanel({
               </button>
               <button
                 onClick={submitStartSync}
-                disabled={pending || selectedDatasets.size === 0}
+                disabled={
+                  pending ||
+                  (syncMode === "manual" && selectedDatasets.size === 0)
+                }
                 className="bg-accent text-accent-foreground rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
               >
                 {pending ? "Starting…" : "Start sync"}

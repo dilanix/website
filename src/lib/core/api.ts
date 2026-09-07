@@ -730,7 +730,9 @@ export interface CoreSyncRunListResponse {
 }
 
 export interface StartSyncInput {
-  datasets: string[];
+  /** Omit to let Core plan all datasets allowed by product entitlements and
+   * the connection's enabled capabilities. An explicit empty list is invalid. */
+  datasets?: string[];
   target_id?: string | null;
 }
 
@@ -759,6 +761,33 @@ export function listSyncRuns(
 ) {
   return coreRequest<CoreSyncRunListResponse>(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/syncs?limit=${params.limit}&offset=${params.offset}`,
+    token,
+  );
+}
+
+export type SyncDatasetHealthStatus =
+  "healthy" | "degraded" | "delayed" | "failing" | "never_synced";
+
+export interface CoreSyncDatasetHealth {
+  dataset: string;
+  status: SyncDatasetHealthStatus;
+  last_successful_sync_at: string | null;
+  policy_enabled: boolean;
+  interval_seconds: number | null;
+}
+
+export interface CoreSyncHealthListResponse {
+  items: CoreSyncDatasetHealth[];
+}
+
+/** Per-dataset operational health, separate from connection verification. */
+export function getSyncHealth(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+) {
+  return coreRequest<CoreSyncHealthListResponse>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync-health`,
     token,
   );
 }

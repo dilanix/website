@@ -127,6 +127,70 @@ describe("sync", () => {
     expect(result).toEqual(mockRun);
   });
 
+  it("omits datasets when Core should plan the sync automatically", async () => {
+    const mockRun = {
+      id: "run-auto",
+      organization_id: "org-123",
+      connection_id: "conn-1",
+      trigger: "manual",
+      status: "queued",
+      created_at: "2026-09-07T10:00:00Z",
+      started_at: null,
+      finished_at: null,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockRun), { status: 201 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { startSync } = await import("./api");
+    await startSync("org-123", "conn-1", "test-token", {});
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/syncs",
+      ),
+      expect.objectContaining({ body: "{}" }),
+    );
+  });
+
+  it("reads per-dataset sync health", async () => {
+    const mockHealth = {
+      items: [
+        {
+          dataset: "inventory.resources",
+          status: "healthy",
+          last_successful_sync_at: "2026-09-07T09:00:00Z",
+          policy_enabled: true,
+          interval_seconds: 3600,
+        },
+      ],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockHealth), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getSyncHealth } = await import("./api");
+    const result = await getSyncHealth("org-123", "conn-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/sync-health",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockHealth);
+  });
+
   it("lists sync runs with pagination query params", async () => {
     const mockResponse = { items: [], total: 0 };
     const response = new Response(JSON.stringify(mockResponse), {

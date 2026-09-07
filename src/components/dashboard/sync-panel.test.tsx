@@ -6,12 +6,17 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CoreSyncPolicy } from "@/lib/core/api";
+import type {
+  CoreSyncDatasetHealth,
+  CoreSyncPolicy,
+  CoreSyncRun,
+} from "@/lib/core/api";
 import { SyncPanel } from "./sync-panel";
 
 const actions = vi.hoisted(() => ({
   cancelSyncAction: vi.fn(),
   getSyncJobAttemptsAction: vi.fn(),
+  getSyncHealthAction: vi.fn(),
   getSyncRunAction: vi.fn(),
   listSyncRunsAction: vi.fn(),
   setSyncPolicyAction: vi.fn(),
@@ -37,6 +42,27 @@ const enabledPolicy: CoreSyncPolicy = {
   updated_at: "2026-09-06T10:00:00Z",
 };
 
+const initialHealth: CoreSyncDatasetHealth[] = [
+  {
+    dataset: "inventory.resources",
+    status: "delayed",
+    last_successful_sync_at: "2026-09-06T10:00:00Z",
+    policy_enabled: true,
+    interval_seconds: 3 * 3600,
+  },
+];
+
+const queuedRun: CoreSyncRun = {
+  id: "run-1",
+  organization_id: "organization-1",
+  connection_id: "connection-1",
+  trigger: "manual",
+  status: "queued",
+  created_at: "2026-09-07T10:00:00Z",
+  started_at: null,
+  finished_at: null,
+};
+
 function renderPanel() {
   render(
     <SyncPanel
@@ -45,11 +71,21 @@ function renderPanel() {
       initialRuns={[]}
       initialTotal={0}
       initialPolicies={[enabledPolicy]}
+      initialHealth={initialHealth}
     />,
   );
 }
 
 describe("SyncPanel automatic sync", () => {
+  it("shows backend-projected health separately for each dataset", () => {
+    renderPanel();
+
+    expect(screen.getByText("Dataset sync health")).not.toBeNull();
+    expect(screen.getByText("Delayed")).not.toBeNull();
+    expect(screen.getByText("Every 3 hours")).not.toBeNull();
+    expect(screen.getByText("Last successful")).not.toBeNull();
+  });
+
   it("shows a compact summary and moves schedule controls into a modal", () => {
     renderPanel();
 
@@ -87,6 +123,47 @@ describe("SyncPanel automatic sync", () => {
     });
     await waitFor(() => {
       expect(screen.getByText("No schedules enabled")).not.toBeNull();
+    });
+  });
+
+  it("uses backend automatic planning by default", async () => {
+    actions.startSyncAction.mockResolvedValue({ data: queuedRun });
+    renderPanel();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Sync now" })[0]);
+
+    expect(
+      (screen.getByRole("radio", { name: /Automatic/ }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start sync" }));
+
+    await waitFor(() => {
+      expect(actions.startSyncAction).toHaveBeenCalledWith(
+        "connection-1",
+        undefined,
+      );
+    });
+  });
+
+  it("keeps explicit dataset selection as an optional mode", async () => {
+    actions.startSyncAction.mockResolvedValue({ data: queuedRun });
+    renderPanel();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Sync now" })[0]);
+    fireEvent.click(screen.getByRole("radio", { name: /Select manually/ }));
+
+    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(
+      true,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start sync" }));
+
+    await waitFor(() => {
+      expect(actions.startSyncAction).toHaveBeenCalledWith("connection-1", [
+        "inventory.resources",
+      ]);
     });
   });
 });

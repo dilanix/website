@@ -5,6 +5,7 @@ import {
   CoreApiError,
   getConnection,
   getConnectionAwsSetup,
+  getSyncHealth,
   listIntegrations,
   listIntegrationCapabilities,
   listConnectionCapabilities,
@@ -57,6 +58,7 @@ export default async function ConnectionDetailPage({
     targets,
     syncRuns,
     syncPolicies,
+    syncHealth,
   ] = await Promise.all([
     listIntegrations(token),
     listIntegrationCapabilities(connection.integration_id, token),
@@ -74,6 +76,7 @@ export default async function ConnectionDetailPage({
       offset: 0,
     }),
     listSyncPolicies(organization.organization_id, connectionId, token),
+    getSyncHealth(organization.organization_id, connectionId, token),
   ]);
   const integration =
     integrations.find((item) => item.id === connection.integration_id) ?? null;
@@ -100,6 +103,7 @@ export default async function ConnectionDetailPage({
         initialSyncRuns={syncRuns.items}
         initialSyncTotal={syncRuns.total}
         initialSyncPolicies={syncPolicies.items}
+        initialSyncHealth={syncHealth.items}
       />
     </div>
   );

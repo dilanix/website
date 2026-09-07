@@ -25,6 +25,7 @@ import type {
   CoreIntegrationConnection,
   CoreIntegrationTarget,
   CoreSyncPolicy,
+  CoreSyncDatasetHealth,
   CoreSyncRun,
   IntegrationConnectionStatus,
 } from "@/lib/core/api";
@@ -73,6 +74,7 @@ export function ConnectionDetailClient({
   initialSyncRuns,
   initialSyncTotal,
   initialSyncPolicies,
+  initialSyncHealth,
 }: {
   connection: CoreIntegrationConnection;
   integrationName: string;
@@ -85,6 +87,7 @@ export function ConnectionDetailClient({
   initialSyncRuns: CoreSyncRun[];
   initialSyncTotal: number;
   initialSyncPolicies: CoreSyncPolicy[];
+  initialSyncHealth: CoreSyncDatasetHealth[];
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ConnectionDetailTab>(initialTab);
@@ -599,6 +602,7 @@ export function ConnectionDetailClient({
                 initialRuns={initialSyncRuns}
                 initialTotal={initialSyncTotal}
                 initialPolicies={initialSyncPolicies}
+                initialHealth={initialSyncHealth}
               />
             </Section>
           </div>
