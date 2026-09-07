@@ -10,6 +10,10 @@ import {
   createApplicationEnvironment,
   createTelemetryIngestionToken,
   createTelemetrySource,
+  deleteApplication,
+  deleteApplicationEnvironment,
+  deleteTelemetryIngestionToken,
+  deleteTelemetrySource,
   revokeTelemetryIngestionToken,
   updateApplication,
   updateApplicationEnvironment,
@@ -28,6 +32,7 @@ export type ApplicationActionResult<T = undefined> = {
 
 const idSchema = z.uuid();
 const nameSchema = z.string().trim().min(1).max(255);
+const confirmationNameSchema = z.string().min(1).max(255);
 const slugSchema = z
   .string()
   .trim()
@@ -132,6 +137,33 @@ export async function updateApplicationAction(
   }
 }
 
+export async function deleteApplicationAction(
+  applicationId: string,
+  confirmName: string,
+): Promise<ApplicationActionResult<{ deletedId: string }>> {
+  const parsed = z
+    .object({
+      applicationId: idSchema,
+      confirmName: confirmationNameSchema,
+    })
+    .safeParse({ applicationId, confirmName });
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    await deleteApplication(
+      organizationId,
+      parsed.data.applicationId,
+      parsed.data.confirmName,
+      token,
+    );
+    revalidatePath("/dashboard/applications");
+    return { data: { deletedId: parsed.data.applicationId } };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
 export async function createEnvironmentAction(
   applicationId: string,
   input: { name: string; slug: string },
@@ -187,6 +219,36 @@ export async function updateEnvironmentAction(
       `/dashboard/applications/${applicationId}/environments/${environmentId}`,
     );
     return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function deleteEnvironmentAction(
+  applicationId: string,
+  environmentId: string,
+  confirmName: string,
+): Promise<ApplicationActionResult<{ deletedId: string }>> {
+  const parsed = z
+    .object({
+      applicationId: idSchema,
+      environmentId: idSchema,
+      confirmName: confirmationNameSchema,
+    })
+    .safeParse({ applicationId, environmentId, confirmName });
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    await deleteApplicationEnvironment(
+      organizationId,
+      parsed.data.applicationId,
+      parsed.data.environmentId,
+      parsed.data.confirmName,
+      token,
+    );
+    revalidatePath(`/dashboard/applications/${applicationId}`);
+    return { data: { deletedId: parsed.data.environmentId } };
   } catch (error) {
     return { error: message(error) };
   }
@@ -280,6 +342,41 @@ export async function updateTelemetrySourceAction(
   }
 }
 
+export async function deleteTelemetrySourceAction(
+  applicationId: string,
+  environmentId: string,
+  sourceId: string,
+  confirmName: string,
+): Promise<ApplicationActionResult<{ deletedId: string }>> {
+  const parsed = z
+    .object({
+      applicationId: idSchema,
+      environmentId: idSchema,
+      sourceId: idSchema,
+      confirmName: confirmationNameSchema,
+    })
+    .safeParse({ applicationId, environmentId, sourceId, confirmName });
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    await deleteTelemetrySource(
+      organizationId,
+      parsed.data.applicationId,
+      parsed.data.environmentId,
+      parsed.data.sourceId,
+      parsed.data.confirmName,
+      token,
+    );
+    revalidatePath(
+      `/dashboard/applications/${applicationId}/environments/${environmentId}`,
+    );
+    return { data: { deletedId: parsed.data.sourceId } };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
 export async function createTelemetryTokenAction(
   applicationId: string,
   environmentId: string,
@@ -346,6 +443,41 @@ export async function revokeTelemetryTokenAction(
       `/dashboard/applications/${applicationId}/environments/${environmentId}`,
     );
     return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function deleteTelemetryTokenAction(
+  applicationId: string,
+  environmentId: string,
+  sourceId: string,
+  ingestionTokenId: string,
+): Promise<ApplicationActionResult<{ deletedId: string }>> {
+  const parsed = z
+    .object({
+      applicationId: idSchema,
+      environmentId: idSchema,
+      sourceId: idSchema,
+      ingestionTokenId: idSchema,
+    })
+    .safeParse({ applicationId, environmentId, sourceId, ingestionTokenId });
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    await deleteTelemetryIngestionToken(
+      organizationId,
+      parsed.data.applicationId,
+      parsed.data.environmentId,
+      parsed.data.sourceId,
+      parsed.data.ingestionTokenId,
+      token,
+    );
+    revalidatePath(
+      `/dashboard/applications/${applicationId}/environments/${environmentId}`,
+    );
+    return { data: { deletedId: parsed.data.ingestionTokenId } };
   } catch (error) {
     return { error: message(error) };
   }

@@ -2,13 +2,15 @@
 
 import type { Route } from "next";
 import Link from "next/link";
-import { Archive, Boxes, Plus, RotateCcw, X } from "lucide-react";
+import { Archive, Boxes, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useState, useTransition } from "react";
 import {
   createApplicationAction,
+  deleteApplicationAction,
   updateApplicationAction,
 } from "@/app/dashboard/applications/actions";
 import type { CoreApplication } from "@/lib/core/api";
+import { DestructiveActionDialog } from "./destructive-action-dialog";
 import { EmptyState, StatusBadge } from "./primitives";
 
 function sortApplications(applications: CoreApplication[]) {
@@ -35,6 +37,9 @@ export function ApplicationsClient({
     sortApplications(initialApplications),
   );
   const [createOpen, setCreateOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<CoreApplication | null>(
+    null,
+  );
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
@@ -68,6 +73,23 @@ export function ApplicationsClient({
     });
   }
 
+  function deleteApplication(confirmName?: string) {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setError("");
+    startTransition(async () => {
+      const result = await deleteApplicationAction(
+        target.id,
+        confirmName ?? "",
+      );
+      if (result.error) return setError(result.error);
+      setApplications((current) =>
+        current.filter((item) => item.id !== target.id),
+      );
+      setDeleteTarget(null);
+    });
+  }
+
   return (
     <>
       <div className="flex justify-end">
@@ -80,7 +102,7 @@ export function ApplicationsClient({
         </button>
       </div>
 
-      {error && !createOpen ? (
+      {error && !createOpen && !deleteTarget ? (
         <p role="alert" className="text-sm text-red-500">
           {error}
         </p>
@@ -138,19 +160,33 @@ export function ApplicationsClient({
                 >
                   Open application
                 </Link>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => toggleStatus(application)}
-                  className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs disabled:opacity-50"
-                >
-                  {application.status === "active" ? (
-                    <Archive size={13} />
-                  ) : (
-                    <RotateCcw size={13} />
-                  )}
-                  {application.status === "active" ? "Archive" : "Restore"}
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => toggleStatus(application)}
+                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs disabled:opacity-50"
+                  >
+                    {application.status === "active" ? (
+                      <Archive size={13} />
+                    ) : (
+                      <RotateCcw size={13} />
+                    )}
+                    {application.status === "active" ? "Archive" : "Restore"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => {
+                      setError("");
+                      setDeleteTarget(application);
+                    }}
+                    aria-label={`Delete ${application.name} permanently`}
+                    className="text-muted-foreground inline-flex items-center gap-1 text-xs hover:text-red-500 disabled:opacity-50"
+                  >
+                    <Trash2 size={13} /> Delete
+                  </button>
+                </div>
               </div>
             </article>
           ))}
@@ -255,6 +291,22 @@ export function ApplicationsClient({
             </form>
           </div>
         </div>
+      ) : null}
+
+      {deleteTarget ? (
+        <DestructiveActionDialog
+          key={deleteTarget.id}
+          title={`Permanently delete ${deleteTarget.name}?`}
+          description="This irreversibly deletes the application, every environment, telemetry source, ingestion token, and all telemetry data they own. This cannot be undone."
+          confirmationName={deleteTarget.name}
+          pending={pending}
+          error={error}
+          onCancel={() => {
+            setDeleteTarget(null);
+            setError("");
+          }}
+          onConfirm={(confirmationName) => deleteApplication(confirmationName)}
+        />
       ) : null}
     </>
   );

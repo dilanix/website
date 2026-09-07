@@ -2,6 +2,7 @@
 
 import type { Route } from "next";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Archive,
   Boxes,
@@ -9,11 +10,14 @@ import {
   Plus,
   RotateCcw,
   Server,
+  Trash2,
   X,
 } from "lucide-react";
 import { useState, useTransition } from "react";
 import {
   createEnvironmentAction,
+  deleteApplicationAction,
+  deleteEnvironmentAction,
   updateApplicationAction,
   updateEnvironmentAction,
 } from "@/app/dashboard/applications/actions";
@@ -21,6 +25,7 @@ import type {
   CoreApplication,
   CoreApplicationEnvironment,
 } from "@/lib/core/api";
+import { DestructiveActionDialog } from "./destructive-action-dialog";
 import { EmptyState, StatusBadge } from "./primitives";
 
 function sortEnvironments(environments: CoreApplicationEnvironment[]) {
@@ -45,11 +50,17 @@ export function ApplicationDetailClient({
   initialApplication: CoreApplication;
   initialEnvironments: CoreApplicationEnvironment[];
 }) {
+  const router = useRouter();
   const [application, setApplication] = useState(initialApplication);
   const [environments, setEnvironments] = useState(() =>
     sortEnvironments(initialEnvironments),
   );
   const [dialog, setDialog] = useState<"edit" | "environment" | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { kind: "application" }
+    | { kind: "environment"; environment: CoreApplicationEnvironment }
+    | null
+  >(null);
   const [environmentName, setEnvironmentName] = useState("");
   const [environmentSlug, setEnvironmentSlug] = useState("");
   const [environmentSlugEdited, setEnvironmentSlugEdited] = useState(false);
@@ -95,6 +106,34 @@ export function ApplicationDetailClient({
           ),
         );
       }
+    });
+  }
+
+  function deleteSelectedTarget(confirmName: string) {
+    if (!deleteTarget) return;
+    setError("");
+    startTransition(async () => {
+      if (deleteTarget.kind === "application") {
+        const result = await deleteApplicationAction(
+          application.id,
+          confirmName,
+        );
+        if (result.error) return setError(result.error);
+        router.push("/dashboard/applications");
+        router.refresh();
+        return;
+      }
+
+      const result = await deleteEnvironmentAction(
+        application.id,
+        deleteTarget.environment.id,
+        confirmName,
+      );
+      if (result.error) return setError(result.error);
+      setEnvironments((current) =>
+        current.filter((item) => item.id !== deleteTarget.environment.id),
+      );
+      setDeleteTarget(null);
     });
   }
 
@@ -146,11 +185,22 @@ export function ApplicationDetailClient({
               )}
               {application.status === "active" ? "Archive" : "Restore"}
             </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setError("");
+                setDeleteTarget({ kind: "application" });
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/25 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-500/5 disabled:opacity-50"
+            >
+              <Trash2 size={13} /> Delete
+            </button>
           </div>
         </div>
       </section>
 
-      {error && !dialog ? (
+      {error && !dialog && !deleteTarget ? (
         <p role="alert" className="text-sm text-red-500">
           {error}
         </p>
@@ -208,7 +258,7 @@ export function ApplicationDetailClient({
                 <p className="text-muted-foreground mt-1 font-mono text-xs">
                   {environment.slug}
                 </p>
-                <div className="border-border-soft mt-5 flex items-center justify-between border-t pt-4">
+                <div className="border-border-soft mt-5 flex items-center justify-between gap-3 border-t pt-4">
                   <Link
                     href={
                       `/dashboard/applications/${application.id}/environments/${environment.id}` as Route
@@ -217,19 +267,33 @@ export function ApplicationDetailClient({
                   >
                     Manage telemetry
                   </Link>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => toggleEnvironmentStatus(environment)}
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs disabled:opacity-50"
-                  >
-                    {environment.status === "active" ? (
-                      <Archive size={13} />
-                    ) : (
-                      <RotateCcw size={13} />
-                    )}
-                    {environment.status === "active" ? "Archive" : "Restore"}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => toggleEnvironmentStatus(environment)}
+                      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs disabled:opacity-50"
+                    >
+                      {environment.status === "active" ? (
+                        <Archive size={13} />
+                      ) : (
+                        <RotateCcw size={13} />
+                      )}
+                      {environment.status === "active" ? "Archive" : "Restore"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => {
+                        setError("");
+                        setDeleteTarget({ kind: "environment", environment });
+                      }}
+                      aria-label={`Delete ${environment.name} permanently`}
+                      className="text-muted-foreground inline-flex items-center gap-1 text-xs hover:text-red-500 disabled:opacity-50"
+                    >
+                      <Trash2 size={13} /> Delete
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}
@@ -371,6 +435,40 @@ export function ApplicationDetailClient({
             </form>
           </div>
         </div>
+      ) : null}
+
+      {deleteTarget ? (
+        <DestructiveActionDialog
+          key={
+            deleteTarget.kind === "application"
+              ? application.id
+              : deleteTarget.environment.id
+          }
+          title={
+            deleteTarget.kind === "application"
+              ? `Permanently delete ${application.name}?`
+              : `Permanently delete ${deleteTarget.environment.name}?`
+          }
+          description={
+            deleteTarget.kind === "application"
+              ? "This irreversibly deletes the application, every environment, telemetry source, ingestion token, and all telemetry data they own. This cannot be undone."
+              : "This irreversibly deletes the environment, its telemetry sources, ingestion tokens, and all telemetry data it owns. This cannot be undone."
+          }
+          confirmationName={
+            deleteTarget.kind === "application"
+              ? application.name
+              : deleteTarget.environment.name
+          }
+          pending={pending}
+          error={error}
+          onCancel={() => {
+            setDeleteTarget(null);
+            setError("");
+          }}
+          onConfirm={(confirmationName) =>
+            deleteSelectedTarget(confirmationName ?? "")
+          }
+        />
       ) : null}
     </>
   );

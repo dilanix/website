@@ -1634,6 +1634,20 @@ export function updateApplication(
   );
 }
 
+export function deleteApplication(
+  organizationId: string,
+  applicationId: string,
+  confirmName: string,
+  token: string,
+) {
+  const query = new URLSearchParams({ confirm_name: confirmName });
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/applications/${applicationId}?${query.toString()}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
 export type ApplicationEnvironmentStatus = "active" | "archived";
 
 export interface CoreApplicationEnvironment {
@@ -1712,6 +1726,21 @@ export function updateApplicationEnvironment(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     },
+  );
+}
+
+export function deleteApplicationEnvironment(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+  confirmName: string,
+  token: string,
+) {
+  const query = new URLSearchParams({ confirm_name: confirmName });
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/applications/${applicationId}/environments/${environmentId}?${query.toString()}`,
+    token,
+    { method: "DELETE" },
   );
 }
 
@@ -1825,6 +1854,22 @@ export function updateTelemetrySource(
   );
 }
 
+export function deleteTelemetrySource(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+  sourceId: string,
+  confirmName: string,
+  token: string,
+) {
+  const query = new URLSearchParams({ confirm_name: confirmName });
+  return coreRequest<void>(
+    `${telemetrySourcesPath(organizationId, applicationId, environmentId)}/${sourceId}?${query.toString()}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
 export type TelemetryIngestionScope =
   | "telemetry:logs:write"
   | "telemetry:traces:write"
@@ -1907,5 +1952,20 @@ export function revokeTelemetryIngestionToken(
     `${telemetryTokensPath(organizationId, applicationId, environmentId, sourceId)}/${ingestionTokenId}/revoke`,
     token,
     { method: "POST" },
+  );
+}
+
+export function deleteTelemetryIngestionToken(
+  organizationId: string,
+  applicationId: string,
+  environmentId: string,
+  sourceId: string,
+  ingestionTokenId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `${telemetryTokensPath(organizationId, applicationId, environmentId, sourceId)}/${ingestionTokenId}`,
+    token,
+    { method: "DELETE" },
   );
 }

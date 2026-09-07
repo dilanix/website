@@ -9,12 +9,18 @@ import {
   Plus,
   RadioTower,
   RotateCcw,
+  Trash2,
   X,
 } from "lucide-react";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
   createTelemetrySourceAction,
   createTelemetryTokenAction,
+  deleteEnvironmentAction,
+  deleteTelemetrySourceAction,
+  deleteTelemetryTokenAction,
   revokeTelemetryTokenAction,
   updateEnvironmentAction,
   updateTelemetrySourceAction,
@@ -27,6 +33,7 @@ import type {
   TelemetryIngestionScope,
   TelemetrySourceType,
 } from "@/lib/core/api";
+import { DestructiveActionDialog } from "./destructive-action-dialog";
 import { hasResourceMetadata, ResourceMetadata } from "./resource-metadata";
 import { EmptyState, StatusBadge } from "./primitives";
 
@@ -111,6 +118,7 @@ export function EnvironmentTelemetryClient({
   initialTokens: Record<string, CoreTelemetryIngestionToken[]>;
   targetOptions: TelemetryTargetOption[];
 }) {
+  const router = useRouter();
   const [environment, setEnvironment] = useState(initialEnvironment);
   const [sources, setSources] = useState(() => sortSources(initialSources));
   const [tokens, setTokens] = useState(initialTokens);
@@ -126,6 +134,16 @@ export function EnvironmentTelemetryClient({
     sourceName: string;
     value: string;
   } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { kind: "environment" }
+    | { kind: "source"; source: CoreTelemetrySource }
+    | {
+        kind: "token";
+        sourceId: string;
+        token: CoreTelemetryIngestionToken;
+      }
+    | null
+  >(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -195,6 +213,60 @@ export function EnvironmentTelemetryClient({
     });
   }
 
+  function deleteSelectedTarget(confirmName?: string) {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setError("");
+    startTransition(async () => {
+      if (target.kind === "environment") {
+        const result = await deleteEnvironmentAction(
+          application.id,
+          environment.id,
+          confirmName ?? "",
+        );
+        if (result.error) return setError(result.error);
+        router.push(`/dashboard/applications/${application.id}` as Route);
+        router.refresh();
+        return;
+      }
+
+      if (target.kind === "source") {
+        const result = await deleteTelemetrySourceAction(
+          application.id,
+          environment.id,
+          target.source.id,
+          confirmName ?? "",
+        );
+        if (result.error) return setError(result.error);
+        setSources((current) =>
+          current.filter((source) => source.id !== target.source.id),
+        );
+        setTokens((current) => {
+          const next = { ...current };
+          delete next[target.source.id];
+          return next;
+        });
+        setDeleteTarget(null);
+        return;
+      }
+
+      const result = await deleteTelemetryTokenAction(
+        application.id,
+        environment.id,
+        target.sourceId,
+        target.token.id,
+      );
+      if (result.error) return setError(result.error);
+      setTokens((current) => ({
+        ...current,
+        [target.sourceId]: (current[target.sourceId] ?? []).filter(
+          (token) => token.id !== target.token.id,
+        ),
+      }));
+      setDeleteTarget(null);
+    });
+  }
+
   return (
     <>
       <section className="border-border-soft bg-card-strong/70 rounded-2xl border p-5 shadow-[0_16px_40px_var(--shadow-card)] sm:p-6">
@@ -233,6 +305,17 @@ export function EnvironmentTelemetryClient({
               )}
               {environment.status === "active" ? "Archive" : "Restore"}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setError("");
+                setDeleteTarget({ kind: "environment" });
+              }}
+              disabled={pending}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/25 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-500/5 disabled:opacity-50"
+            >
+              <Trash2 size={13} /> Delete
+            </button>
           </div>
         </div>
       </section>
@@ -241,7 +324,8 @@ export function EnvironmentTelemetryClient({
       !environmentDialog &&
       !sourceDialog &&
       !tokenSource &&
-      !generatedToken ? (
+      !generatedToken &&
+      !deleteTarget ? (
         <p role="alert" className="text-sm text-red-500">
           {error}
         </p>
@@ -338,6 +422,17 @@ export function EnvironmentTelemetryClient({
                         )}
                         {source.status === "active" ? "Archive" : "Restore"}
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setError("");
+                          setDeleteTarget({ kind: "source", source });
+                        }}
+                        disabled={pending}
+                        className="text-muted-foreground inline-flex items-center gap-1 text-xs hover:text-red-500 disabled:opacity-50"
+                      >
+                        <Trash2 size={12} /> Delete
+                      </button>
                     </div>
                   </div>
 
@@ -396,16 +491,36 @@ export function EnvironmentTelemetryClient({
                                 {formatDate(ingestionToken.last_used_at)}
                               </p>
                             </div>
-                            <button
-                              type="button"
-                              disabled={ingestionToken.is_revoked || pending}
-                              onClick={() =>
-                                revokeToken(source.id, ingestionToken.id)
-                              }
-                              className="text-muted-foreground self-start hover:text-red-500 disabled:opacity-40 sm:self-auto"
-                            >
-                              {ingestionToken.is_revoked ? "Revoked" : "Revoke"}
-                            </button>
+                            <div className="flex items-center gap-3 self-start sm:self-auto">
+                              <button
+                                type="button"
+                                disabled={ingestionToken.is_revoked || pending}
+                                onClick={() =>
+                                  revokeToken(source.id, ingestionToken.id)
+                                }
+                                className="text-muted-foreground hover:text-foreground disabled:opacity-40"
+                              >
+                                {ingestionToken.is_revoked
+                                  ? "Revoked"
+                                  : "Revoke"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={pending}
+                                onClick={() => {
+                                  setError("");
+                                  setDeleteTarget({
+                                    kind: "token",
+                                    sourceId: source.id,
+                                    token: ingestionToken,
+                                  });
+                                }}
+                                aria-label={`Delete token ${ingestionToken.token_prefix} permanently`}
+                                className="text-muted-foreground inline-flex items-center gap-1 hover:text-red-500 disabled:opacity-40"
+                              >
+                                <Trash2 size={12} /> Delete
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -812,6 +927,46 @@ export function EnvironmentTelemetryClient({
             </button>
           </div>
         </div>
+      ) : null}
+
+      {deleteTarget ? (
+        <DestructiveActionDialog
+          key={
+            deleteTarget.kind === "environment"
+              ? environment.id
+              : deleteTarget.kind === "source"
+                ? deleteTarget.source.id
+                : deleteTarget.token.id
+          }
+          title={
+            deleteTarget.kind === "environment"
+              ? `Permanently delete ${environment.name}?`
+              : deleteTarget.kind === "source"
+                ? `Permanently delete ${deleteTarget.source.name}?`
+                : `Permanently delete token ${deleteTarget.token.token_prefix}…?`
+          }
+          description={
+            deleteTarget.kind === "environment"
+              ? "This irreversibly deletes the environment, every telemetry source, ingestion token, and all telemetry data it owns. This cannot be undone."
+              : deleteTarget.kind === "source"
+                ? "This irreversibly deletes the telemetry source, its ingestion tokens, and all telemetry logs it owns. This cannot be undone."
+                : "This permanently removes the ingestion token record. Any client using this credential will no longer be able to authenticate. This cannot be undone."
+          }
+          confirmationName={
+            deleteTarget.kind === "environment"
+              ? environment.name
+              : deleteTarget.kind === "source"
+                ? deleteTarget.source.name
+                : undefined
+          }
+          pending={pending}
+          error={error}
+          onCancel={() => {
+            setDeleteTarget(null);
+            setError("");
+          }}
+          onConfirm={deleteSelectedTarget}
+        />
       ) : null}
     </>
   );
