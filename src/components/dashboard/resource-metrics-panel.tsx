@@ -6,6 +6,8 @@ import { listMetricDatapointsAction } from "@/app/dashboard/integrations/actions
 import type {
   CoreMetricDatapoint,
   CoreMetricDatapointListResponse,
+  CoreMetricUtilizationSummary,
+  CoreMetricUtilizationSummaryListResponse,
 } from "@/lib/core/api";
 import { EmptyState, Metric } from "./primitives";
 
@@ -15,9 +17,20 @@ interface MetricDefinition {
   metricName: string;
   statistic: string;
   unit: string | null;
+  sampleCount: number;
+  average: number;
+  maximum: number;
+  latestValue: number;
+  latestTimestamp: string;
 }
 
-function definitionKey(point: CoreMetricDatapoint) {
+interface MetricIdentity {
+  namespace: string;
+  metric_name: string;
+  statistic: string;
+}
+
+function definitionKey(point: MetricIdentity) {
   return `${point.namespace}\u0000${point.metric_name}\u0000${point.statistic}`;
 }
 
@@ -49,6 +62,11 @@ function formatValue(value: number, unit: string | null) {
   return `${formatted} ${unit}`;
 }
 
+function resolvedUnit(metricName: string, unit: string | null) {
+  if (unit) return unit;
+  return /utilization$/i.test(metricName) ? "Percent" : null;
+}
+
 function formatTimestamp(value: string) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -58,17 +76,24 @@ function formatTimestamp(value: string) {
   }).format(new Date(value));
 }
 
-function definitionsFrom(points: CoreMetricDatapoint[]): MetricDefinition[] {
+function definitionsFrom(
+  summaries: CoreMetricUtilizationSummary[],
+): MetricDefinition[] {
   const definitions = new Map<string, MetricDefinition>();
-  points.forEach((point) => {
-    const key = definitionKey(point);
+  summaries.forEach((summary) => {
+    const key = definitionKey(summary);
     if (!definitions.has(key)) {
       definitions.set(key, {
         key,
-        namespace: point.namespace,
-        metricName: point.metric_name,
-        statistic: point.statistic,
-        unit: point.unit,
+        namespace: summary.namespace,
+        metricName: summary.metric_name,
+        statistic: summary.statistic,
+        unit: summary.unit,
+        sampleCount: summary.sample_count,
+        average: summary.average,
+        maximum: summary.maximum,
+        latestValue: summary.latest_value,
+        latestTimestamp: summary.latest_timestamp,
       });
     }
   });
@@ -166,7 +191,7 @@ function MetricChart({
           >
             <title>
               {formatTimestamp(point.timestamp)}:{" "}
-              {formatValue(point.value, point.unit)}
+              {formatValue(point.value, unit ?? point.unit)}
             </title>
           </circle>
         ))}
@@ -199,44 +224,62 @@ function MetricChart({
 export function ResourceMetricsPanel({
   connectionId,
   resourceId,
+  resourceOptions,
+  resourceSelectorLabel = "Resource",
+  initialMetricSummary,
   initialMetrics,
 }: {
   connectionId: string;
   resourceId: string;
+  resourceOptions?: Array<{ id: string; label: string; detail?: string }>;
+  resourceSelectorLabel?: string;
+  initialMetricSummary: CoreMetricUtilizationSummaryListResponse;
   initialMetrics: CoreMetricDatapointListResponse;
 }) {
+  const [selectedResourceId, setSelectedResourceId] = useState(resourceId);
   const definitions = useMemo(
-    () => definitionsFrom(initialMetrics.items),
-    [initialMetrics.items],
+    () =>
+      definitionsFrom(
+        initialMetricSummary.items.filter(
+          (summary) => summary.resource_id === selectedResourceId,
+        ),
+      ),
+    [initialMetricSummary.items, selectedResourceId],
   );
-  const [selectedKey, setSelectedKey] = useState(definitions[0]?.key ?? "");
-  const [points, setPoints] = useState(() =>
-    initialMetrics.items.filter(
-      (point) => definitionKey(point) === definitions[0]?.key,
-    ),
+  const initialSummary = initialMetricSummary.items.find(
+    (summary) => summary.resource_id === resourceId,
+  );
+  const initialKey = initialSummary ? definitionKey(initialSummary) : "";
+  const initialCacheKey = `${resourceId}\u0001${initialKey}`;
+  const [selectedKey, setSelectedKey] = useState(initialKey);
+  const [pointsByKey, setPointsByKey] = useState<
+    Record<string, CoreMetricDatapoint[]>
+  >(() =>
+    initialKey
+      ? {
+          [initialCacheKey]: initialMetrics.items.filter(
+            (point) =>
+              point.resource_id === resourceId &&
+              definitionKey(point) === initialKey,
+          ),
+        }
+      : {},
   );
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const selected = definitions.find((item) => item.key === selectedKey);
+  const selectedCacheKey = `${selectedResourceId}\u0001${selectedKey}`;
+  const points = pointsByKey[selectedCacheKey] ?? [];
   const ordered = [...points].sort((a, b) =>
     b.timestamp.localeCompare(a.timestamp),
   );
-  const values = ordered.map((point) => point.value);
-  const latest = ordered[0];
-  const minimum = values.length ? Math.min(...values) : null;
-  const maximum = values.length ? Math.max(...values) : null;
-  const average = values.length
-    ? values.reduce((sum, value) => sum + value, 0) / values.length
-    : null;
 
-  function selectMetric(key: string) {
-    setSelectedKey(key);
-    const definition = definitions.find((item) => item.key === key);
-    if (!definition) return;
-    setError("");
+  function loadMetric(nextResourceId: string, definition: MetricDefinition) {
+    const cacheKey = `${nextResourceId}\u0001${definition.key}`;
+    if (Object.hasOwn(pointsByKey, cacheKey)) return;
     startTransition(async () => {
       const result = await listMetricDatapointsAction(connectionId, {
-        resourceId,
+        resourceId: nextResourceId,
         limit: 100,
         offset: 0,
         namespace: definition.namespace,
@@ -244,16 +287,41 @@ export function ResourceMetricsPanel({
       });
       if (result.error) return setError(result.error);
       if (result.data) {
-        setPoints(
-          result.data.items.filter(
-            (point) => point.statistic === definition.statistic,
+        const data = result.data;
+        setPointsByKey((current) => ({
+          ...current,
+          [cacheKey]: data.items.filter(
+            (point) =>
+              point.resource_id === nextResourceId &&
+              point.statistic === definition.statistic,
           ),
-        );
+        }));
       }
     });
   }
 
-  if (definitions.length === 0) {
+  function selectMetric(key: string) {
+    setSelectedKey(key);
+    const definition = definitions.find((item) => item.key === key);
+    if (!definition) return;
+    setError("");
+    loadMetric(selectedResourceId, definition);
+  }
+
+  function selectResource(nextResourceId: string) {
+    setSelectedResourceId(nextResourceId);
+    setError("");
+    const nextDefinitions = definitionsFrom(
+      initialMetricSummary.items.filter(
+        (summary) => summary.resource_id === nextResourceId,
+      ),
+    );
+    const nextDefinition = nextDefinitions[0];
+    setSelectedKey(nextDefinition?.key ?? "");
+    if (nextDefinition) loadMetric(nextResourceId, nextDefinition);
+  }
+
+  if (definitions.length === 0 && !resourceOptions) {
     return (
       <EmptyState
         title="No utilization metrics yet"
@@ -265,17 +333,51 @@ export function ResourceMetricsPanel({
   const label = selected
     ? `${metricLabel(selected.metricName)} · ${selected.statistic}`
     : "Metric";
+  const selectedUnit = selected
+    ? resolvedUnit(selected.metricName, selected.unit)
+    : null;
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <label className="block min-w-0 flex-1 text-sm sm:max-w-md">
+      <div
+        className={
+          resourceOptions
+            ? "grid gap-3 sm:grid-cols-[repeat(2,minmax(0,1fr))_auto] sm:items-end"
+            : "flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
+        }
+      >
+        {resourceOptions ? (
+          <label className="block min-w-0 text-sm">
+            <span className="text-muted-foreground mb-1.5 block text-[11px] font-semibold tracking-wide uppercase">
+              {resourceSelectorLabel}
+            </span>
+            <select
+              value={selectedResourceId}
+              disabled={pending}
+              onChange={(event) => selectResource(event.target.value)}
+              className="border-foreground/15 bg-background h-10 w-full rounded-lg border px-3 text-sm disabled:opacity-60"
+            >
+              {resourceOptions.map((option) => (
+                <option key={option.id} value={option.id} title={option.detail}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <label
+          className={
+            resourceOptions
+              ? "block min-w-0 text-sm"
+              : "block min-w-0 flex-1 text-sm sm:max-w-md"
+          }
+        >
           <span className="text-muted-foreground mb-1.5 block text-[11px] font-semibold tracking-wide uppercase">
             Metric series
           </span>
           <select
             value={selectedKey}
-            disabled={pending}
+            disabled={pending || definitions.length === 0}
             onChange={(event) => selectMetric(event.target.value)}
             className="border-foreground/15 bg-background h-10 w-full rounded-lg border px-3 text-sm disabled:opacity-60"
           >
@@ -287,7 +389,13 @@ export function ResourceMetricsPanel({
             ))}
           </select>
         </label>
-        <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
+        <span
+          className={
+            resourceOptions
+              ? "text-muted-foreground inline-flex h-10 items-center gap-1.5 text-xs sm:justify-self-end"
+              : "text-muted-foreground inline-flex items-center gap-1.5 text-xs"
+          }
+        >
           {pending ? (
             <RefreshCw size={12} className="animate-spin" />
           ) : (
@@ -303,35 +411,28 @@ export function ResourceMetricsPanel({
         </p>
       ) : null}
 
-      {latest && minimum !== null && maximum !== null && average !== null ? (
+      {selected ? (
         <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Metric
             label="Latest"
-            value={formatValue(latest.value, selected?.unit ?? latest.unit)}
-            detail={formatTimestamp(latest.timestamp)}
+            value={formatValue(selected.latestValue, selectedUnit)}
+            detail={formatTimestamp(selected.latestTimestamp)}
           />
           <Metric
             label="Average"
-            value={formatValue(average, selected?.unit ?? null)}
-          />
-          <Metric
-            label="Minimum"
-            value={formatValue(minimum, selected?.unit ?? null)}
+            value={formatValue(selected.average, selectedUnit)}
           />
           <Metric
             label="Maximum"
-            value={formatValue(maximum, selected?.unit ?? null)}
+            value={formatValue(selected.maximum, selectedUnit)}
           />
+          <Metric label="Samples" value={String(selected.sampleCount)} />
         </dl>
       ) : null}
 
       {ordered.length > 0 ? (
         <>
-          <MetricChart
-            points={ordered}
-            unit={selected?.unit ?? null}
-            label={label}
-          />
+          <MetricChart points={ordered} unit={selectedUnit} label={label} />
           <div className="border-border-soft overflow-hidden rounded-xl border">
             <div className="border-border-soft bg-foreground/[0.025] grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b px-4 py-3 text-[11px] font-semibold tracking-wide uppercase">
               <span>Timestamp</span>
@@ -351,7 +452,7 @@ export function ResourceMetricsPanel({
                     {point.period_seconds}s
                   </span>
                   <span className="text-right font-mono font-medium">
-                    {formatValue(point.value, point.unit)}
+                    {formatValue(point.value, selectedUnit ?? point.unit)}
                   </span>
                 </div>
               ))}
@@ -360,8 +461,16 @@ export function ResourceMetricsPanel({
         </>
       ) : (
         <EmptyState
-          title="No datapoints in this series"
-          description="The selected metric exists, but no values were returned for the current resource."
+          title={
+            selected
+              ? "No datapoints in this series"
+              : "No utilization metrics for this service"
+          }
+          description={
+            selected
+              ? "The selected metric exists, but no values were returned for the current resource."
+              : "Select another ECS service or run a metrics.utilization sync."
+          }
         />
       )}
     </div>

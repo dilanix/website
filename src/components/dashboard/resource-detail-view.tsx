@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type {
   CoreMetricDatapointListResponse,
+  CoreMetricUtilizationSummaryListResponse,
   CoreResource,
 } from "@/lib/core/api";
 import {
@@ -27,6 +28,7 @@ import {
   resourceTypeLabel,
 } from "@/lib/inventory/resources";
 import { ResourceCategoryIcon } from "./resource-category-icon";
+import { EcsClusterMetricsPanel } from "./ecs-cluster-metrics-panel";
 import { ResourceMetricsPanel } from "./resource-metrics-panel";
 import { hasResourceMetadata, ResourceMetadata } from "./resource-metadata";
 import { StatusBadge } from "./primitives";
@@ -98,11 +100,17 @@ export function ResourceDetailView({
   resource,
   connectionName,
   backHref,
+  clusterServices = [],
+  clusterMetricSummary = { items: [] },
+  initialMetricSummary,
   initialMetrics,
 }: {
   resource: CoreResource;
   connectionName: string;
   backHref: Route;
+  clusterServices?: CoreResource[];
+  clusterMetricSummary?: CoreMetricUtilizationSummaryListResponse;
+  initialMetricSummary: CoreMetricUtilizationSummaryListResponse;
   initialMetrics: CoreMetricDatapointListResponse;
 }) {
   const specificationAttributes = formatSpecificationAttributes(
@@ -238,13 +246,27 @@ export function ResourceDetailView({
           <DetailCard
             icon={<Activity size={17} />}
             title="Utilization metrics"
-            description="Provider metrics collected by the metrics.utilization dataset."
+            description={
+              resource.provider_resource_type === "ecs.cluster"
+                ? "CPU and memory utilization for the ECS services in this cluster."
+                : "Provider metrics collected by the metrics.utilization dataset."
+            }
           >
-            <ResourceMetricsPanel
-              connectionId={resource.connection_id}
-              resourceId={resource.id}
-              initialMetrics={initialMetrics}
-            />
+            {resource.provider_resource_type === "ecs.cluster" ? (
+              <EcsClusterMetricsPanel
+                connectionId={resource.connection_id}
+                services={clusterServices}
+                metricSummary={clusterMetricSummary}
+                initialMetrics={initialMetrics}
+              />
+            ) : (
+              <ResourceMetricsPanel
+                connectionId={resource.connection_id}
+                resourceId={resource.id}
+                initialMetricSummary={initialMetricSummary}
+                initialMetrics={initialMetrics}
+              />
+            )}
           </DetailCard>
 
           <DetailCard

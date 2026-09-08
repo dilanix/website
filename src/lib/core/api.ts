@@ -1526,10 +1526,35 @@ export interface CoreMetricDatapointListResponse {
   total: number;
 }
 
+export interface CoreMetricUtilizationSummary {
+  resource_id: string;
+  namespace: string;
+  metric_name: string;
+  statistic: string;
+  unit: string | null;
+  sample_count: number;
+  average: number;
+  maximum: number;
+  latest_value: number;
+  latest_timestamp: string;
+}
+
+export interface CoreMetricUtilizationSummaryListResponse {
+  items: CoreMetricUtilizationSummary[];
+}
+
 export interface ListMetricDatapointsParams {
   resourceId: string;
   limit: number;
   offset: number;
+  namespace?: string | null;
+  metricName?: string | null;
+  start?: string | null;
+  end?: string | null;
+}
+
+export interface GetMetricUtilizationSummaryParams {
+  resourceIds: string[];
   namespace?: string | null;
   metricName?: string | null;
   start?: string | null;
@@ -1554,6 +1579,27 @@ export function listMetricDatapoints(
   if (params.end) query.set("end", params.end);
   return coreRequest<CoreMetricDatapointListResponse>(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/metrics?${query.toString()}`,
+    token,
+  );
+}
+
+/** Aggregated series discovery/read path for one or more resources. */
+export function getMetricUtilizationSummary(
+  organizationId: string,
+  connectionId: string,
+  token: string,
+  params: GetMetricUtilizationSummaryParams,
+) {
+  const query = new URLSearchParams();
+  params.resourceIds.forEach((resourceId) =>
+    query.append("resource_id", resourceId),
+  );
+  if (params.namespace) query.set("namespace", params.namespace);
+  if (params.metricName) query.set("metric_name", params.metricName);
+  if (params.start) query.set("start", params.start);
+  if (params.end) query.set("end", params.end);
+  return coreRequest<CoreMetricUtilizationSummaryListResponse>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/metrics/summary?${query.toString()}`,
     token,
   );
 }

@@ -767,6 +767,45 @@ describe("metrics, applications, and telemetry", () => {
     expect(result).toEqual(mockResponse);
   });
 
+  it("gets metric summaries for repeated resource ids and optional filters", async () => {
+    const mockResponse = { items: [] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getMetricUtilizationSummary } = await import("./api");
+    const result = await getMetricUtilizationSummary(
+      "org-123",
+      "conn-1",
+      "test-token",
+      {
+        resourceIds: ["resource-1", "resource-2"],
+        namespace: "AWS/ECS",
+        metricName: "CPUUtilization",
+        start: "2026-09-01T00:00:00Z",
+        end: "2026-09-08T00:00:00Z",
+      },
+    );
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    const parsed = new URL(url);
+    expect(parsed.pathname).toContain(
+      "/v1/organizations/org-123/integrations/connections/conn-1/metrics/summary",
+    );
+    expect(parsed.searchParams.getAll("resource_id")).toEqual([
+      "resource-1",
+      "resource-2",
+    ]);
+    expect(parsed.searchParams.get("namespace")).toBe("AWS/ECS");
+    expect(parsed.searchParams.get("metric_name")).toBe("CPUUtilization");
+    expect(parsed.searchParams.get("start")).toBe("2026-09-01T00:00:00Z");
+    expect(parsed.searchParams.get("end")).toBe("2026-09-08T00:00:00Z");
+    expect(result).toEqual(mockResponse);
+  });
+
   it("creates an application with the backend contract", async () => {
     const mockApplication = { id: "app-1", name: "Payments" };
     const fetchMock = vi
