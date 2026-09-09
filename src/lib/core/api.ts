@@ -66,6 +66,29 @@ export interface CoreProduct {
   access_expires_at: string | null;
 }
 
+/**
+ * Platform-wide capability grant (`aws.billing.cost_usage`, ...) — not tied
+ * to any Product, and distinct from `CoreConnectionCapability` (a
+ * self-service, per-connection toggle under a connection's own "Access"
+ * tab). `access_status` is `"disabled"` both when Core has no grant row for
+ * this organization and when a grant exists but is explicitly disabled —
+ * callers gate on `=== "active"` and never need to tell the two apart.
+ */
+export interface CoreOrganizationCapability {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  domain: string | null;
+  access_status: "active" | "pending" | "expired" | "disabled";
+}
+
+/** Mirrors Core's `modules.integrations.repositories.access_repository.provider_capability_code`
+ * — the `Capability.code` gating an organization's access to a whole provider/integration. */
+export function providerCapabilityCode(slug: string): string {
+  return `provider.${slug}`;
+}
+
 export type ApiKeyAccessMode = "full" | "restricted";
 export interface CoreApiKey {
   id: string;
@@ -152,6 +175,15 @@ export function listOrganizationProducts(
 ) {
   return coreRequest<CoreProduct[]>(
     `/v1/organizations/${organizationId}/products`,
+    token,
+  );
+}
+export function listOrganizationCapabilities(
+  organizationId: string,
+  token: string,
+) {
+  return coreRequest<CoreOrganizationCapability[]>(
+    `/v1/organizations/${organizationId}/capabilities`,
     token,
   );
 }

@@ -91,6 +91,7 @@ describe("CostUsagePanel", () => {
       <CostUsagePanel
         connectionId="conn-1"
         costReadEnabled
+        focusExportEnabled
         connectionSettingsHref="/dashboard/integrations/conn-1"
         initialCostUsage={[row]}
         initialTotal={1}
@@ -109,5 +110,23 @@ describe("CostUsagePanel", () => {
     expect(screen.getByText("Environment")).toBeTruthy();
     expect(screen.getByText("FargateTask")).toBeTruthy();
     expect(screen.getByText("manifest-1")).toBeTruthy();
+  });
+
+  it("shows a not-enabled empty state instead of FOCUS data when the organization lacks the capability grant", () => {
+    render(
+      <CostUsagePanel
+        connectionId="conn-1"
+        costReadEnabled
+        focusExportEnabled={false}
+        connectionSettingsHref="/dashboard/integrations/conn-1"
+        initialCostUsage={[row]}
+        initialTotal={1}
+      />,
+    );
+
+    expect(
+      screen.getByText("FOCUS billing export is not enabled"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Amazon ECS")).toBeNull();
   });
 });

@@ -6,6 +6,7 @@ import {
   listCostSummaries,
   listCostUsage,
   listIntegrations,
+  listOrganizationCapabilities,
 } from "@/lib/core/api";
 import type { CostBasis } from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
@@ -16,7 +17,10 @@ import {
   presetRange,
   type PeriodPresetId,
 } from "@/lib/billing/cost-summaries";
-import { COST_USAGE_PAGE_SIZE } from "@/lib/billing/cost-usage";
+import {
+  COST_USAGE_PAGE_SIZE,
+  FOCUS_COST_USAGE_CAPABILITY_CODE,
+} from "@/lib/billing/cost-usage";
 import { CloudConnectionSelector } from "@/components/dashboard/cloud-connection-selector";
 import { CostSummaryPanel } from "@/components/dashboard/cost-summary-panel";
 import { CostUsagePanel } from "@/components/dashboard/cost-usage-panel";
@@ -88,15 +92,24 @@ export default async function CostsPage({
     );
   }
 
-  const connectionCapabilities = await listConnectionCapabilities(
-    organization.organization_id,
-    selectedConnection.id,
-    token,
-    false,
-  );
+  const [connectionCapabilities, organizationCapabilities] = await Promise.all([
+    listConnectionCapabilities(
+      organization.organization_id,
+      selectedConnection.id,
+      token,
+      false,
+    ),
+    listOrganizationCapabilities(organization.organization_id, token),
+  ]);
   const costReadEnabled = connectionCapabilities.some(
     (row) => row.enabled && row.capability.slug === "billing.read",
   );
+  const focusCostUsageEnabled = organizationCapabilities.some(
+    (capability) =>
+      capability.code === FOCUS_COST_USAGE_CAPABILITY_CODE &&
+      capability.access_status === "active",
+  );
+  const focusCostUsageActive = costReadEnabled && focusCostUsageEnabled;
   const requestedBasis = stringParam(query.basis) as CostBasis;
   const initialCostBasis = COST_BASIS_FILTER_ORDER.includes(requestedBasis)
     ? requestedBasis
@@ -123,7 +136,7 @@ export default async function CostsPage({
           },
         )
       : Promise.resolve({ items: [], total: 0 }),
-    costReadEnabled
+    focusCostUsageActive
       ? listCostUsage(
           organization.organization_id,
           selectedConnection.id,
@@ -190,6 +203,7 @@ export default async function CostsPage({
           key={selectedConnection.id}
           connectionId={selectedConnection.id}
           costReadEnabled={costReadEnabled}
+          focusExportEnabled={focusCostUsageEnabled}
           connectionSettingsHref={connectionSettingsHref}
           initialCostUsage={costUsage.items}
           initialTotal={costUsage.total}

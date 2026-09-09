@@ -225,6 +225,7 @@ interface CostUsageFilters {
 export function CostUsagePanel({
   connectionId,
   costReadEnabled,
+  focusExportEnabled,
   connectionSettingsHref,
   initialCostUsage,
   initialTotal,
@@ -235,6 +236,12 @@ export function CostUsagePanel({
    * (`CostUsageService.list_cost_usages`), so this panel never even attempts
    * to fetch until it's true. */
   costReadEnabled: boolean;
+  /** Whether the organization holds the `aws.billing.cost_usage` platform
+   * capability grant (`OrganizationCapabilityGrantAdmin`) — distinct from
+   * `costReadEnabled`, and not something the organization can self-serve
+   * from Access: AWS FOCUS export is not yet generally supported, so this
+   * defaults to disabled for every organization until Dilanix enables it. */
+  focusExportEnabled: boolean;
   connectionSettingsHref: string;
   initialCostUsage: CoreCostUsage[];
   initialTotal: number;
@@ -298,6 +305,15 @@ export function CostUsagePanel({
         setCostUsage((current) => [...current, ...result.data!.items]);
       }
     });
+  }
+
+  if (!focusExportEnabled) {
+    return (
+      <EmptyState
+        title="FOCUS billing export is not enabled"
+        description="AWS FOCUS 1.2 billing export is not yet available for your organization. Contact Dilanix to have it enabled."
+      />
+    );
   }
 
   if (!costReadEnabled) {

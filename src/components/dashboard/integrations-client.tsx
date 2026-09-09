@@ -13,8 +13,10 @@ import {
 import type {
   CoreIntegration,
   CoreIntegrationConnection,
+  CoreOrganizationCapability,
   IntegrationConnectionStatus,
 } from "@/lib/core/api";
+import { providerCapabilityCode } from "@/lib/core/api";
 import { createConnectionAction } from "@/app/dashboard/integrations/actions";
 import { EmptyState, StatusBadge } from "./primitives";
 import { AwsOnboardingWizard } from "./integrations/aws-onboarding-wizard";
@@ -68,9 +70,13 @@ function formatLastSync(value: string | null) {
 export function IntegrationsClient({
   integrations,
   initialConnections,
+  organizationCapabilities,
 }: {
   integrations: CoreIntegration[];
   initialConnections: CoreIntegrationConnection[];
+  /** Drives per-provider access below — not tied to any Product, see
+   * `CoreOrganizationCapability`'s own docstring. */
+  organizationCapabilities: CoreOrganizationCapability[];
 }) {
   const router = useRouter();
   const [connections, setConnections] = useState(initialConnections);
@@ -81,6 +87,15 @@ export function IntegrationsClient({
     connection: CoreIntegrationConnection;
     integrationName: string;
   } | null>(null);
+
+  const activeCapabilityCodes = new Set(
+    organizationCapabilities
+      .filter((capability) => capability.access_status === "active")
+      .map((capability) => capability.code),
+  );
+  function hasProviderAccess(slug: string) {
+    return activeCapabilityCodes.has(providerCapabilityCode(slug));
+  }
 
   function close() {
     setConnectTo(null);
@@ -147,6 +162,9 @@ export function IntegrationsClient({
           const errorCount = integrationConnections.filter(
             (connection) => connection.status === "error",
           ).length;
+          const providerGranted = hasProviderAccess(integration.slug);
+          const canConnect =
+            integration.connection_supported && providerGranted;
           return (
             <article
               key={integration.id}
@@ -174,18 +192,22 @@ export function IntegrationsClient({
                 <button
                   type="button"
                   onClick={() => setConnectTo(integration)}
-                  disabled={!integration.connection_supported}
+                  disabled={!canConnect}
                   title={
-                    integration.connection_supported
-                      ? `Connect ${integration.name}`
-                      : `${integration.name} connection support is coming soon`
+                    !integration.connection_supported
+                      ? `${integration.name} connection support is coming soon`
+                      : !providerGranted
+                        ? `${integration.name} isn't enabled for your organization. Contact Dilanix.`
+                        : `Connect ${integration.name}`
                   }
                   className="border-foreground/15 hover:bg-foreground/5 inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                 >
-                  {integration.connection_supported ? <Plus size={13} /> : null}
-                  {integration.connection_supported
-                    ? "Add connection"
-                    : "Coming soon"}
+                  {canConnect ? <Plus size={13} /> : null}
+                  {!integration.connection_supported
+                    ? "Coming soon"
+                    : !providerGranted
+                      ? "Not enabled"
+                      : "Add connection"}
                 </button>
               </div>
               {integration.description ? (

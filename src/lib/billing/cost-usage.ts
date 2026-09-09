@@ -4,6 +4,15 @@ import type { CostUsageMetric } from "@/lib/core/api";
 export const COST_USAGE_PAGE_SIZE = 25;
 
 /**
+ * Platform capability code gating the FOCUS cost-usage section — mirrors
+ * `_BASELINE_CAPABILITIES` in Core's `modules.entitlements.seeding`. Not
+ * granted to any organization by default (AWS FOCUS export is not yet
+ * generally supported); an admin enables it per organization from
+ * `OrganizationCapabilityGrantAdmin`. See `listOrganizationCapabilities`.
+ */
+export const FOCUS_COST_USAGE_CAPABILITY_CODE = "aws.billing.cost_usage";
+
+/**
  * Labels for FOCUS's four parallel cost columns
  * (`modules.billing.contracts.CostUsageMetric` in Core). Kept as an explicit
  * map, not a mechanical humanizer, matching `COST_BASIS_LABELS`'s own
