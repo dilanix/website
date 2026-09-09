@@ -189,10 +189,7 @@ function MetricChart({
             stroke="var(--accent)"
             strokeWidth="2"
           >
-            <title>
-              {formatTimestamp(point.timestamp)}:{" "}
-              {formatValue(point.value, unit ?? point.unit)}
-            </title>
+            <title>{`${formatTimestamp(point.timestamp)}: ${formatValue(point.value, unit ?? point.unit)}`}</title>
           </circle>
         ))}
         {ordered.length > 0 ? (

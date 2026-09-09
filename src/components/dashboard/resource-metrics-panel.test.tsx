@@ -92,6 +92,9 @@ describe("ResourceMetricsPanel", () => {
         name: "CPU Utilization · Average utilization over time",
       }),
     ).toBeTruthy();
+    expect(
+      screen.getByText(/Sep 7, .*: 40%/, { selector: "title" }),
+    ).toBeTruthy();
     expect(screen.getAllByText("300s")).toHaveLength(2);
   });
 
