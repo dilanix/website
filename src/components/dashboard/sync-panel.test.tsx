@@ -157,7 +157,10 @@ function renderPanel({
   render(
     <SyncPanel
       connectionId="connection-1"
+      providerSlug="aws"
       enabledCapabilitySlugs={["inventory.read"]}
+      activeOrganizationCapabilityCodes={["aws.inventory.read"]}
+      connectionUsable
       initialRuns={initialRuns}
       initialTotal={initialTotal}
       initialPolicies={[enabledPolicy]}
@@ -168,6 +171,48 @@ function renderPanel({
 }
 
 describe("SyncPanel automatic sync", () => {
+  it("hides sync controls and health without an organization capability grant", () => {
+    render(
+      <SyncPanel
+        connectionId="connection-1"
+        providerSlug="aws"
+        enabledCapabilitySlugs={["inventory.read"]}
+        activeOrganizationCapabilityCodes={[]}
+        connectionUsable
+        initialRuns={[]}
+        initialTotal={0}
+        initialPolicies={[enabledPolicy]}
+        initialHealth={initialHealth}
+        initialTargets={[target]}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Sync now" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Configure" })).toBeNull();
+    expect(screen.queryByText("Delayed")).toBeNull();
+  });
+
+  it("hides mutation controls when the connection is not usable", () => {
+    render(
+      <SyncPanel
+        connectionId="connection-1"
+        providerSlug="aws"
+        enabledCapabilitySlugs={["inventory.read"]}
+        activeOrganizationCapabilityCodes={["aws.inventory.read"]}
+        connectionUsable={false}
+        initialRuns={[]}
+        initialTotal={0}
+        initialPolicies={[enabledPolicy]}
+        initialHealth={initialHealth}
+        initialTargets={[target]}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Sync now" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Configure" })).toBeNull();
+    expect(screen.queryByText("Delayed")).toBeNull();
+  });
+
   it("shows backend-projected health separately for each dataset", () => {
     renderPanel();
 

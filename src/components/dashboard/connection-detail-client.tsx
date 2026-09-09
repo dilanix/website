@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity,
+  Ban,
   Boxes,
   CheckCircle2,
   CircleDollarSign,
@@ -24,11 +25,13 @@ import type {
   CoreIntegrationCapability,
   CoreIntegrationConnection,
   CoreIntegrationTarget,
+  CoreOrganizationCapability,
   CoreSyncPolicy,
   CoreSyncDatasetHealth,
   CoreSyncRun,
   IntegrationConnectionStatus,
 } from "@/lib/core/api";
+import { integrationCapabilityCode } from "@/lib/core/api";
 import {
   addConnectionScopeAction,
   disableConnectionAction,
@@ -65,6 +68,7 @@ export type ConnectionDetailTab =
 export function ConnectionDetailClient({
   connection: initialConnection,
   integrationName,
+  integrationSlug,
   initialTab,
   capabilities,
   initialConnectionCapabilities,
@@ -75,9 +79,11 @@ export function ConnectionDetailClient({
   initialSyncTotal,
   initialSyncPolicies,
   initialSyncHealth,
+  organizationCapabilities,
 }: {
   connection: CoreIntegrationConnection;
   integrationName: string;
+  integrationSlug: string;
   initialTab: ConnectionDetailTab;
   capabilities: CoreIntegrationCapability[];
   initialConnectionCapabilities: CoreConnectionCapability[];
@@ -88,7 +94,32 @@ export function ConnectionDetailClient({
   initialSyncTotal: number;
   initialSyncPolicies: CoreSyncPolicy[];
   initialSyncHealth: CoreSyncDatasetHealth[];
+  organizationCapabilities: CoreOrganizationCapability[];
 }) {
+  const activeOrganizationCapabilityCodes = useMemo(
+    () =>
+      organizationCapabilities
+        .filter((capability) => capability.access_status === "active")
+        .map((capability) => capability.code),
+    [organizationCapabilities],
+  );
+  const activeOrganizationCapabilityCodeSet = useMemo(
+    () => new Set(activeOrganizationCapabilityCodes),
+    [activeOrganizationCapabilityCodes],
+  );
+  const availableCapabilities = useMemo(
+    () =>
+      capabilities.filter((capability) =>
+        activeOrganizationCapabilityCodeSet.has(
+          integrationCapabilityCode(integrationSlug, capability.slug),
+        ),
+      ),
+    [activeOrganizationCapabilityCodeSet, capabilities, integrationSlug],
+  );
+  const availableCapabilityIds = useMemo(
+    () => new Set(availableCapabilities.map((capability) => capability.id)),
+    [availableCapabilities],
+  );
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ConnectionDetailTab>(initialTab);
   const [connection, setConnection] = useState(initialConnection);
@@ -98,7 +129,16 @@ export function ConnectionDetailClient({
   const [scopes, setScopes] = useState(initialScopes);
   const [selectedCapabilityIds, setSelectedCapabilityIds] = useState<
     Set<string>
-  >(() => new Set(initialConnectionCapabilities.map((c) => c.capability_id)));
+  >(
+    () =>
+      new Set(
+        initialConnectionCapabilities
+          .filter((capability) =>
+            availableCapabilityIds.has(capability.capability_id),
+          )
+          .map((capability) => capability.capability_id),
+      ),
+  );
   const [editDialog, setEditDialog] = useState(false);
   const [verifyDialog, setVerifyDialog] = useState(false);
   const [removeDialog, setRemoveDialog] = useState(false);
@@ -136,11 +176,17 @@ export function ConnectionDetailClient({
   }
 
   const capabilitiesDirty = useMemo(() => {
-    const current = new Set(connectionCapabilities.map((c) => c.capability_id));
+    const current = new Set(
+      connectionCapabilities
+        .filter((capability) =>
+          availableCapabilityIds.has(capability.capability_id),
+        )
+        .map((capability) => capability.capability_id),
+    );
     if (current.size !== selectedCapabilityIds.size) return true;
     for (const id of selectedCapabilityIds) if (!current.has(id)) return true;
     return false;
-  }, [connectionCapabilities, selectedCapabilityIds]);
+  }, [availableCapabilityIds, connectionCapabilities, selectedCapabilityIds]);
 
   function toggleCapability(id: string) {
     setSelectedCapabilityIds((current) => {
@@ -255,6 +301,7 @@ export function ConnectionDetailClient({
   }
 
   const canRemove = REMOVABLE_STATUSES.has(connection.status);
+  const connectionDisabled = connection.status === "disabled";
 
   const tabs: {
     id: ConnectionDetailTab;
@@ -288,10 +335,14 @@ export function ConnectionDetailClient({
   const enabledCapabilitySlugs = useMemo(
     () =>
       connectionCapabilities
-        .filter((row) => row.enabled)
+        .filter(
+          (row) => row.enabled && availableCapabilityIds.has(row.capability_id),
+        )
         .map((row) => row.capability.slug),
-    [connectionCapabilities],
+    [availableCapabilityIds, connectionCapabilities],
   );
+  const canViewResources = enabledCapabilitySlugs.includes("inventory.read");
+  const canViewCosts = enabledCapabilitySlugs.includes("billing.read");
 
   return (
     <div className="flex flex-col gap-6">
@@ -337,6 +388,12 @@ export function ConnectionDetailClient({
           className="border-success/25 bg-success/8 text-success rounded-xl border px-4 py-3 text-sm"
         >
           {notice}
+        </p>
+      ) : null}
+      {connectionDisabled ? (
+        <p className="border-border-soft bg-foreground/[0.025] text-muted-foreground flex items-center gap-2 rounded-xl border px-4 py-3 text-sm">
+          <Ban size={15} className="shrink-0" />
+          Connection is disabled. Enable it to make changes or run sync.
         </p>
       ) : null}
 
@@ -440,30 +497,43 @@ export function ConnectionDetailClient({
                 workspaces.
               </p>
               <div className="mt-5 grid gap-2">
-                <Link
-                  href={
-                    `/dashboard/resources?connection=${connection.id}` as Route
-                  }
-                  className="border-foreground/10 hover:border-accent/30 hover:bg-accent/5 flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-medium transition-colors"
-                >
-                  <span className="flex items-center gap-2">
-                    <Boxes size={15} className="text-accent" /> Resources
-                  </span>
-                  <span className="text-muted-foreground text-xs">
-                    View all
-                  </span>
-                </Link>
-                <Link
-                  href={`/dashboard/costs?connection=${connection.id}` as Route}
-                  className="border-foreground/10 hover:border-accent/30 hover:bg-accent/5 flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-medium transition-colors"
-                >
-                  <span className="flex items-center gap-2">
-                    <CircleDollarSign size={15} className="text-accent" /> Costs
-                  </span>
-                  <span className="text-muted-foreground text-xs">
-                    View all
-                  </span>
-                </Link>
+                {canViewResources ? (
+                  <Link
+                    href={
+                      `/dashboard/resources?connection=${connection.id}` as Route
+                    }
+                    className="border-foreground/10 hover:border-accent/30 hover:bg-accent/5 flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-medium transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Boxes size={15} className="text-accent" /> Resources
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      View all
+                    </span>
+                  </Link>
+                ) : null}
+                {canViewCosts ? (
+                  <Link
+                    href={
+                      `/dashboard/costs?connection=${connection.id}` as Route
+                    }
+                    className="border-foreground/10 hover:border-accent/30 hover:bg-accent/5 flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-medium transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <CircleDollarSign size={15} className="text-accent" />{" "}
+                      Costs
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      View all
+                    </span>
+                  </Link>
+                ) : null}
+                {!canViewResources && !canViewCosts ? (
+                  <p className="text-muted-foreground text-sm">
+                    No cloud-data capabilities are available for this
+                    connection.
+                  </p>
+                ) : null}
               </div>
             </section>
           </div>
@@ -480,7 +550,7 @@ export function ConnectionDetailClient({
               title="Capabilities"
               className="border-border-soft rounded-2xl border p-5"
               action={
-                capabilitiesDirty ? (
+                capabilitiesDirty && !connectionDisabled ? (
                   <button
                     onClick={saveCapabilities}
                     disabled={pending}
@@ -491,9 +561,9 @@ export function ConnectionDetailClient({
                 ) : undefined
               }
             >
-              {capabilities.length ? (
+              {availableCapabilities.length ? (
                 <div className="space-y-2">
-                  {capabilities.map((capability) => {
+                  {availableCapabilities.map((capability) => {
                     const selected = selectedCapabilityIds.has(capability.id);
                     return (
                       <label
@@ -503,7 +573,10 @@ export function ConnectionDetailClient({
                         <input
                           type="checkbox"
                           checked={selected}
-                          disabled={capability.status !== "active" && !selected}
+                          disabled={
+                            connectionDisabled ||
+                            (capability.status !== "active" && !selected)
+                          }
                           onChange={() => toggleCapability(capability.id)}
                           className="border-foreground/20 text-accent focus:ring-accent rounded"
                         />
@@ -525,7 +598,7 @@ export function ConnectionDetailClient({
                 </div>
               ) : (
                 <p className="text-muted-foreground text-sm">
-                  This integration has no capabilities defined yet.
+                  No capabilities are available for your organization.
                 </p>
               )}
             </Section>
@@ -534,13 +607,15 @@ export function ConnectionDetailClient({
               title="Scopes"
               className="border-border-soft rounded-2xl border p-5"
               action={
-                <button
-                  onClick={() => setScopeDialog(true)}
-                  className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium"
-                >
-                  <Plus size={13} />
-                  Add scope
-                </button>
+                connectionDisabled ? undefined : (
+                  <button
+                    onClick={() => setScopeDialog(true)}
+                    className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium"
+                  >
+                    <Plus size={13} />
+                    Add scope
+                  </button>
+                )
               }
             >
               {scopes.length ? (
@@ -556,16 +631,18 @@ export function ConnectionDetailClient({
                         </span>
                         <p className="mt-0.5 font-mono">{scope.scope_key}</p>
                       </div>
-                      <button
-                        onClick={() =>
-                          removeScope(scope.scope_type, scope.scope_key)
-                        }
-                        disabled={pending}
-                        aria-label={`Remove scope ${scope.scope_type}/${scope.scope_key}`}
-                        className="text-muted-foreground p-1.5 hover:text-red-500 disabled:opacity-40"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {!connectionDisabled ? (
+                        <button
+                          onClick={() =>
+                            removeScope(scope.scope_type, scope.scope_key)
+                          }
+                          disabled={pending}
+                          aria-label={`Remove scope ${scope.scope_type}/${scope.scope_key}`}
+                          className="text-muted-foreground p-1.5 hover:text-red-500 disabled:opacity-40"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -584,6 +661,7 @@ export function ConnectionDetailClient({
               <TargetsPanel
                 connectionId={connection.id}
                 initialTargets={initialTargets}
+                readOnly={connectionDisabled}
               />
             </Section>
           </div>
@@ -598,7 +676,12 @@ export function ConnectionDetailClient({
             <Section title="Sync & Activity">
               <SyncPanel
                 connectionId={connection.id}
+                providerSlug={integrationSlug}
                 enabledCapabilitySlugs={enabledCapabilitySlugs}
+                activeOrganizationCapabilityCodes={
+                  activeOrganizationCapabilityCodes
+                }
+                connectionUsable={connection.status === "connected"}
                 initialRuns={initialSyncRuns}
                 initialTotal={initialSyncTotal}
                 initialPolicies={initialSyncPolicies}
@@ -623,15 +706,17 @@ export function ConnectionDetailClient({
                   verification configuration.
                 </p>
                 <div className="mt-5 flex flex-wrap gap-2">
-                  <button
-                    onClick={() => setEditDialog(true)}
-                    disabled={pending}
-                    className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
-                  >
-                    <Edit2 size={14} />
-                    Modify
-                  </button>
-                  {awsSetup.cloudformation_supported ? (
+                  {!connectionDisabled ? (
+                    <button
+                      onClick={() => setEditDialog(true)}
+                      disabled={pending}
+                      className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+                    >
+                      <Edit2 size={14} />
+                      Modify
+                    </button>
+                  ) : null}
+                  {awsSetup.cloudformation_supported && !connectionDisabled ? (
                     <button
                       onClick={() => setVerifyDialog(true)}
                       disabled={pending || connection.status === "disabled"}
@@ -695,9 +780,9 @@ export function ConnectionDetailClient({
                   </h3>
                   <p className="text-muted-foreground mt-1 max-w-xl text-sm leading-6">
                     Irreversibly deletes this connection together with every
-                    sync history, inventory resource, and cost data row it
-                    owns — a separate, harder-to-undo action from Remove
-                    above, which refuses once real history exists.
+                    sync history, inventory resource, and cost data row it owns
+                    — a separate, harder-to-undo action from Remove above, which
+                    refuses once real history exists.
                   </p>
                 </div>
                 <button
@@ -993,9 +1078,9 @@ export function ConnectionDetailClient({
               Permanently delete {connection.name}?
             </h2>
             <p className="text-muted-foreground mt-2 text-sm leading-6">
-              This irreversibly deletes the connection together with every
-              sync checkpoint, sync run, inventory resource, and cost row it
-              owns. This cannot be undone.
+              This irreversibly deletes the connection together with every sync
+              checkpoint, sync run, inventory resource, and cost row it owns.
+              This cannot be undone.
             </p>
             <label className="mt-4 block text-sm">
               <span className="mb-1.5 block font-medium">

@@ -43,6 +43,7 @@ function TargetRow({
   connectionId,
   target,
   onChanged,
+  readOnly,
 }: {
   connectionId: string;
   target: CoreIntegrationTarget;
@@ -51,6 +52,7 @@ function TargetRow({
    * created, so a targeted merge would leave this row's now-stale `verified`
    * status showing in the UI. */
   onChanged: () => void;
+  readOnly: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [replaceDialog, setReplaceDialog] = useState(false);
@@ -96,28 +98,30 @@ function TargetRow({
             {target.external_id}
           </span>
         </div>
-        <div className="flex shrink-0 items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setReplaceDialog(true)}
-            disabled={pending}
-            className="text-accent inline-flex items-center gap-1 text-xs hover:underline disabled:opacity-50"
-          >
-            <RefreshCw size={12} />
-            Replace
-          </button>
-          {target.status !== "disabled" ? (
+        {!readOnly ? (
+          <div className="flex shrink-0 items-center gap-3">
             <button
               type="button"
-              onClick={disable}
+              onClick={() => setReplaceDialog(true)}
               disabled={pending}
-              className="text-muted-foreground inline-flex items-center gap-1 text-xs hover:text-red-500 disabled:opacity-50"
+              className="text-accent inline-flex items-center gap-1 text-xs hover:underline disabled:opacity-50"
             >
-              <ShieldOff size={12} />
-              Disable
+              <RefreshCw size={12} />
+              Replace
             </button>
-          ) : null}
-        </div>
+            {target.status !== "disabled" ? (
+              <button
+                type="button"
+                onClick={disable}
+                disabled={pending}
+                className="text-muted-foreground inline-flex items-center gap-1 text-xs hover:text-red-500 disabled:opacity-50"
+              >
+                <ShieldOff size={12} />
+                Disable
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       {target.display_name ? (
         <p className="text-muted-foreground text-xs">{target.display_name}</p>
@@ -232,9 +236,11 @@ function TargetRow({
 export function TargetsPanel({
   connectionId,
   initialTargets,
+  readOnly = false,
 }: {
   connectionId: string;
   initialTargets: CoreIntegrationTarget[];
+  readOnly?: boolean;
 }) {
   const [targets, setTargets] = useState(() => sortTargets(initialTargets));
   const [, startReload] = useTransition();
@@ -263,6 +269,7 @@ export function TargetsPanel({
           connectionId={connectionId}
           target={target}
           onChanged={reload}
+          readOnly={readOnly}
         />
       ))}
     </div>

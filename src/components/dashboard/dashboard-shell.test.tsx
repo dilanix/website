@@ -21,7 +21,12 @@ afterEach(cleanup);
 describe("DashboardShell", () => {
   it("hides organization-scoped navigation when no effective organization exists", () => {
     render(
-      <DashboardShell user={user} organization={null} products={[]}>
+      <DashboardShell
+        user={user}
+        organization={null}
+        products={[]}
+        activeCapabilityCodes={[]}
+      >
         <p>Account settings</p>
       </DashboardShell>,
     );
@@ -42,6 +47,7 @@ describe("DashboardShell", () => {
         user={user}
         organization={{ name: "Analytical Engines" }}
         products={[]}
+        activeCapabilityCodes={["aws.inventory.read", "aws.billing.read"]}
       >
         <p>Organization dashboard</p>
       </DashboardShell>,
@@ -55,5 +61,21 @@ describe("DashboardShell", () => {
     expect(screen.getByRole("link", { name: "API Keys" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Billing" })).toBeNull();
     expect(screen.getByText("Analytical Engines")).toBeTruthy();
+  });
+
+  it("hides capability-owned navigation without an organization grant", () => {
+    render(
+      <DashboardShell
+        user={user}
+        organization={{ name: "Analytical Engines" }}
+        products={[]}
+        activeCapabilityCodes={["aws.inventory.read"]}
+      >
+        <p>Organization dashboard</p>
+      </DashboardShell>,
+    );
+
+    expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Costs" })).toBeNull();
   });
 });

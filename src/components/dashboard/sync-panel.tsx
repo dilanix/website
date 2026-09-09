@@ -613,7 +613,10 @@ function CancelRunButton({
 
 export function SyncPanel({
   connectionId,
+  providerSlug,
   enabledCapabilitySlugs,
+  activeOrganizationCapabilityCodes,
+  connectionUsable,
   initialRuns,
   initialTotal,
   initialPolicies,
@@ -621,7 +624,10 @@ export function SyncPanel({
   initialTargets,
 }: {
   connectionId: string;
+  providerSlug: string;
   enabledCapabilitySlugs: string[];
+  activeOrganizationCapabilityCodes: string[];
+  connectionUsable: boolean;
   initialRuns: CoreSyncRun[];
   initialTotal: number;
   initialPolicies: CoreSyncPolicy[];
@@ -663,10 +669,21 @@ export function SyncPanel({
   const [healthError, setHealthError] = useState("");
 
   const eligibleDatasets = useMemo(
-    () => eligibleSyncDatasets(enabledCapabilitySlugs),
-    [enabledCapabilitySlugs],
+    () =>
+      eligibleSyncDatasets(
+        enabledCapabilitySlugs,
+        activeOrganizationCapabilityCodes,
+        providerSlug,
+      ),
+    [activeOrganizationCapabilityCodes, enabledCapabilitySlugs, providerSlug],
   );
-  const canSync = eligibleDatasets.length > 0 || health.length > 0;
+  const eligibleDatasetSlugs = new Set<string>(
+    eligibleDatasets.map((dataset) => dataset.slug),
+  );
+  const visibleHealth = connectionUsable
+    ? health.filter((entry) => eligibleDatasetSlugs.has(entry.dataset))
+    : [];
+  const canSync = connectionUsable && eligibleDatasets.length > 0;
   const targetById = useMemo(
     () => new Map(initialTargets.map((target) => [target.id, target])),
     [initialTargets],
@@ -712,6 +729,7 @@ export function SyncPanel({
     datasetSlug: string,
     patch: { enabled?: boolean; intervalSeconds?: number },
   ) {
+    if (!canSync) return;
     const existing = policyByDataset.get(datasetSlug);
     const enabled = patch.enabled ?? existing?.enabled ?? false;
     const intervalSeconds =
@@ -757,6 +775,7 @@ export function SyncPanel({
   }
 
   function openPolicyDialog() {
+    if (!canSync) return;
     setPolicyError("");
     setPolicyDialogOpen(true);
   }
@@ -869,6 +888,7 @@ export function SyncPanel({
   ]);
 
   function openDialog() {
+    if (!canSync) return;
     setDialogError("");
     setSyncMode("auto");
     setSelectedDatasets(
@@ -997,9 +1017,9 @@ export function SyncPanel({
           </button>
         </div>
 
-        {health.length > 0 ? (
+        {visibleHealth.length > 0 ? (
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {health.map((entry) => (
+            {visibleHealth.map((entry) => (
               <article
                 key={entry.dataset}
                 className="border-border-soft bg-background/45 rounded-xl border p-3.5"
@@ -1111,19 +1131,15 @@ export function SyncPanel({
           Start an on-demand sync to pull the latest data for this connection.
           Core can select every eligible dataset automatically.
         </p>
-        <button
-          onClick={openDialog}
-          disabled={!canSync}
-          title={
-            canSync
-              ? undefined
-              : "Enable a capability such as Inventory Read before syncing."
-          }
-          className="bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50"
-        >
-          <RefreshCw size={14} />
-          Sync now
-        </button>
+        {canSync ? (
+          <button
+            onClick={openDialog}
+            className="bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
+          >
+            <RefreshCw size={14} />
+            Sync now
+          </button>
+        ) : null}
       </div>
 
       {runs.length === 0 ? (

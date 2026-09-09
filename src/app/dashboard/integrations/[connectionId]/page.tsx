@@ -8,6 +8,7 @@ import {
   getSyncHealth,
   listIntegrations,
   listIntegrationCapabilities,
+  listOrganizationCapabilities,
   listConnectionCapabilities,
   listConnectionScopes,
   listTargets,
@@ -59,6 +60,7 @@ export default async function ConnectionDetailPage({
     syncRuns,
     syncPolicies,
     syncHealth,
+    organizationCapabilities,
   ] = await Promise.all([
     listIntegrations(token),
     listIntegrationCapabilities(connection.integration_id, token),
@@ -77,6 +79,7 @@ export default async function ConnectionDetailPage({
     }),
     listSyncPolicies(organization.organization_id, connectionId, token),
     getSyncHealth(organization.organization_id, connectionId, token),
+    listOrganizationCapabilities(organization.organization_id, token),
   ]);
   const integration =
     integrations.find((item) => item.id === connection.integration_id) ?? null;
@@ -94,6 +97,7 @@ export default async function ConnectionDetailPage({
       <ConnectionDetailClient
         connection={connection}
         integrationName={integration?.name ?? "Cloud provider"}
+        integrationSlug={integration?.slug ?? ""}
         initialTab={initialTab}
         capabilities={capabilities}
         initialConnectionCapabilities={connectionCapabilities}
@@ -104,6 +108,7 @@ export default async function ConnectionDetailPage({
         initialSyncTotal={syncRuns.total}
         initialSyncPolicies={syncPolicies.items}
         initialSyncHealth={syncHealth.items}
+        organizationCapabilities={organizationCapabilities}
       />
     </div>
   );

@@ -8,7 +8,11 @@ import {
 
 describe("eligibleSyncDatasets", () => {
   it("returns only datasets whose required capability is enabled", () => {
-    const result = eligibleSyncDatasets(["inventory.read"]);
+    const result = eligibleSyncDatasets(
+      ["inventory.read"],
+      ["aws.inventory.read"],
+      "aws",
+    );
 
     expect(result.map((dataset) => dataset.slug)).toEqual([
       "inventory.resources",
@@ -16,17 +20,41 @@ describe("eligibleSyncDatasets", () => {
   });
 
   it("returns every capability-matching dataset when multiple capabilities are enabled", () => {
-    const result = eligibleSyncDatasets(["inventory.read", "billing.read"]);
+    const result = eligibleSyncDatasets(
+      ["inventory.read", "billing.read"],
+      ["aws.inventory.read", "aws.billing.read"],
+      "aws",
+    );
 
     expect(result.map((dataset) => dataset.slug).sort()).toEqual([
       "billing.cost_summary",
-      "billing.cost_usage",
       "inventory.resources",
     ]);
   });
 
+  it("requires the additional organization grant for FOCUS cost usage", () => {
+    const result = eligibleSyncDatasets(
+      ["billing.read"],
+      ["aws.billing.read", "aws.billing.cost_usage"],
+      "aws",
+    );
+
+    expect(result.map((dataset) => dataset.slug).sort()).toEqual([
+      "billing.cost_summary",
+      "billing.cost_usage",
+    ]);
+  });
+
+  it("excludes datasets when the organization grant is unavailable", () => {
+    expect(eligibleSyncDatasets(["inventory.read"], [], "aws")).toEqual([]);
+  });
+
   it("returns metrics.utilization when metrics.read is enabled", () => {
-    const result = eligibleSyncDatasets(["metrics.read"]);
+    const result = eligibleSyncDatasets(
+      ["metrics.read"],
+      ["aws.metrics.read"],
+      "aws",
+    );
 
     expect(result.map((dataset) => dataset.slug)).toEqual([
       "metrics.utilization",
@@ -34,7 +62,7 @@ describe("eligibleSyncDatasets", () => {
   });
 
   it("returns an empty list when no capability is enabled", () => {
-    expect(eligibleSyncDatasets([])).toEqual([]);
+    expect(eligibleSyncDatasets([], [], "aws")).toEqual([]);
   });
 
   it("returns every dataset when every capability is enabled", () => {
@@ -42,9 +70,14 @@ describe("eligibleSyncDatasets", () => {
       (dataset) => dataset.requiredCapability,
     );
 
-    expect(eligibleSyncDatasets(allCapabilities)).toHaveLength(
-      SYNC_DATASETS.length,
-    );
+    const organizationCapabilities = [
+      ...allCapabilities.map((capability) => `aws.${capability}`),
+      "aws.billing.cost_usage",
+    ];
+
+    expect(
+      eligibleSyncDatasets(allCapabilities, organizationCapabilities, "aws"),
+    ).toHaveLength(SYNC_DATASETS.length);
   });
 
   it("contains only datasets executable by the current Core registry", () => {

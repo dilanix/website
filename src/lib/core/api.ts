@@ -89,6 +89,14 @@ export function providerCapabilityCode(slug: string): string {
   return `provider.${slug}`;
 }
 
+/** Mirrors Core's canonical organization grant for one provider capability. */
+export function integrationCapabilityCode(
+  providerSlug: string,
+  capabilitySlug: string,
+): string {
+  return `${providerSlug}.${capabilitySlug}`;
+}
+
 export type ApiKeyAccessMode = "full" | "restricted";
 export interface CoreApiKey {
   id: string;

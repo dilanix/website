@@ -22,11 +22,15 @@ export function CloudConnectionSelector({
   integrations,
   connections,
   selectedConnectionId,
+  showResources,
+  showCosts,
 }: {
   basePath: "/dashboard/resources" | "/dashboard/costs";
   integrations: CoreIntegration[];
   connections: CoreIntegrationConnection[];
   selectedConnectionId: string;
+  showResources: boolean;
+  showCosts: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -79,24 +83,30 @@ export function CloudConnectionSelector({
       <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
         <div className="border-foreground/10 bg-background flex w-fit rounded-lg border p-1 text-xs">
           {[
-            { label: "Resources", path: "/dashboard/resources" as const },
-            { label: "Costs", path: "/dashboard/costs" as const },
-          ].map((item) => (
-            <Link
-              key={item.path}
-              href={
-                `${item.path}?connection=${encodeURIComponent(selectedConnectionId)}` as Route
-              }
-              aria-current={basePath === item.path ? "page" : undefined}
-              className={`rounded-md px-2.5 py-1.5 transition-colors ${
-                basePath === item.path
-                  ? "bg-accent/10 text-accent font-medium"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+            showResources
+              ? { label: "Resources", path: "/dashboard/resources" as const }
+              : null,
+            showCosts
+              ? { label: "Costs", path: "/dashboard/costs" as const }
+              : null,
+          ]
+            .filter((item) => item !== null)
+            .map((item) => (
+              <Link
+                key={item.path}
+                href={
+                  `${item.path}?connection=${encodeURIComponent(selectedConnectionId)}` as Route
+                }
+                aria-current={basePath === item.path ? "page" : undefined}
+                className={`rounded-md px-2.5 py-1.5 transition-colors ${
+                  basePath === item.path
+                    ? "bg-accent/10 text-accent font-medium"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
         </div>
         <label className="relative block w-full sm:w-72">
           <span className="sr-only">Select cloud connection</span>

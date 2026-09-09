@@ -11,21 +11,25 @@ export const SYNC_DATASETS = [
     slug: "inventory.resources",
     label: "Inventory Resources",
     requiredCapability: "inventory.read",
+    additionalOrganizationCapabilities: [],
   },
   {
     slug: "billing.cost_summary",
     label: "Cost Summary (AWS Cost Explorer)",
     requiredCapability: "billing.read",
+    additionalOrganizationCapabilities: [],
   },
   {
     slug: "billing.cost_usage",
     label: "Cost Usage (AWS FOCUS Data Export)",
     requiredCapability: "billing.read",
+    additionalOrganizationCapabilities: ["billing.cost_usage"],
   },
   {
     slug: "metrics.utilization",
     label: "Utilization Metrics (AWS CloudWatch)",
     requiredCapability: "metrics.read",
+    additionalOrganizationCapabilities: [],
   },
 ] as const;
 
@@ -37,10 +41,18 @@ export const SYNC_RUNS_PAGE_SIZE = 10;
 /** Datasets this connection can actually sync, given its currently enabled capabilities. */
 export function eligibleSyncDatasets(
   enabledCapabilitySlugs: string[],
+  activeOrganizationCapabilityCodes: string[],
+  providerSlug: string,
 ): SyncDataset[] {
   const enabled = new Set(enabledCapabilitySlugs);
-  return SYNC_DATASETS.filter((dataset) =>
-    enabled.has(dataset.requiredCapability),
+  const granted = new Set(activeOrganizationCapabilityCodes);
+  return SYNC_DATASETS.filter(
+    (dataset) =>
+      enabled.has(dataset.requiredCapability) &&
+      granted.has(`${providerSlug}.${dataset.requiredCapability}`) &&
+      dataset.additionalOrganizationCapabilities.every((capability) =>
+        granted.has(`${providerSlug}.${capability}`),
+      ),
   );
 }
 

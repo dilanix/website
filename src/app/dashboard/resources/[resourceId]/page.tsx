@@ -6,7 +6,11 @@ import {
   findResource,
   getConnection,
   getMetricUtilizationSummary,
+  integrationCapabilityCode,
+  listConnectionCapabilities,
+  listIntegrations,
   listMetricDatapoints,
+  listOrganizationCapabilities,
   listResources,
   type CoreMetricDatapointListResponse,
   type CoreMetricUtilizationSummaryListResponse,
@@ -130,15 +134,45 @@ export default async function ResourceDetailPage({
   const connectionId = scalarParam(query.connection);
   if (!connectionId) notFound();
 
-  const connection = await getConnection(
+  const [connection, integrations, organizationCapabilities] =
+    await Promise.all([
+      getConnection(organization.organization_id, connectionId, token).catch(
+        (error) => {
+          if (error instanceof CoreApiError && error.status === 404)
+            return null;
+          throw error;
+        },
+      ),
+      listIntegrations(token),
+      listOrganizationCapabilities(organization.organization_id, token),
+    ]);
+  if (!connection) notFound();
+  const capabilities = await listConnectionCapabilities(
     organization.organization_id,
     connectionId,
     token,
-  ).catch((error) => {
-    if (error instanceof CoreApiError && error.status === 404) return null;
-    throw error;
-  });
-  if (!connection) notFound();
+    false,
+  );
+  const providerSlug = integrations.find(
+    (integration) => integration.id === connection.integration_id,
+  )?.slug;
+  const activeOrganizationCapabilities = new Set(
+    organizationCapabilities
+      .filter((capability) => capability.access_status === "active")
+      .map((capability) => capability.code),
+  );
+  const hasConnectionCapability = (slug: string) =>
+    capabilities.some((row) => row.enabled && row.capability.slug === slug);
+  const hasCapability = (slug: string) =>
+    Boolean(
+      providerSlug &&
+      hasConnectionCapability(slug) &&
+      activeOrganizationCapabilities.has(
+        integrationCapabilityCode(providerSlug, slug),
+      ),
+    );
+  if (!hasCapability("inventory.read")) notFound();
+  const metricsEnabled = hasCapability("metrics.read");
 
   const resource = await findResource(
     organization.organization_id,
@@ -173,12 +207,14 @@ export default async function ResourceDetailPage({
       resource,
       token,
     );
-    clusterMetricSummary = await getMetricSummaries(
-      organization.organization_id,
-      connectionId,
-      clusterServices.map((service) => service.id),
-      token,
-    );
+    if (metricsEnabled) {
+      clusterMetricSummary = await getMetricSummaries(
+        organization.organization_id,
+        connectionId,
+        clusterServices.map((service) => service.id),
+        token,
+      );
+    }
     const initialService = clusterServices.find((service) =>
       clusterMetricSummary.items.some(
         (summary) => summary.resource_id === service.id,
@@ -203,7 +239,7 @@ export default async function ResourceDetailPage({
         },
       );
     }
-  } else {
+  } else if (metricsEnabled) {
     initialMetricSummary = await getMetricUtilizationSummary(
       organization.organization_id,
       connectionId,

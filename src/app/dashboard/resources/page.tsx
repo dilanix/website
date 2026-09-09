@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   listConnections,
+  listConnectionCapabilities,
   listIntegrations,
+  listOrganizationCapabilities,
   listResourceFilters,
   listResources,
+  integrationCapabilityCode,
 } from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { RESOURCES_PAGE_SIZE } from "@/lib/inventory/resources";
@@ -47,17 +50,38 @@ export default async function ResourcesPage({
   }>;
 }) {
   const { token, organization } = await requireDashboardOrganization();
-  const [integrations, connections] = await Promise.all([
-    listIntegrations(token),
-    listConnections(organization.organization_id, token),
-  ]);
+  const [integrations, connections, organizationCapabilities] =
+    await Promise.all([
+      listIntegrations(token),
+      listConnections(organization.organization_id, token),
+      listOrganizationCapabilities(organization.organization_id, token),
+    ]);
+  const activeOrganizationCapabilities = new Set(
+    organizationCapabilities
+      .filter((capability) => capability.access_status === "active")
+      .map((capability) => capability.code),
+  );
+  const integrationsById = new Map(
+    integrations.map((integration) => [integration.id, integration]),
+  );
+  const resourceConnections = connections.filter((connection) => {
+    const providerSlug = integrationsById.get(connection.integration_id)?.slug;
+    return Boolean(
+      providerSlug &&
+      activeOrganizationCapabilities.has(
+        integrationCapabilityCode(providerSlug, "inventory.read"),
+      ),
+    );
+  });
 
   const query = await searchParams;
   const requestedId = requestedConnectionId(query.connection);
   const selectedConnection =
-    connections.find((connection) => connection.id === requestedId) ??
-    connections.find((connection) => connection.status === "connected") ??
-    connections[0];
+    resourceConnections.find((connection) => connection.id === requestedId) ??
+    resourceConnections.find(
+      (connection) => connection.status === "connected",
+    ) ??
+    resourceConnections[0];
 
   if (!selectedConnection) {
     return (
@@ -67,8 +91,16 @@ export default async function ResourcesPage({
           description="Explore cloud resources across every connected provider."
         />
         <EmptyState
-          title="Connect a cloud provider first"
-          description="Resources from AWS accounts, Azure subscriptions, and GCP projects will appear here after the first sync."
+          title={
+            connections.length
+              ? "Resource access is unavailable"
+              : "Connect a cloud provider first"
+          }
+          description={
+            connections.length
+              ? "Your organization does not have access to resource inventory for its configured providers."
+              : "Resources from AWS accounts, Azure subscriptions, and GCP projects will appear here after the first sync."
+          }
           actions={
             <Link
               href="/dashboard/integrations"
@@ -108,6 +140,57 @@ export default async function ResourcesPage({
       ? requestedDirection
       : undefined;
 
+  const connectionCapabilities = await listConnectionCapabilities(
+    organization.organization_id,
+    selectedConnection.id,
+    token,
+    false,
+  );
+  const inventoryEnabled = connectionCapabilities.some(
+    (row) => row.enabled && row.capability.slug === "inventory.read",
+  );
+  const selectedProviderSlug = integrationsById.get(
+    selectedConnection.integration_id,
+  )?.slug;
+
+  if (!inventoryEnabled) {
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          title="Resources"
+          description="Explore cloud resources across every connected provider."
+        />
+        <CloudConnectionSelector
+          basePath="/dashboard/resources"
+          integrations={integrations}
+          connections={resourceConnections}
+          selectedConnectionId={selectedConnection.id}
+          showResources
+          showCosts={Boolean(
+            selectedProviderSlug &&
+            activeOrganizationCapabilities.has(
+              integrationCapabilityCode(selectedProviderSlug, "billing.read"),
+            ),
+          )}
+        />
+        <EmptyState
+          title="Resource access is not enabled"
+          description="Enable the provider's inventory-read capability under Access before collecting resource data."
+          actions={
+            selectedConnection.status !== "disabled" ? (
+              <Link
+                href={`/dashboard/integrations/${selectedConnection.id}?tab=access`}
+                className="bg-accent text-accent-foreground rounded-lg px-4 py-2 text-sm font-medium"
+              >
+                Configure access
+              </Link>
+            ) : undefined
+          }
+        />
+      </div>
+    );
+  }
+
   const [resources, filterOptions] = await Promise.all([
     listResources(organization.organization_id, selectedConnection.id, token, {
       limit: RESOURCES_PAGE_SIZE,
@@ -133,8 +216,15 @@ export default async function ResourcesPage({
       <CloudConnectionSelector
         basePath="/dashboard/resources"
         integrations={integrations}
-        connections={connections}
+        connections={resourceConnections}
         selectedConnectionId={selectedConnection.id}
+        showResources
+        showCosts={Boolean(
+          selectedProviderSlug &&
+          activeOrganizationCapabilities.has(
+            integrationCapabilityCode(selectedProviderSlug, "billing.read"),
+          ),
+        )}
       />
       <Section title="Cloud inventory">
         <ResourcePanel

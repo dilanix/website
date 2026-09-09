@@ -36,6 +36,7 @@ const navGroups = [
         href: "/dashboard/resources",
         icon: Boxes,
         organizationRequired: true,
+        requiredCapability: "inventory.read",
       },
       {
         label: "Applications",
@@ -48,6 +49,7 @@ const navGroups = [
         href: "/dashboard/costs",
         icon: CircleDollarSign,
         organizationRequired: true,
+        requiredCapability: "billing.read",
       },
     ],
   },
@@ -89,11 +91,13 @@ export function DashboardShell({
   user,
   organization,
   products,
+  activeCapabilityCodes,
   children,
 }: {
   user: { firstName: string; lastName: string; email: string };
   organization: { name: string } | null;
   products: DashboardProduct[];
+  activeCapabilityCodes: string[];
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -102,7 +106,12 @@ export function DashboardShell({
     .map((group) => ({
       ...group,
       items: group.items.filter(
-        (item) => organization || !item.organizationRequired,
+        (item) =>
+          (organization || !item.organizationRequired) &&
+          (!("requiredCapability" in item) ||
+            activeCapabilityCodes.some((code) =>
+              code.endsWith(`.${item.requiredCapability}`),
+            )),
       ),
     }))
     .filter((group) => group.items.length > 0);

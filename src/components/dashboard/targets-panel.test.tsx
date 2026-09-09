@@ -37,4 +37,27 @@ describe("TargetsPanel", () => {
     expect(screen.getByText("Assumed role ARN")).toBeTruthy();
     expect(screen.getByText(/role\/Dilanix/)).toBeTruthy();
   });
+
+  it("hides target mutations in read-only mode", () => {
+    const target: CoreIntegrationTarget = {
+      id: "target-1",
+      organization_id: "org-1",
+      connection_id: "conn-1",
+      target_type: "aws_account",
+      external_id: "123456789012",
+      display_name: "Production",
+      parent_target_id: null,
+      status: "verified",
+      provider_metadata: {},
+      created_at: "2026-09-07T10:00:00Z",
+      updated_at: "2026-09-07T10:00:00Z",
+    };
+
+    render(
+      <TargetsPanel connectionId="conn-1" initialTargets={[target]} readOnly />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Replace" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Disable" })).toBeNull();
+  });
 });

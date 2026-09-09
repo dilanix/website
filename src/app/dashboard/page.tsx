@@ -10,6 +10,7 @@ import {
 import {
   listConnections,
   listIntegrations,
+  listOrganizationCapabilities,
   listOrganizationProducts,
 } from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
@@ -53,11 +54,29 @@ const workspaceLinks = [
 
 export default async function DashboardPage() {
   const { token, organization } = await requireDashboardOrganization();
-  const [connections, integrations, products] = await Promise.all([
-    listConnections(organization.organization_id, token),
-    listIntegrations(token),
-    listOrganizationProducts(organization.organization_id, token),
-  ]);
+  const [connections, integrations, products, organizationCapabilities] =
+    await Promise.all([
+      listConnections(organization.organization_id, token),
+      listIntegrations(token),
+      listOrganizationProducts(organization.organization_id, token),
+      listOrganizationCapabilities(organization.organization_id, token),
+    ]);
+  const activeCapabilityCodes = organizationCapabilities
+    .filter((capability) => capability.access_status === "active")
+    .map((capability) => capability.code);
+  const visibleWorkspaceLinks = workspaceLinks.filter((item) => {
+    if (item.href === "/dashboard/resources") {
+      return activeCapabilityCodes.some((code) =>
+        code.endsWith(".inventory.read"),
+      );
+    }
+    if (item.href === "/dashboard/costs") {
+      return activeCapabilityCodes.some((code) =>
+        code.endsWith(".billing.read"),
+      );
+    }
+    return true;
+  });
   const integrationNames = new Map(
     integrations.map((integration) => [integration.id, integration.name]),
   );
@@ -120,7 +139,7 @@ export default async function DashboardPage() {
       </dl>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {workspaceLinks.map((item) => {
+        {visibleWorkspaceLinks.map((item) => {
           const Icon = item.icon;
           return (
             <Link
