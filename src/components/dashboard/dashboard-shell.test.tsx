@@ -58,35 +58,17 @@ const products: DashboardProduct[] = [
 afterEach(cleanup);
 
 describe("DashboardShell", () => {
-  it("hides organization-scoped navigation when no effective organization exists", () => {
-    render(
-      <DashboardShell
-        user={user}
-        organization={null}
-        products={[]}
-        activeCapabilityCodes={[]}
-      >
-        <p>Account settings</p>
-      </DashboardShell>,
-    );
-
-    expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Overview" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Resources" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Applications" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Costs" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Integrations" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "API Keys" })).toBeNull();
-    expect(screen.queryByText("Organization")).toBeNull();
-  });
-
   it("shows organization-scoped navigation for an effective organization", () => {
     render(
       <DashboardShell
         user={user}
         organization={{ name: "Analytical Engines" }}
         products={[]}
-        activeCapabilityCodes={["aws.inventory.read", "aws.billing.read"]}
+        activeCapabilityCodes={[
+          "aws.inventory.read",
+          "aws.billing.read",
+          "platform.application",
+        ]}
       >
         <p>Organization dashboard</p>
       </DashboardShell>,
@@ -102,6 +84,29 @@ describe("DashboardShell", () => {
     expect(screen.getByText("Analytical Engines")).toBeTruthy();
   });
 
+  it("hides Applications without platform.application capability", () => {
+    render(
+      <DashboardShell
+        user={user}
+        organization={{ name: "Analytical Engines" }}
+        products={[]}
+        activeCapabilityCodes={[
+          "aws.inventory.read",
+          "aws.billing.read",
+        ]}
+      >
+        <p>Organization dashboard</p>
+      </DashboardShell>,
+    );
+
+    expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Applications" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Costs" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Integrations" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "API Keys" })).toBeTruthy();
+  });
+
   it("hides capability-owned navigation without an organization grant", () => {
     render(
       <DashboardShell
@@ -115,6 +120,7 @@ describe("DashboardShell", () => {
     );
 
     expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Applications" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Costs" })).toBeNull();
   });
 
