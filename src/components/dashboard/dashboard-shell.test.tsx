@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
 import { DashboardShell } from "./dashboard-shell";
 
 vi.mock("next/navigation", () => ({
@@ -15,6 +16,44 @@ const user = {
   lastName: "Lovelace",
   email: "ada@example.com",
 };
+
+const products: DashboardProduct[] = [
+  {
+    id: "automation",
+    name: "Automation",
+    slug: "automation",
+    description: "Workflow automation",
+    status: "active",
+    href: "/dashboard/products/automation",
+    navigation: [
+      { label: "Overview", href: "/dashboard/products/automation" },
+      { label: "Usage", href: "/dashboard/products/automation/usage" },
+      { label: "Docs", href: "/dashboard/products/automation/docs" },
+    ],
+  },
+  {
+    id: "cost",
+    name: "Cost",
+    slug: "cost",
+    description: "Cloud cost management",
+    status: "active",
+    href: "/dashboard/products/cost",
+    navigation: [
+      { label: "Overview", href: "/dashboard/products/cost" },
+      { label: "Usage", href: "/dashboard/products/cost/usage" },
+      { label: "Docs", href: "/dashboard/products/cost/docs" },
+    ],
+  },
+  {
+    id: "security",
+    name: "Security",
+    slug: "security",
+    description: "Cloud security",
+    status: "pending",
+    href: "/dashboard/products/security",
+    navigation: [],
+  },
+];
 
 afterEach(cleanup);
 
@@ -77,5 +116,36 @@ describe("DashboardShell", () => {
 
     expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Costs" })).toBeNull();
+  });
+
+  it("groups active products into a single linked list", () => {
+    render(
+      <DashboardShell
+        user={user}
+        organization={{ name: "Analytical Engines" }}
+        products={products}
+        activeCapabilityCodes={[]}
+      >
+        <p>Organization dashboard</p>
+      </DashboardShell>,
+    );
+
+    expect(screen.getByText("Products")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Automation" }).getAttribute("href"),
+    ).toBe("/dashboard/products/automation");
+    expect(
+      screen.getByRole("link", { name: "Cost" }).getAttribute("href"),
+    ).toBe("/dashboard/products/cost");
+    expect(screen.queryByRole("link", { name: "Security" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Usage" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Docs" })).toBeNull();
+    expect(screen.getByText("Workflow automation")).toBeTruthy();
+    expect(screen.getByText("Cloud cost management")).toBeTruthy();
+    expect(
+      screen
+        .getByText("Products")
+        .compareDocumentPosition(screen.getByText("Manage")) & 4,
+    ).toBe(4);
   });
 });
