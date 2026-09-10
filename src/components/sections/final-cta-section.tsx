@@ -20,15 +20,15 @@ export function FinalCtaSection({ calendlyUrl }: { calendlyUrl: string }) {
             />
             <div className="relative flex flex-col items-center gap-6">
               <span className="border-accent/20 bg-card-strong/55 text-accent inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.14em] uppercase backdrop-blur-sm">
-                <CalendarCheck size={12} /> Your cloud, made actionable
+                <CalendarCheck size={12} /> Focused conversation, no sales maze
               </span>
               <h2 className="max-w-3xl text-3xl font-semibold tracking-[-0.04em] text-balance sm:text-5xl">
-                Ready to see what Dilanix finds in your cloud?
+                Which important problem should we solve together?
               </h2>
               <p className="text-muted-foreground max-w-xl text-lg leading-7">
-                Book a focused product walkthrough and discuss where clearer
-                cost and infrastructure visibility can create value for your
-                team.
+                Explore the product portfolio, book a focused walkthrough, and
+                discuss where purpose-built software can create measurable value
+                for your team.
               </p>
               <div className="mt-2 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
                 <Button

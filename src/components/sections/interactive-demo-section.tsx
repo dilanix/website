@@ -29,17 +29,18 @@ export function InteractiveDemoSection({
             <div>
               <div className="border-accent/15 bg-card-strong/70 text-accent inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.16em] uppercase shadow-sm backdrop-blur-sm">
                 <Play size={11} fill="currentColor" />
-                Guided product tour
+                Featured product · Guided tour
               </div>
               <h2 className="mt-5 max-w-3xl text-3xl leading-tight font-semibold tracking-[-0.04em] text-balance sm:text-5xl">
-                Don&apos;t take our word for it.
+                See how we think about products.
                 <span className="text-muted-foreground block">
-                  Explore the workspace yourself.
+                  Then explore the workspace yourself.
                 </span>
               </h2>
               <p className="text-muted-foreground mt-5 max-w-2xl text-base leading-7 sm:text-lg">
-                Move through a realistic Dilanix workflow—from cloud health to
-                resource inventory and cost opportunities. No signup required.
+                This interactive sample shows one Dilanix product in action:
+                clear hierarchy, transparent data, and direct paths from signal
+                to decision. No signup required.
               </p>
             </div>
             <div className="flex flex-wrap gap-3 lg:justify-end">
