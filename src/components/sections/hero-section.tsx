@@ -1,43 +1,43 @@
 import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
 import { HeroBackground } from "@/components/sections/hero-background";
-import { ArrowRight, ShieldCheck, Zap, Sparkles } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowRight,
+  DatabaseZap,
+  Eye,
+  ShieldCheck,
+} from "lucide-react";
 
 export function HeroSection({ calendlyUrl }: { calendlyUrl: string }) {
   return (
     <section className="relative overflow-hidden">
       <HeroBackground />
-      <Container className="relative pt-20 pb-14 sm:pt-28 sm:pb-20">
-        <div className="relative flex flex-col items-center gap-6 px-1 py-8 text-center sm:px-10 sm:py-12">
+      <Container className="relative pt-16 pb-10 sm:pt-24 sm:pb-14">
+        <div className="relative flex flex-col items-center px-1 py-8 text-center sm:px-10 sm:py-12">
           <div
             aria-hidden="true"
             className="bg-accent/10 pointer-events-none absolute top-1/2 left-1/2 -z-10 h-72 w-[46rem] max-w-full -translate-x-1/2 -translate-y-1/2 rounded-full blur-[110px]"
           />
-          {/* Release Pill */}
-          <div className="border-accent/30 bg-accent/10 text-accent inline-flex items-center gap-2 rounded-full border px-3.5 py-1 font-mono text-xs font-medium shadow-[0_10px_28px_var(--shadow-brand)]">
-            <span className="bg-accent h-1.5 w-1.5 rounded-full" />
-            <span>Independent Software Ecosystem</span>
-            <span className="text-foreground/40 font-sans">|</span>
-            <span>Engineered for Reliability</span>
+          <div className="border-accent/20 bg-card-strong/72 text-accent inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[10px] font-semibold tracking-[0.14em] uppercase shadow-[0_12px_32px_var(--shadow-card)] backdrop-blur-xl">
+            <span className="bg-accent h-1.5 w-1.5 rounded-full shadow-[0_0_9px_var(--accent)]" />
+            <span>Cloud intelligence without the blind spots</span>
           </div>
 
-          {/* Main Headline */}
-          <h1 className="text-foreground max-w-4xl text-4xl leading-[1.08] font-semibold tracking-[-0.04em] text-balance sm:text-6xl md:text-7xl">
-            Software for problems{" "}
-            <span className="from-accent to-accent-secondary bg-gradient-to-r bg-clip-text text-transparent">
-              worth solving.
+          <h1 className="text-foreground mt-7 max-w-5xl text-4xl leading-[1.02] font-semibold tracking-[-0.055em] text-balance sm:text-6xl md:text-[4.75rem]">
+            See where cloud spend goes.
+            <span className="from-accent via-accent to-accent-secondary mt-2 block bg-gradient-to-r bg-clip-text text-transparent">
+              Know what to fix next.
             </span>
           </h1>
 
-          {/* Subtitle */}
-          <p className="text-muted-foreground max-w-2xl text-lg leading-relaxed text-balance sm:text-xl">
-            Dilanix builds independent, high-leverage software products for
-            engineering teams — combining modern cloud infrastructure,
-            distributed data systems, automation, and thoughtful systems design.
+          <p className="text-muted-foreground mt-7 max-w-3xl text-lg leading-relaxed text-balance sm:text-xl">
+            Dilanix turns fragmented billing, infrastructure, and provider data
+            into one clear workspace—so engineering and finance teams can move
+            from cloud complexity to confident action.
           </p>
 
-          {/* CTAs */}
-          <div className="mt-4 flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row">
+          <div className="mt-9 flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row">
             <Button
               href={calendlyUrl}
               target="_blank"
@@ -45,34 +45,37 @@ export function HeroSection({ calendlyUrl }: { calendlyUrl: string }) {
               variant="primary"
               className="group w-full justify-center px-6 py-3 text-base sm:w-auto"
             >
-              Get started
+              Book a live demo
               <ArrowRight
                 size={16}
                 className="transition-transform duration-200 group-hover:translate-x-0.5"
               />
             </Button>
             <Button
-              href="/products"
+              href="#interactive-demo"
               variant="secondary"
               className="group w-full justify-center px-6 py-3 text-base sm:w-auto"
             >
-              Explore products
+              Explore interactive demo
+              <ArrowDown
+                size={15}
+                className="transition-transform group-hover:translate-y-0.5"
+              />
             </Button>
           </div>
 
-          {/* Value Trust Points */}
-          <div className="border-border-soft bg-card-strong/68 text-muted-foreground mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 rounded-2xl border px-5 py-3 font-mono text-xs shadow-[0_20px_52px_var(--shadow-card)] backdrop-blur-xl">
+          <div className="border-border-soft bg-card-strong/68 text-muted-foreground mt-9 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 rounded-2xl border px-5 py-3 text-[11px] shadow-[0_20px_52px_var(--shadow-card)] backdrop-blur-xl">
             <span className="flex items-center gap-1.5">
-              <Sparkles size={13} className="text-accent" />
-              Zero-Bloat Architecture
+              <DatabaseZap size={13} className="text-accent" />
+              FOCUS 1.2 cost data
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Eye size={13} className="text-accent" />
+              Resource-level visibility
             </span>
             <span className="flex items-center gap-1.5">
               <ShieldCheck size={13} className="text-success" />
-              Enterprise-Grade Security
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Zap size={13} className="text-accent" />
-              High-Throughput Systems
+              Source-aware metrics
             </span>
           </div>
         </div>

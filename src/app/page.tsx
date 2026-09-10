@@ -14,6 +14,7 @@ import { PhilosophySection } from "@/components/sections/philosophy-section";
 import { TechnologySection } from "@/components/sections/technology-section";
 import { CompanySection } from "@/components/sections/company-section";
 import { FinalCtaSection } from "@/components/sections/final-cta-section";
+import { InteractiveDemoSection } from "@/components/sections/interactive-demo-section";
 
 export default async function Home() {
   const featuredProduct = await getFeaturedProduct();
@@ -39,13 +40,18 @@ export default async function Home() {
   return (
     <div className="home-atmosphere relative isolate overflow-hidden">
       <HeroSection calendlyUrl={settings.calendlyUrl} />
-      <ProductsSection product={featuredProduct} snapshot={snapshot} />
+      <InteractiveDemoSection
+        productName={featuredProduct.shortName ?? featuredProduct.name}
+        snapshot={snapshot}
+        calendlyUrl={settings.calendlyUrl}
+      />
       <ProblemSolutionSection />
+      <ProductsSection product={featuredProduct} snapshot={snapshot} />
       <EcosystemSection product={featuredProduct} />
       <PhilosophySection principles={principles} />
       <TechnologySection categories={categories} />
       <CompanySection company={company} />
-      <FinalCtaSection />
+      <FinalCtaSection calendlyUrl={settings.calendlyUrl} />
     </div>
   );
 }
