@@ -52,6 +52,7 @@ const navGroups = [
         href: "/dashboard/applications",
         icon: PanelsTopLeft,
         organizationRequired: true,
+        requiredCapability: "platform.application",
       },
       {
         label: "Costs",
@@ -201,26 +202,30 @@ export function DashboardShell({
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [open]);
-  const availableNavGroups = navGroups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter(
-        (item) =>
-          (organization || !item.organizationRequired) &&
-          (!("requiredCapability" in item) ||
-            activeCapabilityCodes.some((code) =>
-              code.endsWith(`.${item.requiredCapability}`),
-            )),
-      ),
-    }))
-    .filter((group) => group.items.length > 0);
-  const activeProducts = organization
-    ? products.filter((product) => product.status === "active")
-    : [];
-  const activeProduct = activeProducts.find(
-    (product) =>
-      pathname === product.href || pathname.startsWith(`${product.href}/`),
-  );
+   const availableNavGroups = navGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter(
+          (item) =>
+            (organization || !item.organizationRequired) &&
+            (!("requiredCapability" in item) ||
+              activeCapabilityCodes.some(
+                (code) =>
+                  code === item.requiredCapability ||
+                  code.endsWith(`.${item.requiredCapability}`),
+              )),
+        ),
+      }))
+      .filter((group) => group.items.length > 0);
+
+    const activeProducts = organization
+      ? products.filter((product) => product.status === "active")
+      : [];
+
+    const activeProduct = activeProducts.find(
+      (product) =>
+        pathname === product.href || pathname.startsWith(`${product.href}/`),
+    );
   const activeProductId = activeProduct?.id ?? null;
   const pageContext = getPageContext(pathname, activeProduct);
   const renderNavGroup = (group: (typeof availableNavGroups)[number]) => (
