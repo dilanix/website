@@ -6,20 +6,29 @@ export function PageHeader({
   title,
   description,
   action,
+  eyebrow,
 }: {
   title: string;
   description: string;
   action?: ReactNode;
+  eyebrow?: string;
 }) {
   return (
-    <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-6">
+    <header className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+      <div className="min-w-0">
+        {eyebrow ? (
+          <p className="text-accent mb-2 text-[10px] font-semibold tracking-[0.18em] uppercase">
+            {eyebrow}
+          </p>
+        ) : null}
+        <h1 className="text-2xl font-semibold tracking-[-0.035em] sm:text-3xl">
+          {title}
+        </h1>
+        <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-6">
           {description}
         </p>
       </div>
-      {action}
+      {action ? <div className="shrink-0">{action}</div> : null}
     </header>
   );
 }
@@ -37,7 +46,9 @@ export function Metric({
 }) {
   return (
     <div className="border-border-soft min-w-0 border-l pl-4 first:border-l-0 first:pl-0 sm:first:border-l sm:first:pl-4">
-      <dt className="text-muted-foreground text-xs">{label}</dt>
+      <dt className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+        {label}
+      </dt>
       <dd
         className={cn(
           "mt-2 font-mono text-xl font-medium tracking-tight",
@@ -60,16 +71,27 @@ export function Section({
   action,
   children,
   className,
+  description,
 }: {
   title: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  description?: string;
 }) {
   return (
     <section className={cn("min-w-0", className)}>
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+      <div className="mb-4 flex items-end justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold tracking-[-0.02em]">
+            {title}
+          </h2>
+          {description ? (
+            <p className="text-muted-foreground mt-1 text-xs leading-5">
+              {description}
+            </p>
+          ) : null}
+        </div>
         {action}
       </div>
       {children}
@@ -87,7 +109,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium shadow-[0_10px_24px_var(--shadow-card)]",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium shadow-[0_8px_20px_var(--shadow-card)] backdrop-blur-sm",
         status === "success" && "border-success/25 bg-success/10 text-success",
         status === "warning" &&
           "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-300",
@@ -97,7 +119,7 @@ export function StatusBadge({
     >
       <span
         className={cn(
-          "h-1.5 w-1.5 rounded-full",
+          "h-1.5 w-1.5 rounded-full shadow-[0_0_0_3px_color-mix(in_oklab,currentColor_10%,transparent)]",
           status === "success"
             ? "bg-success"
             : status === "warning"
@@ -120,11 +142,11 @@ export function EmptyState({
   actions?: ReactNode;
 }) {
   return (
-    <div className="border-border-soft bg-card-strong/68 flex min-h-56 flex-col items-center justify-center rounded-2xl border border-dashed px-6 py-10 text-center shadow-[0_16px_40px_var(--shadow-card)]">
-      <span className="bg-foreground/5 text-muted-foreground flex h-10 w-10 items-center justify-center rounded-lg">
-        <Inbox size={18} />
+    <div className="border-border-soft bg-dashboard-panel dashboard-panel-highlight flex min-h-56 flex-col items-center justify-center rounded-[1.4rem] border border-dashed px-6 py-10 text-center shadow-[0_18px_48px_var(--shadow-card)] backdrop-blur-sm">
+      <span className="border-border-soft bg-card-strong/80 text-muted-foreground flex size-11 items-center justify-center rounded-xl border shadow-[0_10px_24px_var(--shadow-card)]">
+        <Inbox size={19} />
       </span>
-      <h3 className="mt-4 text-sm font-medium">{title}</h3>
+      <h3 className="mt-4 text-sm font-semibold">{title}</h3>
       <p className="text-muted-foreground mt-1 max-w-md text-sm leading-6">
         {description}
       </p>
@@ -141,7 +163,7 @@ export function DashboardError({ onRetry }: { onRetry?: () => void }) {
   return (
     <div
       role="alert"
-      className="border-border-soft bg-card-strong/72 shadow-[0_16px_40px_var(--shadow-card)] flex items-start gap-3 rounded-2xl border p-5"
+      className="border-border-soft bg-dashboard-panel flex items-start gap-3 rounded-[1.4rem] border p-5 shadow-[0_18px_48px_var(--shadow-card)] backdrop-blur-sm"
     >
       <AlertTriangle className="text-muted-foreground mt-0.5" size={18} />
       <div>
@@ -165,7 +187,10 @@ export function DashboardError({ onRetry }: { onRetry?: () => void }) {
 export function Skeleton({ className }: { className?: string }) {
   return (
     <div
-      className={cn("bg-foreground/7 animate-pulse rounded-xl", className)}
+      className={cn(
+        "from-foreground/[0.045] via-foreground/[0.085] to-foreground/[0.045] animate-pulse rounded-xl bg-gradient-to-r",
+        className,
+      )}
     />
   );
 }

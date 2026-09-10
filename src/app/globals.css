@@ -22,6 +22,11 @@
   --shadow-card: rgba(10, 34, 69, 0.09);
   --glow-blue: rgba(23, 121, 213, 0.18);
   --glow-cyan: rgba(32, 208, 219, 0.12);
+  --dashboard-sidebar: rgba(251, 253, 255, 0.9);
+  --dashboard-header: rgba(245, 249, 253, 0.8);
+  --dashboard-panel: rgba(255, 255, 255, 0.82);
+  --dashboard-panel-strong: rgba(255, 255, 255, 0.96);
+  --dashboard-grid: rgba(23, 121, 213, 0.075);
 }
 
 .dark {
@@ -41,6 +46,11 @@
   --shadow-card: rgba(0, 0, 0, 0.28);
   --glow-blue: rgba(78, 159, 255, 0.2);
   --glow-cyan: rgba(35, 200, 218, 0.14);
+  --dashboard-sidebar: rgba(8, 18, 32, 0.9);
+  --dashboard-header: rgba(7, 17, 31, 0.78);
+  --dashboard-panel: rgba(13, 25, 43, 0.8);
+  --dashboard-panel-strong: rgba(15, 32, 53, 0.94);
+  --dashboard-grid: rgba(117, 176, 237, 0.08);
 }
 
 @theme inline {
@@ -55,6 +65,10 @@
   --color-surface: var(--surface);
   --color-surface-strong: var(--surface-strong);
   --color-border-soft: var(--border-soft);
+  --color-dashboard-sidebar: var(--dashboard-sidebar);
+  --color-dashboard-header: var(--dashboard-header);
+  --color-dashboard-panel: var(--dashboard-panel);
+  --color-dashboard-panel-strong: var(--dashboard-panel-strong);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --animate-spin-slow: spin-slow 3s linear infinite;
@@ -162,6 +176,72 @@ body {
   transition:
     background-color 0.2s ease,
     color 0.2s ease;
+}
+
+.dashboard-canvas {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(
+      ellipse 55% 32% at 18% -8%,
+      color-mix(in oklab, var(--accent) 13%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      ellipse 42% 30% at 94% 8%,
+      color-mix(in oklab, var(--accent-secondary) 10%, transparent),
+      transparent 76%
+    ),
+    linear-gradient(
+      145deg,
+      color-mix(in oklab, var(--background) 96%, var(--accent) 4%),
+      var(--background) 56%,
+      color-mix(in oklab, var(--background) 97%, var(--accent-secondary) 3%)
+    );
+}
+
+.dashboard-canvas::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background-image: radial-gradient(
+    var(--dashboard-grid) 0.75px,
+    transparent 0.75px
+  );
+  background-size: 24px 24px;
+  content: "";
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, black, transparent 76%);
+}
+
+.dashboard-panel-highlight {
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-panel-highlight::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    118deg,
+    color-mix(in oklab, white 22%, transparent),
+    transparent 28%,
+    transparent 72%,
+    color-mix(in oklab, var(--accent-secondary) 6%, transparent)
+  );
+  content: "";
+  pointer-events: none;
+}
+
+.dark .dashboard-panel-highlight::after {
+  background: linear-gradient(
+    118deg,
+    color-mix(in oklab, white 5%, transparent),
+    transparent 28%,
+    transparent 72%,
+    color-mix(in oklab, var(--accent-secondary) 6%, transparent)
+  );
 }
 
 /* The marketing homepage uses one continuous atmospheric canvas. Individual

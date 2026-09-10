@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
 import { DashboardShell } from "./dashboard-shell";
@@ -142,10 +142,13 @@ describe("DashboardShell", () => {
     expect(screen.queryByRole("link", { name: "Docs" })).toBeNull();
     expect(screen.getByText("Workflow automation")).toBeTruthy();
     expect(screen.getByText("Cloud cost management")).toBeTruthy();
+    const navigation = within(
+      screen.getByRole("navigation", { name: "Dashboard navigation" }),
+    );
     expect(
-      screen
+      navigation
         .getByText("Products")
-        .compareDocumentPosition(screen.getByText("Manage")) & 4,
+        .compareDocumentPosition(navigation.getByText("Manage")) & 4,
     ).toBe(4);
   });
 });
