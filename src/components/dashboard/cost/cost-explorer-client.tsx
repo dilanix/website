@@ -105,6 +105,8 @@ export function CostExplorerClient({
   const [periodStart, setPeriodStart] = useState(initialPeriodStart);
   const [periodEnd, setPeriodEnd] = useState(initialPeriodEnd);
   const [metric, setMetric] = useState<CostUsageMetric>("effective_cost");
+  const [resultMetric, setResultMetric] =
+    useState<CostUsageMetric>("effective_cost");
   const [granularity, setGranularity] = useState<ExplorerGranularity>("daily");
   const [groupBy, setGroupBy] = useState<CostExplorerGroupByField[]>([
     { dimension: "service_name" },
@@ -172,6 +174,7 @@ export function CostExplorerClient({
       });
       if (result.error) return setError(result.error);
       setItems(result.data?.items ?? []);
+      setResultMetric(metric);
       setSelectedSavedViewId("");
     });
   }
@@ -197,6 +200,7 @@ export function CostExplorerClient({
       });
       if (result.error) return setError(result.error);
       setItems(result.data?.items ?? []);
+      setResultMetric("effective_cost");
     });
   }
 
@@ -379,7 +383,7 @@ export function CostExplorerClient({
             {totals.map(([currency, amount]) => (
               <StatCard
                 key={currency}
-                label={`${METRIC_LABELS[metric]} · ${currency}`}
+                label={`${METRIC_LABELS[resultMetric]} · ${currency}`}
                 value={formatAmount(amount, currency)}
               />
             ))}

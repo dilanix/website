@@ -5,15 +5,32 @@ import { Pencil, Plus, Tags, Trash2, X } from "lucide-react";
 import {
   createAllocationAction,
   deleteAllocationAction,
+  getAllocationBreakdownAction,
   updateAllocationAction,
 } from "@/app/dashboard/products/cost-actions";
-import type { CoreAllocation, CoreScopeCondition } from "@/lib/core/api";
+import type {
+  CoreAllocation,
+  CoreAllocationBreakdown,
+  CoreScopeCondition,
+  CostUsageMetric,
+} from "@/lib/core/api";
 import { DestructiveActionDialog } from "@/components/dashboard/destructive-action-dialog";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
+import { AllocationBreakdownPanel } from "./allocation-breakdown-panel";
 import { ScopeEditor, summarizeScope } from "./scope-editor";
 
 function sortAllocations(allocations: CoreAllocation[]) {
   return [...allocations].sort((left, right) => left.priority - right.priority);
+}
+
+function startIso(date: string) {
+  return new Date(`${date}T00:00:00.000Z`).toISOString();
+}
+
+function inclusiveEndIso(date: string) {
+  const end = new Date(`${date}T00:00:00.000Z`);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return end.toISOString();
 }
 
 interface AllocationFormState {
@@ -173,8 +190,14 @@ function AllocationDialog({
 
 export function AllocationsClient({
   initialAllocations,
+  initialBreakdown,
+  initialPeriodStart,
+  initialPeriodEnd,
 }: {
   initialAllocations: CoreAllocation[];
+  initialBreakdown: CoreAllocationBreakdown | null;
+  initialPeriodStart: string;
+  initialPeriodEnd: string;
 }) {
   const [allocations, setAllocations] = useState(() =>
     sortAllocations(initialAllocations),
@@ -182,11 +205,41 @@ export function AllocationsClient({
   const [dialogState, setDialogState] = useState<
     "closed" | "create" | CoreAllocation
   >("closed");
-  const [deleteTarget, setDeleteTarget] = useState<CoreAllocation | null>(
-    null,
-  );
+  const [deleteTarget, setDeleteTarget] = useState<CoreAllocation | null>(null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const [breakdown, setBreakdown] = useState<CoreAllocationBreakdown | null>(
+    initialBreakdown,
+  );
+  const [periodStart, setPeriodStart] = useState(initialPeriodStart);
+  const [periodEnd, setPeriodEnd] = useState(initialPeriodEnd);
+  const [metric, setMetric] = useState<CostUsageMetric>("effective_cost");
+  const [resultMetric, setResultMetric] =
+    useState<CostUsageMetric>("effective_cost");
+  const [breakdownError, setBreakdownError] = useState("");
+  const [breakdownPending, startBreakdownTransition] = useTransition();
+  const breakdownAvailable = initialBreakdown !== null;
+
+  function refreshBreakdown() {
+    if (!breakdownAvailable) return;
+    setBreakdownError("");
+    if (!periodStart || !periodEnd || periodEnd < periodStart) {
+      setBreakdownError("Choose a valid start and end date.");
+      return;
+    }
+    startBreakdownTransition(async () => {
+      const result = await getAllocationBreakdownAction({
+        periodStart: startIso(periodStart),
+        periodEnd: inclusiveEndIso(periodEnd),
+        metric,
+      });
+      if (result.error) return setBreakdownError(result.error);
+      if (result.data) {
+        setBreakdown(result.data);
+        setResultMetric(metric);
+      }
+    });
+  }
 
   function toggleEnabled(allocation: CoreAllocation) {
     setError("");
@@ -203,6 +256,7 @@ export function AllocationsClient({
             ),
           ),
         );
+        refreshBreakdown();
       }
     });
   }
@@ -218,23 +272,46 @@ export function AllocationsClient({
         current.filter((item) => item.id !== target.id),
       );
       setDeleteTarget(null);
+      refreshBreakdown();
     });
   }
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-muted-foreground max-w-2xl text-sm leading-6">
-          Label slices of spend by team, cost center, or business unit.
-          Lower-priority-number allocations match first.
-        </p>
-        <button
-          type="button"
-          onClick={() => setDialogState("create")}
-          className="bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium"
-        >
-          <Plus size={15} /> Create allocation
-        </button>
+      <AllocationBreakdownPanel
+        breakdown={breakdown}
+        available={breakdownAvailable}
+        periodStart={periodStart}
+        periodEnd={periodEnd}
+        metric={metric}
+        resultMetric={resultMetric}
+        pending={breakdownPending}
+        error={breakdownError}
+        onPeriodStartChange={setPeriodStart}
+        onPeriodEndChange={setPeriodEnd}
+        onMetricChange={setMetric}
+        onRun={refreshBreakdown}
+      />
+
+      <div className="border-foreground/10 border-t pt-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">
+              Allocation rules
+            </h2>
+            <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-6">
+              Label slices of spend by team, cost center, or business unit.
+              Lower-priority-number allocations match first.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDialogState("create")}
+            className="bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium"
+          >
+            <Plus size={15} /> Create allocation
+          </button>
+        </div>
       </div>
 
       {error && dialogState === "closed" && !deleteTarget ? (
@@ -271,9 +348,7 @@ export function AllocationsClient({
                   </span>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold">
-                        {allocation.name}
-                      </p>
+                      <p className="text-sm font-semibold">{allocation.name}</p>
                       <StatusBadge
                         status={allocation.enabled ? "success" : "neutral"}
                       >
@@ -342,6 +417,7 @@ export function AllocationsClient({
               );
             });
             setDialogState("closed");
+            refreshBreakdown();
           }}
         />
       ) : null}

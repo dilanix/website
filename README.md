@@ -66,6 +66,12 @@ saved-view execution endpoint, with metric, daily/weekly/monthly granularity,
 multi-dimension grouping (including tag keys), and the shared Cost scope-filter
 DSL. The former Cost `/usage` route redirects to Explorer.
 
+The Cost Allocations screen also reads
+`GET .../cost/allocations/breakdown` for a period/metric showback or chargeback
+view. It displays allocated and unallocated spend per currency, following
+Core's first-enabled-rule-by-priority semantics, and recalculates after a rule
+is created, edited, enabled/disabled, or deleted.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

@@ -1734,6 +1734,38 @@ export function listAllocations(organizationId: string, token: string) {
   );
 }
 
+export interface CoreAllocationTotal {
+  target_label: string;
+  currency: string;
+  amount: string;
+}
+
+export interface CoreAllocationBreakdown {
+  period_start: string;
+  period_end: string;
+  items: CoreAllocationTotal[];
+}
+
+export function getAllocationBreakdown(
+  organizationId: string,
+  token: string,
+  params: {
+    periodStart: string;
+    periodEnd: string;
+    metric?: CostUsageMetric;
+  },
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  if (params.metric) query.set("metric", params.metric);
+  return coreRequest<CoreAllocationBreakdown>(
+    `/v1/organizations/${organizationId}/cost/allocations/breakdown?${query.toString()}`,
+    token,
+  );
+}
+
 export function getAllocation(
   organizationId: string,
   allocationId: string,

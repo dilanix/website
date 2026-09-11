@@ -14,6 +14,7 @@ import {
   deleteBudget,
   deleteReport,
   deleteSavedView,
+  getAllocationBreakdown,
   queryCostExplorer,
   runCostExplorerSavedView,
   updateAllocation,
@@ -22,6 +23,7 @@ import {
   updateReport,
   updateSavedView,
   type CoreAllocation,
+  type CoreAllocationBreakdown,
   type CoreAnomaly,
   type CoreBudget,
   type CoreCostExplorerResponse,
@@ -132,16 +134,18 @@ const explorerGroupBySchema = z
     },
   );
 
+const costUsageMetricSchema = z.enum([
+  "billed_cost",
+  "effective_cost",
+  "list_cost",
+  "contracted_cost",
+]);
+
 const explorerQuerySchema = z
   .object({
     period_start: z.iso.datetime(),
     period_end: z.iso.datetime(),
-    metric: z.enum([
-      "billed_cost",
-      "effective_cost",
-      "list_cost",
-      "contracted_cost",
-    ]),
+    metric: costUsageMetricSchema,
     granularity: z.enum(["daily", "weekly", "monthly"]).nullable(),
     group_by: z.array(explorerGroupBySchema).max(10),
     scope: scopeSchema,
@@ -394,6 +398,39 @@ export async function deleteAllocationAction(
     await deleteAllocation(organizationId, parsed.data, token);
     revalidatePath(BASE_PATH);
     return { data: { deletedId: parsed.data } };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const allocationBreakdownQuerySchema = z
+  .object({
+    periodStart: z.iso.datetime(),
+    periodEnd: z.iso.datetime(),
+    metric: costUsageMetricSchema,
+  })
+  .refine(
+    (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
+    {
+      message: "The period end must be after its start.",
+      path: ["periodEnd"],
+    },
+  );
+
+export async function getAllocationBreakdownAction(
+  input: z.infer<typeof allocationBreakdownQuerySchema>,
+): Promise<CostActionResult<CoreAllocationBreakdown>> {
+  const parsed = allocationBreakdownQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getAllocationBreakdown(organizationId, token, {
+      periodStart: parsed.data.periodStart,
+      periodEnd: parsed.data.periodEnd,
+      metric: parsed.data.metric,
+    });
+    return { data };
   } catch (error) {
     return { error: message(error) };
   }

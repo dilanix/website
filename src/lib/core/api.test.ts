@@ -160,6 +160,45 @@ describe("cost analytics", () => {
     );
     expect(result).toEqual(mockResponse);
   });
+
+  it("requests the allocation breakdown for a metric and period", async () => {
+    const mockResponse = {
+      period_start: "2026-09-01T00:00:00Z",
+      period_end: "2026-09-12T00:00:00Z",
+      items: [
+        {
+          target_label: "Platform",
+          currency: "USD",
+          amount: "42.000000",
+        },
+      ],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getAllocationBreakdown } = await import("./api");
+    const result = await getAllocationBreakdown("org-123", "test-token", {
+      periodStart: "2026-09-01T00:00:00Z",
+      periodEnd: "2026-09-12T00:00:00Z",
+      metric: "effective_cost",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/allocations/breakdown?period_start=2026-09-01T00%3A00%3A00Z&period_end=2026-09-12T00%3A00%3A00Z&metric=effective_cost",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
 });
 
 describe("sync", () => {
