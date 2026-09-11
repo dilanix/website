@@ -226,6 +226,21 @@ export default async function ResourcesPage({
           ),
         )}
       />
+      {selectedConnection.status !== "connected" ? (
+        <p className="border-accent/30 bg-accent/5 text-accent flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm">
+          <span>
+            This connection is not verified, so new resource data cannot sync.
+            You&apos;re viewing the last data collected before it was
+            disabled.
+          </span>
+          <Link
+            href={`/dashboard/integrations/${selectedConnection.id}?tab=settings`}
+            className="bg-accent text-accent-foreground shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium"
+          >
+            Go to connection settings
+          </Link>
+        </p>
+      ) : null}
       <Section title="Cloud inventory">
         <ResourcePanel
           key={selectedConnection.id}

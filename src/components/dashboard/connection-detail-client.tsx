@@ -234,7 +234,14 @@ export function ConnectionDetailClient({
       if (result.error) return setError(result.error);
       if (result.data) {
         setConnection(result.data);
-        setNotice("Connection enabled.");
+        if (result.data.status === "connected") {
+          setNotice("Connection enabled.");
+        } else {
+          setNotice(
+            "Connection re-enabled — it must be verified again before it can sync or serve data.",
+          );
+          if (awsSetup.cloudformation_supported) setVerifyDialog(true);
+        }
       }
     });
   }
@@ -302,6 +309,8 @@ export function ConnectionDetailClient({
 
   const canRemove = REMOVABLE_STATUSES.has(connection.status);
   const connectionDisabled = connection.status === "disabled";
+  const needsReverification =
+    connection.status === "draft" && Boolean(connection.last_verified_at);
 
   const tabs: {
     id: ConnectionDetailTab;
@@ -395,6 +404,23 @@ export function ConnectionDetailClient({
           <Ban size={15} className="shrink-0" />
           Connection is disabled. Enable it to make changes or run sync.
         </p>
+      ) : null}
+      {needsReverification ? (
+        <div className="border-accent/30 bg-accent/5 text-accent flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm">
+          <span className="flex items-center gap-2">
+            <ShieldCheck size={15} className="shrink-0" />
+            This connection needs to be verified again before it can sync or
+            serve resource/cost data.
+          </span>
+          {awsSetup.cloudformation_supported ? (
+            <button
+              onClick={() => setVerifyDialog(true)}
+              className="bg-accent text-accent-foreground shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium"
+            >
+              Re-verify now
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="border-foreground/10 border-b">

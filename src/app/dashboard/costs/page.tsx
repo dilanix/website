@@ -159,6 +159,7 @@ export default async function CostsPage({
       ? (requestedPeriod as PeriodPresetId | "custom")
       : "30d";
   const connectionSettingsHref = `/dashboard/integrations/${selectedConnection.id}?tab=access`;
+  const connectionVerifyHref = `/dashboard/integrations/${selectedConnection.id}?tab=settings`;
   const [costSummaries, costUsage] = await Promise.all([
     costReadEnabled
       ? listCostSummaries(
@@ -208,7 +209,19 @@ export default async function CostsPage({
       {!connectionUsable ? (
         <EmptyState
           title="Connection is not active"
-          description="Enable and verify this connection before collecting new cost data."
+          description={
+            selectedConnection.status === "draft"
+              ? "This connection was re-enabled but still needs to be verified again before it can collect cost data."
+              : "Enable and verify this connection before collecting new cost data."
+          }
+          actions={
+            <Link
+              href={connectionVerifyHref}
+              className="bg-accent text-accent-foreground rounded-lg px-4 py-2 text-sm font-medium"
+            >
+              Go to connection settings
+            </Link>
+          }
         />
       ) : !costReadGranted ? (
         <EmptyState
