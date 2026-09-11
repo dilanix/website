@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import {
@@ -6,30 +5,25 @@ import {
   Bookmark,
   CircleDollarSign,
   FileText,
-  Minus,
   Tags,
-  TrendingDown,
-  TrendingUp,
   TriangleAlert,
   Wallet,
 } from "lucide-react";
 import {
   CoreApiError,
   getCostOverview,
-  getUnifiedCostTotals,
   listAllocations,
   listAnomalies,
   listBudgets,
   listReports,
   listSavedViews,
-  type CoreUnifiedCostTotals,
+  queryCostExplorer,
 } from "@/lib/core/api";
+import { presetRange } from "@/lib/billing/cost-summaries";
 import { StatCard } from "@/components/dashboard/stat-card";
-import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
-
-function formatAmount(amount: number, currency: string) {
-  return `${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency}`;
-}
+import { StatusBadge } from "@/components/dashboard/primitives";
+import { SpendOverviewClient } from "@/components/dashboard/cost/spend-overview-client";
+import { formatAmount } from "@/components/dashboard/cost/format";
 
 export async function CostOverview({
   organizationId,
@@ -42,47 +36,60 @@ export async function CostOverview({
   connectionId: string | null;
   targetId: string | null;
 }) {
-  const now = new Date();
-  const periodStart = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-  );
+  // "30d" (a rolling window, not calendar-month-to-date) matches the default
+  // `SpendOverviewClient` itself renders, so the first paint never mismatches
+  // what a client-side re-query for the same default would produce.
+  const initialRange = presetRange("30d");
   const scopeQuery = new URLSearchParams();
   if (connectionId) scopeQuery.set("connection", connectionId);
   if (targetId) scopeQuery.set("target", targetId);
   const scopeSuffix = scopeQuery.size ? `?${scopeQuery.toString()}` : "";
-  const [overview, budgets, allocations, anomalies, savedViews, reports, unifiedTotals] =
-    await Promise.all([
-      getCostOverview(organizationId, token, {
-        periodStart: periodStart.toISOString(),
-        periodEnd: now.toISOString(),
-        connectionId,
-        targetId,
-        topN: 5,
-      }).catch((error: unknown) => {
-        if (
-          error instanceof CoreApiError &&
-          error.status === 403 &&
-          error.message.includes("aws.billing.cost_usage")
-        ) {
-          return null;
-        }
-        throw error;
-      }),
-      listBudgets(organizationId, token),
-      listAllocations(organizationId, token),
-      listAnomalies(organizationId, token),
-      listSavedViews(organizationId, token),
-      listReports(organizationId, token),
-      // Only available for a single selected connection — AWS Cost Explorer
-      // has no cross-account aggregate, unlike the org-wide FOCUS overview above.
-      connectionId
-        ? getUnifiedCostTotals(organizationId, connectionId, token, {
-            periodStart: periodStart.toISOString(),
-            periodEnd: now.toISOString(),
-            targetId,
-          }).catch((): CoreUnifiedCostTotals | null => null)
-        : Promise.resolve<CoreUnifiedCostTotals | null>(null),
-    ]);
+  const periodStartIso = initialRange.start.toISOString();
+  const periodEndIso = initialRange.end.toISOString();
+  const [
+    overview,
+    budgets,
+    allocations,
+    anomalies,
+    savedViews,
+    reports,
+    trend,
+  ] = await Promise.all([
+    getCostOverview(organizationId, token, {
+      periodStart: periodStartIso,
+      periodEnd: periodEndIso,
+      connectionId,
+      targetId,
+      topN: 5,
+    }).catch((error: unknown) => {
+      if (
+        error instanceof CoreApiError &&
+        error.status === 403 &&
+        error.message.includes("aws.billing.cost_usage")
+      ) {
+        return null;
+      }
+      throw error;
+    }),
+    listBudgets(organizationId, token),
+    listAllocations(organizationId, token),
+    listAnomalies(organizationId, token),
+    listSavedViews(organizationId, token),
+    listReports(organizationId, token),
+    // Same product API as the overview above (`cost/explorer/query`) — the
+    // trend chart never reaches into `billing`'s own Cost-Explorer-sourced
+    // surface, which belongs to `/dashboard/costs`, not this product.
+    queryCostExplorer(organizationId, token, {
+      period_start: periodStartIso,
+      period_end: periodEndIso,
+      metric: "effective_cost",
+      connection_id: connectionId,
+      target_id: targetId,
+      granularity: "daily",
+      group_by: [],
+      scope: [],
+    }).catch(() => ({ items: [] })),
+  ]);
 
   const enabledBudgets = budgets.items.filter((budget) => budget.enabled);
   const budgetedByCurrency = new Map<string, number>();
@@ -144,236 +151,14 @@ export async function CostOverview({
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">
-              Spend overview
-            </h2>
-            <p className="text-muted-foreground mt-1 text-xs">
-              Current calendar month compared with the immediately preceding
-              period of equal length. Includes provider credits and
-              discounts — for an AWS Console-style total with credits
-              excluded, see{" "}
-              <Link
-                href={`/dashboard/costs${scopeSuffix}` as Route}
-                className="text-accent font-medium"
-              >
-                Dashboard → Costs
-              </Link>
-              .
-            </p>
-          </div>
-          <Link
-            href={`/dashboard/products/cost/explorer${scopeSuffix}` as Route}
-            className="text-accent inline-flex items-center gap-1 text-xs font-semibold"
-          >
-            Open Explorer <ArrowRight size={13} />
-          </Link>
-        </div>
-
-        {overview === null ? (
-          <div className="mt-4">
-            <EmptyState
-              title="Cost analytics is unavailable"
-              description="This organization does not have the FOCUS cost-usage capability granted yet. Existing budgets, anomalies, and other cost-management configuration remain available below."
-            />
-          </div>
-        ) : overview.by_currency.length === 0 ? (
-          <div className="mt-4">
-            <EmptyState
-              title="No cost data this month"
-              description="Run a billing sync for a connected provider, then return here to see organization-wide spend."
-            />
-          </div>
-        ) : (
-          <>
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {overview.by_currency.map((currency) => {
-                const change = currency.change_percent;
-                const ChangeIcon =
-                  change === null || change === 0
-                    ? Minus
-                    : change > 0
-                      ? TrendingUp
-                      : TrendingDown;
-                return (
-                  <StatCard
-                    key={currency.currency}
-                    label={`${currency.currency} spend this month`}
-                    tone={change !== null && change < 0 ? "success" : "default"}
-                    value={
-                      <>
-                        <span className="block">
-                          {formatAmount(
-                            Number(currency.current_total),
-                            currency.currency,
-                          )}
-                        </span>
-                        <span className="mt-1 flex items-center gap-1 text-xs font-normal tracking-normal">
-                          <ChangeIcon size={12} />
-                          {change === null
-                            ? "No previous spend"
-                            : `${Math.abs(change).toFixed(1)}% vs previous period`}
-                        </span>
-                      </>
-                    }
-                  />
-                );
-              })}
-            </div>
-
-            {unifiedTotals ? (
-              <div className="border-border-soft bg-dashboard-panel mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 shadow-[0_16px_44px_var(--shadow-card)]">
-                <div>
-                  <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
-                    AWS Console-style total · this connection
-                  </p>
-                  <p className="mt-0.5 text-sm font-medium">
-                    {unifiedTotals.currency
-                      ? formatAmount(
-                          Number(unifiedTotals.total_amount),
-                          unifiedTotals.currency,
-                        )
-                      : "No data"}{" "}
-                    <span className="text-muted-foreground font-normal">
-                      (credits excluded)
-                    </span>
-                  </p>
-                </div>
-                <Link
-                  href={`/dashboard/costs${scopeSuffix}` as Route}
-                  className="text-accent inline-flex items-center gap-1 text-xs font-semibold"
-                >
-                  Full breakdown <ArrowRight size={13} />
-                </Link>
-              </div>
-            ) : null}
-
-            <div className="mt-4 grid gap-4 lg:grid-cols-2">
-              {overview.by_currency.map((currency) => {
-                const otherAmount = Number(currency.other_total);
-                const maxServiceAmount = Math.max(
-                  ...currency.top_services.map((service) =>
-                    Math.abs(Number(service.amount)),
-                  ),
-                  Math.abs(otherAmount),
-                  1,
-                );
-                const maxCategoryAmount = Math.max(
-                  ...currency.by_charge_category.map((item) =>
-                    Math.abs(Number(item.amount)),
-                  ),
-                  1,
-                );
-                return (
-                  <Fragment key={currency.currency}>
-                    <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
-                      <h3 className="text-sm font-semibold">
-                        Top services · {currency.currency}
-                      </h3>
-                      {currency.top_services.length === 0 ? (
-                        <p className="text-muted-foreground mt-3 text-sm">
-                          No service breakdown is available.
-                        </p>
-                      ) : (
-                        <div className="mt-4 space-y-3">
-                          {currency.top_services.map((service, index) => {
-                            const amount = Number(service.amount);
-                            return (
-                              <div
-                                key={`${service.service_name ?? "unassigned"}-${index}`}
-                                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
-                              >
-                                <span className="truncate text-xs font-medium">
-                                  {service.service_name ?? "Unassigned service"}
-                                </span>
-                                <span className="font-mono text-xs">
-                                  {formatAmount(amount, currency.currency)}
-                                </span>
-                                <span className="bg-foreground/5 col-span-2 h-1.5 overflow-hidden rounded-full">
-                                  <span
-                                    className="bg-accent block h-full rounded-full"
-                                    style={{
-                                      width: `${(Math.abs(amount) / maxServiceAmount) * 100}%`,
-                                      opacity: 1 - index * 0.12,
-                                    }}
-                                  />
-                                </span>
-                              </div>
-                            );
-                          })}
-                          {otherAmount !== 0 ? (
-                            <div className="border-foreground/10 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t pt-3">
-                              <span className="text-muted-foreground truncate text-xs font-medium">
-                                Other services &amp; credits
-                              </span>
-                              <span className="text-muted-foreground font-mono text-xs">
-                                {formatAmount(otherAmount, currency.currency)}
-                              </span>
-                              <span className="bg-foreground/5 col-span-2 h-1.5 overflow-hidden rounded-full">
-                                <span
-                                  className="bg-foreground/30 block h-full rounded-full"
-                                  style={{
-                                    width: `${(Math.abs(otherAmount) / maxServiceAmount) * 100}%`,
-                                  }}
-                                />
-                              </span>
-                            </div>
-                          ) : null}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
-                      <h3 className="text-sm font-semibold">
-                        By charge type · {currency.currency}
-                      </h3>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        Usage minus credits/discounts nets to the total above.
-                      </p>
-                      {currency.by_charge_category.length === 0 ? (
-                        <p className="text-muted-foreground mt-3 text-sm">
-                          No charge-type breakdown is available.
-                        </p>
-                      ) : (
-                        <div className="mt-4 space-y-3">
-                          {currency.by_charge_category.map((item) => {
-                            const amount = Number(item.amount);
-                            return (
-                              <div
-                                key={item.category}
-                                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
-                              >
-                                <span className="truncate text-xs font-medium">
-                                  {item.category}
-                                </span>
-                                <span
-                                  className={`font-mono text-xs ${amount < 0 ? "text-emerald-600 dark:text-emerald-400" : ""}`}
-                                >
-                                  {formatAmount(amount, currency.currency)}
-                                </span>
-                                <span className="bg-foreground/5 col-span-2 h-1.5 overflow-hidden rounded-full">
-                                  <span
-                                    className={`block h-full rounded-full ${amount < 0 ? "bg-emerald-500" : "bg-accent"}`}
-                                    style={{
-                                      width: `${(Math.abs(amount) / maxCategoryAmount) * 100}%`,
-                                    }}
-                                  />
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </Fragment>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </div>
+      <SpendOverviewClient
+        initialOverview={overview}
+        initialTrendPoints={trend.items}
+        initialRange={initialRange}
+        connectionId={connectionId}
+        targetId={targetId}
+        scopeSuffix={scopeSuffix}
+      />
 
       <div>
         <h2 className="mb-4 text-lg font-semibold tracking-tight">

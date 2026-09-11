@@ -5,6 +5,7 @@ import { RefreshCw } from "lucide-react";
 import type { CoreAllocationBreakdown, CostUsageMetric } from "@/lib/core/api";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { formatAmount } from "@/components/dashboard/cost/format";
 
 const METRIC_LABELS: Record<CostUsageMetric, string> = {
   billed_cost: "Billed cost",
@@ -12,13 +13,6 @@ const METRIC_LABELS: Record<CostUsageMetric, string> = {
   list_cost: "List cost",
   contracted_cost: "Contracted cost",
 };
-
-function formatAmount(amount: number, currency: string) {
-  return `${amount.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} ${currency}`;
-}
 
 export function AllocationBreakdownPanel({
   breakdown,

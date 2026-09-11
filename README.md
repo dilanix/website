@@ -56,21 +56,22 @@ rather than returning an empty page (unlike the Resources tab), so the page only
 fetches them server-side once that capability is already known to be enabled;
 each panel explains the gap otherwise.
 
-The Cost product dashboard at `/dashboard/products/cost` uses Core's
-organization-wide Cost module analytics endpoints. Its Overview reads
-`GET .../cost/overview` for current-calendar-month spend, the equal-length
-previous-period comparison, per-currency top services (with an explicit
-"Other services & credits" remainder so the visible breakdown always
-reconciles to the header total), and a "By charge type" panel (the FOCUS
-`Usage`/`Credit`/`Tax`/... split, `by_charge_category`) that makes a
-near-zero net total's usage/credit offsetting visible directly, instead of
-only inferable by comparing against `/dashboard/costs`. Overview also notes
-that its totals include provider credits and, when a single connection is
-selected, shows that connection's AWS Cost Explorer-sourced total
-(`GET .../costs/totals`, credits/refunds excluded, matching the AWS Console's
-own default) alongside the FOCUS-based net total, linking to
-`/dashboard/costs` for the full breakdown — while retaining the
-Budget/Allocation/Anomaly management summary. The dedicated Explorer route at
+The Cost product dashboard at `/dashboard/products/cost` uses only Core's
+own Cost module endpoints (`cost/overview`, `cost/explorer/query`, ...) —
+never `billing`'s Cost-Explorer-sourced `costs/totals`/`cost-summaries`
+surface, which is `/dashboard/costs`'s own, separate dataset/product
+boundary. Its Overview (`SpendOverviewClient`) has its own rolling period
+selector — 1 day/3 days/Week/Month presets shared with `/dashboard/costs`,
+plus a custom range — re-querying `GET .../cost/overview`
+(current-vs-equal-length-previous-period), a "Spend trend" line/area chart
+(built from `POST .../cost/explorer/query` with an empty `group_by`,
+granularity chosen by the selected period's length), per-currency top
+services (with an explicit "Other services & credits" remainder so the
+visible breakdown always reconciles to the header total), and a "By charge
+type" panel (the FOCUS `Usage`/`Credit`/`Tax`/... split, `by_charge_category`)
+that makes a near-zero net total's usage/credit offsetting visible directly,
+from the product's own data — while retaining the Budget/Allocation/Anomaly
+management summary below. The dedicated Explorer route at
 `/dashboard/products/cost/explorer` reads `POST .../cost/explorer/query` and the
 saved-view execution endpoint, with metric, daily/weekly/monthly granularity,
 multi-dimension grouping (including tag keys), and the shared Cost scope-filter

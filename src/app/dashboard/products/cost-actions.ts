@@ -15,6 +15,7 @@ import {
   deleteReport,
   deleteSavedView,
   getAllocationBreakdown,
+  getCostOverview,
   queryCostExplorer,
   runCostExplorerSavedView,
   updateAllocation,
@@ -27,6 +28,7 @@ import {
   type CoreAnomaly,
   type CoreBudget,
   type CoreCostExplorerResponse,
+  type CoreCostOverview,
   type CoreReport,
   type CoreSavedView,
   type CoreScopeCondition,
@@ -223,6 +225,60 @@ export async function runCostExplorerSavedViewAction(
     );
     return { data };
   } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const overviewQuerySchema = z
+  .object({
+    periodStart: z.iso.datetime(),
+    periodEnd: z.iso.datetime(),
+    connectionId: idSchema.nullable().optional(),
+    targetId: idSchema.nullable().optional(),
+    topN: z.number().int().min(1).max(20).optional(),
+  })
+  .refine(
+    (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
+    {
+      message: "The period end must be after its start.",
+      path: ["periodEnd"],
+    },
+  )
+  .refine((input) => !input.targetId || Boolean(input.connectionId), {
+    message: "Choose a connection before choosing a target.",
+    path: ["targetId"],
+  });
+
+/**
+ * `data: null` (not `error`) when the organization has no `billing.cost_usage`
+ * grant yet — mirrors `CostOverview`'s own "this is a real, expected empty
+ * state" handling, so a re-query on period change doesn't flash an error
+ * banner for the same gap the initial server render already treats as normal.
+ */
+export async function getCostOverviewAction(
+  input: z.infer<typeof overviewQuerySchema>,
+): Promise<CostActionResult<CoreCostOverview | null>> {
+  const parsed = overviewQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getCostOverview(organizationId, token, {
+      periodStart: parsed.data.periodStart,
+      periodEnd: parsed.data.periodEnd,
+      connectionId: parsed.data.connectionId,
+      targetId: parsed.data.targetId,
+      topN: parsed.data.topN,
+    });
+    return { data };
+  } catch (error) {
+    if (
+      error instanceof CoreApiError &&
+      error.status === 403 &&
+      error.message.includes("aws.billing.cost_usage")
+    ) {
+      return { data: null };
+    }
     return { error: message(error) };
   }
 }

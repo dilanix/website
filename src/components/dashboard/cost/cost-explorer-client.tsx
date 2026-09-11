@@ -31,6 +31,7 @@ import {
   ScopeEditor,
 } from "@/components/dashboard/cost/scope-editor";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
+import { formatAmount } from "@/components/dashboard/cost/format";
 
 const METRIC_LABELS: Record<CostUsageMetric, string> = {
   billed_cost: "Billed cost",
@@ -110,13 +111,6 @@ function inclusiveEndIso(date: string) {
   const end = new Date(`${date}T00:00:00.000Z`);
   end.setUTCDate(end.getUTCDate() + 1);
   return end.toISOString();
-}
-
-function formatAmount(amount: number, currency: string) {
-  return `${amount.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} ${currency}`;
 }
 
 function formatBucket(point: CoreCostExplorerPoint, hasGranularity: boolean) {
