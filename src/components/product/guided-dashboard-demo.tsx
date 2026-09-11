@@ -5,13 +5,18 @@ import {
   Activity,
   BellRing,
   Boxes,
+  Building2,
   CircleDollarSign,
   Cloud,
   Database,
+  KeyRound,
   LayoutDashboard,
+  Plug,
   Server,
+  Settings,
   ShieldCheck,
   Sparkles,
+  Sun,
   TrendingDown,
   Zap,
 } from "lucide-react";
@@ -23,9 +28,15 @@ type DemoView = "overview" | "costs" | "infrastructure" | "health";
 const tabs = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "costs", label: "Costs", icon: CircleDollarSign },
-  { id: "infrastructure", label: "Infrastructure", icon: Boxes },
+  { id: "infrastructure", label: "Resources", icon: Boxes },
   { id: "health", label: "Health", icon: Activity },
 ] satisfies { id: DemoView; label: string; icon: typeof LayoutDashboard }[];
+
+const manageItems = [
+  { label: "Integrations", icon: Plug },
+  { label: "API Keys", icon: KeyRound },
+  { label: "Settings", icon: Settings },
+];
 
 const inventory = [
   { name: "prod-api-cluster", type: "ECS Cluster", region: "us-east-1" },
@@ -33,6 +44,38 @@ const inventory = [
   { name: "assets-production", type: "S3 Bucket", region: "us-east-1" },
   { name: "worker-fleet", type: "EC2 Auto Scaling", region: "us-west-2" },
 ];
+
+const overviewMetrics = [
+  {
+    label: "Monthly spend",
+    key: "spend",
+    detail: "Current period",
+    icon: CircleDollarSign,
+    iconClassName: "border-cyan-500/20 bg-cyan-500/10 text-cyan-500",
+  },
+  {
+    label: "Potential savings",
+    key: "savings",
+    detail: "per month",
+    icon: TrendingDown,
+    iconClassName: "border-emerald-500/20 bg-emerald-500/10 text-emerald-500",
+    positive: true,
+  },
+  {
+    label: "Optimization score",
+    key: "score",
+    detail: "+8 points",
+    icon: Sparkles,
+    iconClassName: "border-violet-500/20 bg-violet-500/10 text-violet-500",
+  },
+  {
+    label: "Connected sources",
+    key: "connections",
+    detail: "All sources healthy",
+    icon: Plug,
+    iconClassName: "border-blue-500/20 bg-blue-500/10 text-blue-500",
+  },
+] as const;
 
 function OverviewPanel({ snapshot }: { snapshot: ProductDashboardSnapshot }) {
   const max = Math.max(...snapshot.spendTrend);
@@ -46,53 +89,106 @@ function OverviewPanel({ snapshot }: { snapshot: ProductDashboardSnapshot }) {
     })
     .join(" ");
 
+  const metricValues: Record<(typeof overviewMetrics)[number]["key"], string> =
+    {
+      spend: `$${snapshot.monthlySpendUsd.toLocaleString("en-US")}`,
+      savings: `$${snapshot.potentialSavingsUsd.toLocaleString("en-US")}`,
+      score: "72%",
+      connections: "3/3",
+    };
+
   return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(13rem,0.55fr)]">
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-          {[
-            {
-              label: "Monthly spend",
-              value: `$${snapshot.monthlySpendUsd.toLocaleString("en-US")}`,
-              detail: "Current period",
-            },
-            {
-              label: "Potential savings",
-              value: `$${snapshot.potentialSavingsUsd.toLocaleString("en-US")}`,
-              detail: "per month",
-              positive: true,
-            },
-            {
-              label: "Optimization score",
-              value: "72%",
-              detail: "+8 points",
-            },
-          ].map((metric, index) => (
+    <div className="space-y-3">
+      <div className="border-border-soft bg-dashboard-panel dashboard-panel-highlight relative overflow-hidden rounded-[1.35rem] border p-4 shadow-[0_16px_44px_var(--shadow-card)] sm:p-5">
+        <div
+          aria-hidden="true"
+          className="from-accent/18 pointer-events-none absolute -top-14 -right-10 size-36 rounded-full bg-radial to-transparent blur-2xl"
+        />
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-5">
+          <div className="min-w-0">
+            <div className="border-success/20 bg-success/8 text-success mb-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[7.5px] font-semibold tracking-[0.14em] uppercase">
+              <span className="bg-success size-1 rounded-full shadow-[0_0_8px_var(--success)]" />
+              Cloud command center
+            </div>
+            <p className="text-[13px] font-semibold tracking-[-0.02em] sm:text-[15px]">
+              Good to see you, Jordan.
+            </p>
+            <p className="text-muted-foreground mt-1 max-w-[15rem] text-[9.5px] leading-4">
+              Spend is trending down 4.8% with one optimization ready to
+              apply.
+            </p>
+          </div>
+          <div className="flex items-center gap-3.5">
             <div
-              key={metric.label}
-              className={cn(
-                "border-border-soft bg-card-strong/70 rounded-xl border p-3",
-                index === 2 && "col-span-2 sm:col-span-1",
-              )}
+              className="relative flex size-14 shrink-0 items-center justify-center rounded-full p-[4px] shadow-[0_10px_26px_var(--shadow-brand)]"
+              style={{
+                background:
+                  "conic-gradient(var(--accent) 92%, color-mix(in oklab, var(--foreground) 8%, transparent) 0)",
+              }}
             >
-              <p className="text-muted-foreground text-[8px] font-semibold tracking-wide uppercase">
-                {metric.label}
-              </p>
+              <div className="bg-dashboard-panel-strong flex size-full items-center justify-center rounded-full">
+                <span className="font-mono text-[11px] font-semibold">
+                  92%
+                </span>
+              </div>
+            </div>
+            <dl className="space-y-1.5">
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-muted-foreground text-[8.5px]">
+                  Connected
+                </dt>
+                <dd className="font-mono text-[10px] font-semibold">3/3</dd>
+              </div>
+              <div className="border-border-soft flex items-center justify-between gap-4 border-t pt-1.5">
+                <dt className="text-muted-foreground text-[8.5px]">
+                  Providers
+                </dt>
+                <dd className="font-mono text-[10px] font-semibold">2</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        {overviewMetrics.map((metric) => {
+          const Icon = metric.icon;
+          return (
+            <div
+              key={metric.key}
+              className="border-border-soft bg-dashboard-panel rounded-[1.1rem] border p-3 shadow-[0_12px_30px_var(--shadow-card)]"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-muted-foreground text-[7px] font-semibold tracking-wide uppercase">
+                  {metric.label}
+                </p>
+                <span
+                  className={cn(
+                    "flex size-6 shrink-0 items-center justify-center rounded-md border",
+                    metric.iconClassName,
+                  )}
+                >
+                  <Icon size={11} />
+                </span>
+              </div>
               <p
                 className={cn(
-                  "mt-2 font-mono text-base font-semibold sm:text-lg",
-                  metric.positive && "text-success",
+                  "mt-2.5 font-mono text-base font-semibold tracking-tight",
+                  "positive" in metric && metric.positive && "text-success",
                 )}
               >
-                {metric.value}
+                {metricValues[metric.key]}
               </p>
-              <p className="text-muted-foreground mt-0.5 text-[8px]">
+              <p className="text-muted-foreground mt-0.5 text-[7px]">
                 {metric.detail}
               </p>
             </div>
-          ))}
-        </div>
-        <div className="border-border-soft bg-card-strong/55 rounded-xl border p-3 sm:p-4">
+          );
+        })}
+      </div>
+
+      <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1.45fr)_minmax(13rem,0.55fr)]">
+        <div className="border-border-soft bg-dashboard-panel rounded-[1.1rem] border p-3 shadow-[0_12px_30px_var(--shadow-card)] sm:p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[10px] font-semibold">Spend trend</p>
@@ -149,27 +245,30 @@ function OverviewPanel({ snapshot }: { snapshot: ProductDashboardSnapshot }) {
             />
           </svg>
         </div>
-      </div>
 
-      <div className="border-success/18 from-success/10 to-card-strong/60 rounded-xl border bg-gradient-to-br p-4">
-        <span className="bg-success/12 text-success flex size-8 items-center justify-center rounded-lg">
-          <Sparkles size={15} />
-        </span>
-        <p className="mt-4 text-xs font-semibold">Optimization found</p>
-        <p className="text-muted-foreground mt-1 text-[9px] leading-4">
-          Idle EC2 reservations and oversized RDS instances are increasing
-          effective cost.
-        </p>
-        <div className="border-success/15 bg-card-strong/50 mt-4 rounded-lg border p-3">
-          <p className="text-muted-foreground text-[8px] uppercase">
-            Monthly opportunity
+        <div className="border-success/18 from-success/10 to-dashboard-panel rounded-[1.1rem] border bg-gradient-to-br p-4 shadow-[0_12px_30px_var(--shadow-card)]">
+          <span className="border-success/20 bg-success/12 text-success flex size-8 items-center justify-center rounded-lg border">
+            <Sparkles size={15} />
+          </span>
+          <p className="mt-4 text-xs font-semibold">Optimization found</p>
+          <p className="text-muted-foreground mt-1 text-[9px] leading-4">
+            Idle EC2 reservations and oversized RDS instances are increasing
+            effective cost.
           </p>
-          <p className="text-success mt-1 font-mono text-xl font-semibold">
-            ${snapshot.recommendation.monthlySavingUsd.toLocaleString("en-US")}
-          </p>
-        </div>
-        <div className="text-success mt-4 flex items-center gap-1.5 text-[9px] font-semibold">
-          Review recommendation <TrendingDown size={12} />
+          <div className="border-success/15 bg-dashboard-panel-strong mt-4 rounded-lg border p-3">
+            <p className="text-muted-foreground text-[8px] uppercase">
+              Monthly opportunity
+            </p>
+            <p className="text-success mt-1 font-mono text-xl font-semibold">
+              $
+              {snapshot.recommendation.monthlySavingUsd.toLocaleString(
+                "en-US",
+              )}
+            </p>
+          </div>
+          <div className="text-accent-foreground from-accent to-accent-secondary mt-4 flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-br px-3 py-2 text-[9px] font-semibold shadow-[0_10px_24px_var(--shadow-brand)]">
+            Review recommendation <TrendingDown size={12} />
+          </div>
         </div>
       </div>
     </div>
@@ -402,6 +501,8 @@ export function GuidedDashboardDemo({
     document.getElementById(`demo-tab-${next.id}`)?.focus();
   }
 
+  const activeTabLabel = tabs.find((tab) => tab.id === activeView)?.label;
+
   return (
     <div
       className="border-border-soft bg-card-strong/82 relative overflow-hidden rounded-[1.65rem] border p-2 shadow-[0_34px_90px_var(--shadow-brand)] backdrop-blur-xl sm:p-3"
@@ -409,62 +510,127 @@ export function GuidedDashboardDemo({
       onMouseLeave={() => setPaused(false)}
     >
       <div className="border-border-soft bg-background/55 overflow-hidden rounded-[1.25rem] border">
-        <div className="border-border-soft bg-card-strong/70 flex h-11 items-center gap-3 border-b px-3 sm:px-4">
-          <div className="hidden items-center gap-1.5 sm:flex">
-            <span className="size-2 rounded-full bg-rose-400/70" />
-            <span className="size-2 rounded-full bg-amber-400/70" />
-            <span className="size-2 rounded-full bg-emerald-400/70" />
-          </div>
-          <div className="border-border-soft bg-foreground/[0.025] text-muted-foreground mx-auto flex max-w-60 min-w-0 flex-1 items-center justify-center rounded-lg border px-3 py-1.5 font-mono text-[8px]">
-            demo.dilanix.com
-          </div>
-          <span className="border-accent/15 bg-accent/8 text-accent shrink-0 rounded-full border px-2 py-1 text-[7px] font-semibold tracking-wide uppercase">
-            Sample workspace
-          </span>
-        </div>
+        <div className="flex min-h-[31rem]">
+          <aside className="border-border-soft bg-dashboard-sidebar/95 hidden w-52 shrink-0 flex-col border-r p-3.5 sm:flex">
+            <div className="flex items-center justify-between px-0.5">
+              <span className="flex items-center gap-2">
+                <span className="from-accent to-accent-secondary text-accent-foreground flex size-7 items-center justify-center rounded-lg bg-gradient-to-br text-[10px] font-bold shadow-[0_8px_20px_var(--shadow-brand)]">
+                  D
+                </span>
+                <span className="text-[11px] font-semibold tracking-tight">
+                  Dilanix
+                </span>
+              </span>
+              <span className="border-accent/15 bg-accent/8 text-accent shrink-0 rounded-full border px-1.5 py-0.5 text-[6.5px] font-semibold tracking-wide uppercase">
+                Sample workspace
+              </span>
+            </div>
 
-        <div className="grid min-h-[31rem] sm:grid-cols-[3.5rem_minmax(0,1fr)]">
-          <aside className="border-border-soft bg-card-strong/45 hidden flex-col items-center border-r py-4 sm:flex">
-            <span className="from-accent to-accent-secondary text-accent-foreground flex size-8 items-center justify-center rounded-xl bg-gradient-to-br text-[10px] font-bold shadow-[0_8px_20px_var(--shadow-brand)]">
-              D
-            </span>
-            <div className="mt-6 flex flex-col gap-2">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                const active = activeView === tab.id;
-                return (
+            <div className="border-border-soft bg-dashboard-panel mt-4 flex items-center gap-2.5 rounded-xl border p-2.5">
+              <span className="border-accent/15 bg-accent/10 text-accent flex size-7 shrink-0 items-center justify-center rounded-lg border">
+                <Building2 size={13} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="text-muted-foreground block text-[6.5px] font-semibold tracking-[0.14em] uppercase">
+                  Active workspace
+                </span>
+                <span className="mt-0.5 block truncate text-[10px] font-semibold">
+                  Northwind Cloud
+                </span>
+              </span>
+              <span className="bg-success size-1.5 shrink-0 rounded-full shadow-[0_0_6px_var(--success)]" />
+            </div>
+
+            <nav aria-label="Sample product navigation" className="mt-5 flex-1">
+              <p className="text-muted-foreground mb-1.5 px-1.5 text-[7.5px] font-semibold tracking-[0.14em] uppercase">
+                Workspace
+              </p>
+              <div className="flex flex-col gap-1">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const active = activeView === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => selectView(tab.id)}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "relative flex items-center gap-2.5 overflow-hidden rounded-lg border px-2.5 py-2 text-left text-[10.5px] font-medium transition-colors",
+                        active
+                          ? "border-border-soft bg-dashboard-panel-strong text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground border-transparent",
+                      )}
+                    >
+                      {active ? (
+                        <span className="bg-accent absolute top-1/2 left-0 h-3.5 w-0.5 -translate-y-1/2 rounded-r-full" />
+                      ) : null}
+                      <Icon
+                        size={13}
+                        className={active ? "text-accent" : "text-muted-foreground/70"}
+                      />
+                      <span className="truncate">{tab.label}</span>
+                      {active && autoplay && !paused && !reducedMotion ? (
+                        <span
+                          key={activeView}
+                          className="bg-accent absolute inset-x-2 bottom-0.5 h-px origin-left animate-[demo-progress_5.5s_linear]"
+                        />
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <p className="text-muted-foreground mt-5 mb-1.5 px-1.5 text-[7.5px] font-semibold tracking-[0.14em] uppercase">
+                Manage
+              </p>
+              <div className="flex flex-col gap-1 opacity-45">
+                {manageItems.map((item) => (
                   <span
-                    key={tab.id}
-                    className={cn(
-                      "flex size-8 items-center justify-center rounded-lg",
-                      active
-                        ? "bg-accent/10 text-accent"
-                        : "text-muted-foreground/60",
-                    )}
+                    key={item.label}
+                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[10.5px] font-medium"
                   >
-                    <Icon size={14} />
+                    <item.icon size={13} />
+                    <span className="truncate">{item.label}</span>
                   </span>
-                );
-              })}
+                ))}
+              </div>
+            </nav>
+
+            <div className="border-border-soft mt-3 flex items-center gap-2.5 border-t pt-3">
+              <span className="from-accent/18 to-accent-secondary/18 text-accent flex size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br text-[9px] font-semibold">
+                JD
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[10px] font-semibold">
+                  Jordan Diaz
+                </span>
+                <span className="text-muted-foreground block truncate text-[8px]">
+                  Platform lead
+                </span>
+              </span>
             </div>
           </aside>
 
-          <div className="min-w-0">
-            <div className="border-border-soft bg-card-strong/35 flex min-h-14 items-center justify-between gap-3 border-b px-3 py-2.5 sm:px-5">
+          <div className="min-w-0 flex-1">
+            <div className="border-border-soft bg-dashboard-header/90 flex min-h-12 items-center justify-between gap-3 border-b px-3 py-2 sm:px-5">
               <div className="min-w-0">
                 <p className="text-muted-foreground text-[7px] font-semibold tracking-[0.14em] uppercase">
-                  {productName}
+                  {productName} · Workspace
                 </p>
-                <p className="mt-0.5 truncate text-[10px] font-semibold">
-                  {tabs.find((tab) => tab.id === activeView)?.label}
+                <p className="mt-0.5 truncate text-[11px] font-semibold tracking-tight">
+                  {activeTabLabel}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <span className="text-success hidden items-center gap-1.5 text-[8px] sm:flex">
                   <span className="bg-success size-1 rounded-full shadow-[0_0_7px_var(--success)]" />
                   Live sample
                 </span>
-                <span className="border-border-soft bg-card-strong/70 text-muted-foreground flex size-7 items-center justify-center rounded-lg border">
+                <span className="border-border-soft bg-dashboard-panel text-muted-foreground hidden size-7 items-center justify-center rounded-lg border sm:flex">
+                  <Sun size={12} />
+                </span>
+                <span className="border-border-soft bg-dashboard-panel text-muted-foreground flex size-7 items-center justify-center rounded-lg border">
                   <BellRing size={12} />
                 </span>
               </div>
@@ -474,7 +640,7 @@ export function GuidedDashboardDemo({
               <div
                 role="tablist"
                 aria-label="Interactive dashboard views"
-                className="border-border-soft bg-foreground/[0.025] grid grid-cols-2 gap-1 rounded-xl border p-1 sm:grid-cols-4"
+                className="border-border-soft bg-foreground/[0.025] grid grid-cols-2 gap-1 rounded-xl border p-1 sm:hidden"
               >
                 {tabs.map((tab) => {
                   const Icon = tab.icon;
@@ -515,7 +681,7 @@ export function GuidedDashboardDemo({
                 id="guided-demo-panel"
                 role="tabpanel"
                 aria-labelledby={`demo-tab-${activeView}`}
-                className="mt-3 animate-[demo-panel-in_.35s_ease-out] motion-reduce:animate-none"
+                className="mt-3 animate-[demo-panel-in_.35s_ease-out] motion-reduce:animate-none sm:mt-0"
               >
                 {activeView === "overview" ? (
                   <OverviewPanel snapshot={snapshot} />
