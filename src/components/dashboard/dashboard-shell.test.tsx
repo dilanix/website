@@ -82,6 +82,9 @@ describe("DashboardShell", () => {
     expect(screen.getByRole("link", { name: "API Keys" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Billing" })).toBeNull();
     expect(screen.getByText("Analytical Engines")).toBeTruthy();
+    expect(screen.getAllByRole("link", { name: "Dilanix home" })).toHaveLength(
+      1,
+    );
   });
 
   it("hides Applications without platform.application capability", () => {

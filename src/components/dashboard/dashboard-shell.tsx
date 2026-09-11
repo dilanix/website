@@ -422,12 +422,8 @@ export function DashboardShell({
             >
               {open ? <X size={20} /> : <Menu size={20} />}
             </button>
-            <BrandLogo
-              href="/dashboard"
-              className="h-6 w-auto sm:h-7 md:hidden"
-            />
-            <div className="hidden min-w-0 items-center gap-3 md:flex">
-              <span className="border-border-soft bg-dashboard-panel text-accent flex size-9 shrink-0 items-center justify-center rounded-xl border shadow-sm">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="border-border-soft bg-dashboard-panel text-accent hidden size-9 shrink-0 items-center justify-center rounded-xl border shadow-sm md:flex">
                 <Command size={16} />
               </span>
               <div className="min-w-0">
