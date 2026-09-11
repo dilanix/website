@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import type { Route } from "next";
 import Link from "next/link";
 import { Bookmark, Play, Search } from "lucide-react";
 import {
@@ -95,18 +96,33 @@ export function CostExplorerClient({
   initialPeriodStart,
   initialPeriodEnd,
   savedViews,
+  connectionId,
+  targetId,
 }: {
   initialItems: CoreCostExplorerPoint[];
   initialPeriodStart: string;
   initialPeriodEnd: string;
   savedViews: CoreSavedView[];
+  connectionId: string | null;
+  targetId: string | null;
 }) {
-  const [items, setItems] = useState(initialItems);
+  const dataScopeKey = `${connectionId ?? "all"}:${targetId ?? "all"}`;
+  const [result, setResult] = useState<{
+    dataScopeKey: string;
+    items: CoreCostExplorerPoint[];
+    metric: CostUsageMetric;
+  }>(() => ({
+    dataScopeKey,
+    items: initialItems,
+    metric: "effective_cost",
+  }));
+  const items =
+    result.dataScopeKey === dataScopeKey ? result.items : initialItems;
+  const resultMetric =
+    result.dataScopeKey === dataScopeKey ? result.metric : "effective_cost";
   const [periodStart, setPeriodStart] = useState(initialPeriodStart);
   const [periodEnd, setPeriodEnd] = useState(initialPeriodEnd);
   const [metric, setMetric] = useState<CostUsageMetric>("effective_cost");
-  const [resultMetric, setResultMetric] =
-    useState<CostUsageMetric>("effective_cost");
   const [granularity, setGranularity] = useState<ExplorerGranularity>("daily");
   const [groupBy, setGroupBy] = useState<CostExplorerGroupByField[]>([
     { dimension: "service_name" },
@@ -117,6 +133,15 @@ export function CostExplorerClient({
   const [selectedSavedViewId, setSelectedSavedViewId] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const resultScopeLabel = targetId
+    ? `Target ${targetId.slice(0, 8)}…`
+    : connectionId
+      ? `Connection ${connectionId.slice(0, 8)}…`
+      : "All accessible connections";
+  const scopeQuery = new URLSearchParams();
+  if (connectionId) scopeQuery.set("connection", connectionId);
+  if (targetId) scopeQuery.set("target", targetId);
+  const scopeSuffix = scopeQuery.size ? `?${scopeQuery.toString()}` : "";
 
   const totals = useMemo(() => {
     const result = new Map<string, number>();
@@ -168,13 +193,18 @@ export function CostExplorerClient({
         period_start: startIso(periodStart),
         period_end: inclusiveEndIso(periodEnd),
         metric,
+        connection_id: connectionId,
+        target_id: targetId,
         granularity,
         group_by: groupBy,
         scope,
       });
       if (result.error) return setError(result.error);
-      setItems(result.data?.items ?? []);
-      setResultMetric(metric);
+      setResult({
+        dataScopeKey,
+        items: result.data?.items ?? [],
+        metric,
+      });
       setSelectedSavedViewId("");
     });
   }
@@ -197,10 +227,15 @@ export function CostExplorerClient({
         savedViewId: view.id,
         periodStart: startIso(periodStart),
         periodEnd: inclusiveEndIso(periodEnd),
+        connectionId,
+        targetId,
       });
       if (result.error) return setError(result.error);
-      setItems(result.data?.items ?? []);
-      setResultMetric("effective_cost");
+      setResult({
+        dataScopeKey,
+        items: result.data?.items ?? [],
+        metric: "effective_cost",
+      });
     });
   }
 
@@ -355,7 +390,9 @@ export function CostExplorerClient({
               <Play size={13} /> Run view
             </button>
             <Link
-              href="/dashboard/products/cost/saved-views"
+              href={
+                `/dashboard/products/cost/saved-views${scopeSuffix}` as Route
+              }
               className="text-muted-foreground hover:text-foreground inline-flex h-10 items-center gap-1.5 px-2 text-xs font-medium"
             >
               <Bookmark size={13} /> Manage views
@@ -372,10 +409,15 @@ export function CostExplorerClient({
         </div>
       </div>
 
+      <p className="text-muted-foreground text-xs">
+        Results scope:{" "}
+        <span className="text-foreground">{resultScopeLabel}</span>
+      </p>
+
       {items.length === 0 ? (
         <EmptyState
           title="No cost data for this query"
-          description="Try a wider period or remove some filters. Explorer reads organization-wide normalized cost data."
+          description="Try a wider period, another data scope, or remove some filters."
         />
       ) : (
         <>

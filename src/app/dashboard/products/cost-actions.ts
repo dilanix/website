@@ -146,6 +146,8 @@ const explorerQuerySchema = z
     period_start: z.iso.datetime(),
     period_end: z.iso.datetime(),
     metric: costUsageMetricSchema,
+    connection_id: idSchema.nullable().optional(),
+    target_id: idSchema.nullable().optional(),
     granularity: z.enum(["daily", "weekly", "monthly"]).nullable(),
     group_by: z.array(explorerGroupBySchema).max(10),
     scope: scopeSchema,
@@ -156,7 +158,11 @@ const explorerQuerySchema = z
       message: "The period end must be after its start.",
       path: ["period_end"],
     },
-  );
+  )
+  .refine((input) => !input.target_id || Boolean(input.connection_id), {
+    message: "Choose a connection before choosing a target.",
+    path: ["target_id"],
+  });
 
 export async function queryCostExplorerAction(
   input: CostExplorerQueryInput,
@@ -181,6 +187,8 @@ const savedViewQuerySchema = z
     savedViewId: idSchema,
     periodStart: z.iso.datetime(),
     periodEnd: z.iso.datetime(),
+    connectionId: idSchema.nullable().optional(),
+    targetId: idSchema.nullable().optional(),
   })
   .refine(
     (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
@@ -188,7 +196,11 @@ const savedViewQuerySchema = z
       message: "The period end must be after its start.",
       path: ["periodEnd"],
     },
-  );
+  )
+  .refine((input) => !input.targetId || Boolean(input.connectionId), {
+    message: "Choose a connection before choosing a target.",
+    path: ["targetId"],
+  });
 
 export async function runCostExplorerSavedViewAction(
   input: z.infer<typeof savedViewQuerySchema>,
@@ -205,6 +217,8 @@ export async function runCostExplorerSavedViewAction(
       {
         periodStart: parsed.data.periodStart,
         periodEnd: parsed.data.periodEnd,
+        connectionId: parsed.data.connectionId,
+        targetId: parsed.data.targetId,
       },
     );
     return { data };
@@ -408,6 +422,8 @@ const allocationBreakdownQuerySchema = z
     periodStart: z.iso.datetime(),
     periodEnd: z.iso.datetime(),
     metric: costUsageMetricSchema,
+    connectionId: idSchema.nullable().optional(),
+    targetId: idSchema.nullable().optional(),
   })
   .refine(
     (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
@@ -415,7 +431,11 @@ const allocationBreakdownQuerySchema = z
       message: "The period end must be after its start.",
       path: ["periodEnd"],
     },
-  );
+  )
+  .refine((input) => !input.targetId || Boolean(input.connectionId), {
+    message: "Choose a connection before choosing a target.",
+    path: ["targetId"],
+  });
 
 export async function getAllocationBreakdownAction(
   input: z.infer<typeof allocationBreakdownQuerySchema>,
@@ -429,6 +449,8 @@ export async function getAllocationBreakdownAction(
       periodStart: parsed.data.periodStart,
       periodEnd: parsed.data.periodEnd,
       metric: parsed.data.metric,
+      connectionId: parsed.data.connectionId,
+      targetId: parsed.data.targetId,
     });
     return { data };
   } catch (error) {

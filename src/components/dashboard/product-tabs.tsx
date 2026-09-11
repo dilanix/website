@@ -2,7 +2,7 @@
 
 import type { Route } from "next";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 function tabClassName(active: boolean) {
@@ -40,7 +40,16 @@ const PRODUCT_EXTRA_TABS: Record<string, { label: string; path: string }[]> = {
 
 export function ProductTabs({ slug }: { slug: string }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const base = `/dashboard/products/${slug}`;
+  const costScopeParams = new URLSearchParams();
+  const connectionId = searchParams.get("connection");
+  const targetId = searchParams.get("target");
+  if (slug === "cost" && connectionId) {
+    costScopeParams.set("connection", connectionId);
+    if (targetId) costScopeParams.set("target", targetId);
+  }
+  const costScopeQuery = costScopeParams.toString();
 
   const tabs = [
     { label: "Overview", path: "" },
@@ -52,8 +61,9 @@ export function ProductTabs({ slug }: { slug: string }) {
   return (
     <div className="border-foreground/10 flex gap-1 overflow-x-auto border-b">
       {tabs.map((tab) => {
-        const href = tab.path ? `${base}/${tab.path}` : base;
-        const active = pathname === href;
+        const path = tab.path ? `${base}/${tab.path}` : base;
+        const href = `${path}${costScopeQuery ? `?${costScopeQuery}` : ""}`;
+        const active = pathname === path;
         return (
           <Link
             key={tab.label}

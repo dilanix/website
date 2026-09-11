@@ -193,11 +193,15 @@ export function AllocationsClient({
   initialBreakdown,
   initialPeriodStart,
   initialPeriodEnd,
+  connectionId,
+  targetId,
 }: {
   initialAllocations: CoreAllocation[];
   initialBreakdown: CoreAllocationBreakdown | null;
   initialPeriodStart: string;
   initialPeriodEnd: string;
+  connectionId: string | null;
+  targetId: string | null;
 }) {
   const [allocations, setAllocations] = useState(() =>
     sortAllocations(initialAllocations),
@@ -232,6 +236,8 @@ export function AllocationsClient({
         periodStart: startIso(periodStart),
         periodEnd: inclusiveEndIso(periodEnd),
         metric,
+        connectionId,
+        targetId,
       });
       if (result.error) return setBreakdownError(result.error);
       if (result.data) {

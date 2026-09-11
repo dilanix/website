@@ -72,6 +72,12 @@ view. It displays allocated and unallocated spend per currency, following
 Core's first-enabled-rule-by-priority semantics, and recalculates after a rule
 is created, edited, enabled/disabled, or deleted.
 
+Overview, Explorer, saved-view execution, and Allocation breakdown forward the
+shared Cost data scope as optional `connection_id`/`target_id` backend filters.
+The selector only offers connections with an active per-connection
+`billing.read` capability; the default combines all accessible connections,
+while preserving the selected scope in the URL across Cost product tabs.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

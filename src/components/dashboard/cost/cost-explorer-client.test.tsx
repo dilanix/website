@@ -52,6 +52,37 @@ const savedView: CoreSavedView = {
 };
 
 describe("CostExplorerClient", () => {
+  it("replaces stale rows when the selected connection changes", async () => {
+    const { rerender } = render(
+      <CostExplorerClient
+        initialItems={[point]}
+        initialPeriodStart="2026-09-01"
+        initialPeriodEnd="2026-09-11"
+        savedViews={[]}
+        connectionId="c328ae26-c7d3-4664-90e3-4d7d73fb3b3a"
+        targetId={null}
+      />,
+    );
+
+    expect(screen.getByText("Service: Amazon EC2")).toBeTruthy();
+    expect(screen.getByText("Connection c328ae26…")).toBeTruthy();
+
+    rerender(
+      <CostExplorerClient
+        initialItems={[]}
+        initialPeriodStart="2026-09-01"
+        initialPeriodEnd="2026-09-11"
+        savedViews={[]}
+        connectionId="b0576937-9a43-4ea5-851d-c0aef25a69f7"
+        targetId={null}
+      />,
+    );
+
+    expect(await screen.findByText("No cost data for this query")).toBeTruthy();
+    expect(screen.queryByText("Service: Amazon EC2")).toBeNull();
+    expect(screen.getByText("Connection b0576937…")).toBeTruthy();
+  });
+
   it("renders initial data and submits an inclusive date-range query", async () => {
     vi.mocked(queryCostExplorerAction).mockResolvedValue({
       data: { items: [point] },
@@ -63,6 +94,8 @@ describe("CostExplorerClient", () => {
         initialPeriodStart="2026-09-01"
         initialPeriodEnd="2026-09-11"
         savedViews={[savedView]}
+        connectionId={null}
+        targetId={null}
       />,
     );
 
@@ -76,6 +109,8 @@ describe("CostExplorerClient", () => {
         period_start: "2026-09-01T00:00:00.000Z",
         period_end: "2026-09-12T00:00:00.000Z",
         metric: "effective_cost",
+        connection_id: null,
+        target_id: null,
         granularity: "daily",
         group_by: [{ dimension: "service_name" }],
         scope: [],
@@ -94,6 +129,8 @@ describe("CostExplorerClient", () => {
         initialPeriodStart="2026-09-01"
         initialPeriodEnd="2026-09-11"
         savedViews={[savedView]}
+        connectionId={null}
+        targetId={null}
       />,
     );
 
@@ -107,6 +144,8 @@ describe("CostExplorerClient", () => {
         savedViewId: savedView.id,
         periodStart: "2026-09-01T00:00:00.000Z",
         periodEnd: "2026-09-12T00:00:00.000Z",
+        connectionId: null,
+        targetId: null,
       }),
     );
     expect(await screen.findByText("Service: Amazon EC2")).toBeTruthy();

@@ -1753,6 +1753,8 @@ export function getAllocationBreakdown(
     periodStart: string;
     periodEnd: string;
     metric?: CostUsageMetric;
+    connectionId?: string | null;
+    targetId?: string | null;
   },
 ) {
   const query = new URLSearchParams({
@@ -1760,6 +1762,8 @@ export function getAllocationBreakdown(
     period_end: params.periodEnd,
   });
   if (params.metric) query.set("metric", params.metric);
+  if (params.connectionId) query.set("connection_id", params.connectionId);
+  if (params.targetId) query.set("target_id", params.targetId);
   return coreRequest<CoreAllocationBreakdown>(
     `/v1/organizations/${organizationId}/cost/allocations/breakdown?${query.toString()}`,
     token,
@@ -1905,6 +1909,8 @@ export interface CostExplorerQueryInput {
   period_start: string;
   period_end: string;
   metric?: CostUsageMetric;
+  connection_id?: string | null;
+  target_id?: string | null;
   granularity?: ExplorerGranularity | null;
   group_by?: CostExplorerGroupByField[];
   scope?: CoreScopeCondition[];
@@ -1942,12 +1948,19 @@ export function runCostExplorerSavedView(
   organizationId: string,
   savedViewId: string,
   token: string,
-  params: { periodStart: string; periodEnd: string },
+  params: {
+    periodStart: string;
+    periodEnd: string;
+    connectionId?: string | null;
+    targetId?: string | null;
+  },
 ) {
   const query = new URLSearchParams({
     period_start: params.periodStart,
     period_end: params.periodEnd,
   });
+  if (params.connectionId) query.set("connection_id", params.connectionId);
+  if (params.targetId) query.set("target_id", params.targetId);
   return coreRequest<CoreCostExplorerResponse>(
     `/v1/organizations/${organizationId}/cost/explorer/saved-views/${savedViewId}?${query.toString()}`,
     token,
@@ -1965,6 +1978,10 @@ export interface CoreCostOverviewCurrency {
   previous_total: string;
   change_percent: number | null;
   top_services: CoreCostOverviewService[];
+  /** `current_total` minus the sum of `top_services` — always present, so
+   * `top_services` + `other_total` reconciles exactly to `current_total`. Can
+   * be negative (e.g. a credit/refund sorts outside the top-N). */
+  other_total: string;
 }
 
 export interface CoreCostOverview {
@@ -1978,12 +1995,20 @@ export interface CoreCostOverview {
 export function getCostOverview(
   organizationId: string,
   token: string,
-  params: { periodStart: string; periodEnd: string; topN?: number },
+  params: {
+    periodStart: string;
+    periodEnd: string;
+    connectionId?: string | null;
+    targetId?: string | null;
+    topN?: number;
+  },
 ) {
   const query = new URLSearchParams({
     period_start: params.periodStart,
     period_end: params.periodEnd,
   });
+  if (params.connectionId) query.set("connection_id", params.connectionId);
+  if (params.targetId) query.set("target_id", params.targetId);
   if (params.topN !== undefined) query.set("top_n", String(params.topN));
   return coreRequest<CoreCostOverview>(
     `/v1/organizations/${organizationId}/cost/overview?${query.toString()}`,

@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { TrendingDown } from "lucide-react";
 import { getProductBySlug } from "@/lib/data/products";
 import { getDashboardOverview } from "@/lib/data/dashboard";
+import { parseCostDataScope } from "@/lib/billing/cost-data-scope";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { AnimatedNumber } from "@/components/common/animated-number";
 import { Sparkline } from "@/components/product/sparkline";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { CostOverview } from "@/components/dashboard/cost/cost-overview";
+import { CostDataScope } from "@/components/dashboard/cost/cost-data-scope";
 
 export async function generateMetadata({
   params,
@@ -22,13 +24,26 @@ export async function generateMetadata({
 
 export default async function ProductOverviewPage({
   params,
+  searchParams,
 }: PageProps<"/dashboard/products/[slug]">) {
   const { slug } = await params;
 
   if (slug === "cost") {
+    const costDataScope = parseCostDataScope(await searchParams);
     const { token, organization } = await requireDashboardOrganization();
     return (
-      <CostOverview organizationId={organization.organization_id} token={token} />
+      <>
+        <CostDataScope
+          organizationId={organization.organization_id}
+          token={token}
+        />
+        <CostOverview
+          organizationId={organization.organization_id}
+          token={token}
+          connectionId={costDataScope.connectionId}
+          targetId={costDataScope.targetId}
+        />
+      </>
     );
   }
 

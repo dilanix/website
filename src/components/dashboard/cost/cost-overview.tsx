@@ -31,19 +31,29 @@ function formatAmount(amount: number, currency: string) {
 export async function CostOverview({
   organizationId,
   token,
+  connectionId,
+  targetId,
 }: {
   organizationId: string;
   token: string;
+  connectionId: string | null;
+  targetId: string | null;
 }) {
   const now = new Date();
   const periodStart = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
   );
+  const scopeQuery = new URLSearchParams();
+  if (connectionId) scopeQuery.set("connection", connectionId);
+  if (targetId) scopeQuery.set("target", targetId);
+  const scopeSuffix = scopeQuery.size ? `?${scopeQuery.toString()}` : "";
   const [overview, budgets, allocations, anomalies, savedViews, reports] =
     await Promise.all([
       getCostOverview(organizationId, token, {
         periodStart: periodStart.toISOString(),
         periodEnd: now.toISOString(),
+        connectionId,
+        targetId,
         topN: 5,
       }).catch((error: unknown) => {
         if (
@@ -134,7 +144,7 @@ export async function CostOverview({
             </p>
           </div>
           <Link
-            href="/dashboard/products/cost/explorer"
+            href={`/dashboard/products/cost/explorer${scopeSuffix}` as Route}
             className="text-accent inline-flex items-center gap-1 text-xs font-semibold"
           >
             Open Explorer <ArrowRight size={13} />
@@ -194,10 +204,12 @@ export async function CostOverview({
 
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               {overview.by_currency.map((currency) => {
+                const otherAmount = Number(currency.other_total);
                 const maxServiceAmount = Math.max(
                   ...currency.top_services.map((service) =>
                     Math.abs(Number(service.amount)),
                   ),
+                  Math.abs(otherAmount),
                   1,
                 );
                 return (
@@ -239,6 +251,24 @@ export async function CostOverview({
                             </div>
                           );
                         })}
+                        {otherAmount !== 0 ? (
+                          <div className="border-foreground/10 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t pt-3">
+                            <span className="text-muted-foreground truncate text-xs font-medium">
+                              Other services &amp; credits
+                            </span>
+                            <span className="text-muted-foreground font-mono text-xs">
+                              {formatAmount(otherAmount, currency.currency)}
+                            </span>
+                            <span className="bg-foreground/5 col-span-2 h-1.5 overflow-hidden rounded-full">
+                              <span
+                                className="bg-foreground/30 block h-full rounded-full"
+                                style={{
+                                  width: `${(Math.abs(otherAmount) / maxServiceAmount) * 100}%`,
+                                }}
+                              />
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -290,7 +320,9 @@ export async function CostOverview({
             return (
               <Link
                 key={item.href}
-                href={`/dashboard/products/cost/${item.href}` as Route}
+                href={
+                  `/dashboard/products/cost/${item.href}${scopeSuffix}` as Route
+                }
                 className="group border-border-soft bg-dashboard-panel hover:border-accent/30 flex items-center gap-3 rounded-2xl border p-4 shadow-[0_16px_44px_var(--shadow-card)] transition-all"
               >
                 <span

@@ -106,6 +106,8 @@ describe("cost analytics", () => {
       period_start: "2026-09-01T00:00:00.000Z",
       period_end: "2026-09-12T00:00:00.000Z",
       metric: "effective_cost" as const,
+      connection_id: "connection-1",
+      target_id: "target-1",
       granularity: "daily" as const,
       group_by: [{ dimension: "service_name" as const }],
       scope: [],
@@ -124,6 +126,35 @@ describe("cost analytics", () => {
       }),
     );
     expect(result).toEqual(mockResponse);
+  });
+
+  it("runs a saved Explorer view within the selected account scope", async () => {
+    const mockResponse = { items: [] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { runCostExplorerSavedView } = await import("./api");
+    await runCostExplorerSavedView("org-123", "view-1", "test-token", {
+      periodStart: "2026-09-01T00:00:00Z",
+      periodEnd: "2026-09-12T00:00:00Z",
+      connectionId: "connection-1",
+      targetId: "target-1",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/explorer/saved-views/view-1?period_start=2026-09-01T00%3A00%3A00Z&period_end=2026-09-12T00%3A00%3A00Z&connection_id=connection-1&target_id=target-1",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
   });
 
   it("requests the overview period and top-services limit", async () => {
@@ -145,12 +176,14 @@ describe("cost analytics", () => {
     const result = await getCostOverview("org-123", "test-token", {
       periodStart: "2026-09-01T00:00:00Z",
       periodEnd: "2026-09-11T00:00:00Z",
+      connectionId: "connection-1",
+      targetId: "target-1",
       topN: 5,
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/v1/organizations/org-123/cost/overview?period_start=2026-09-01T00%3A00%3A00Z&period_end=2026-09-11T00%3A00%3A00Z&top_n=5",
+        "/v1/organizations/org-123/cost/overview?period_start=2026-09-01T00%3A00%3A00Z&period_end=2026-09-11T00%3A00%3A00Z&connection_id=connection-1&target_id=target-1&top_n=5",
       ),
       expect.objectContaining({
         headers: expect.objectContaining({
@@ -185,11 +218,13 @@ describe("cost analytics", () => {
       periodStart: "2026-09-01T00:00:00Z",
       periodEnd: "2026-09-12T00:00:00Z",
       metric: "effective_cost",
+      connectionId: "connection-1",
+      targetId: "target-1",
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/v1/organizations/org-123/cost/allocations/breakdown?period_start=2026-09-01T00%3A00%3A00Z&period_end=2026-09-12T00%3A00%3A00Z&metric=effective_cost",
+        "/v1/organizations/org-123/cost/allocations/breakdown?period_start=2026-09-01T00%3A00%3A00Z&period_end=2026-09-12T00%3A00%3A00Z&metric=effective_cost&connection_id=connection-1&target_id=target-1",
       ),
       expect.objectContaining({
         headers: expect.objectContaining({

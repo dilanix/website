@@ -60,6 +60,8 @@ function renderClient() {
       initialBreakdown={breakdown}
       initialPeriodStart="2026-09-01"
       initialPeriodEnd="2026-09-11"
+      connectionId={null}
+      targetId={null}
     />,
   );
 }
@@ -81,6 +83,8 @@ describe("AllocationsClient", () => {
         periodStart: "2026-09-01T00:00:00.000Z",
         periodEnd: "2026-09-12T00:00:00.000Z",
         metric: "effective_cost",
+        connectionId: null,
+        targetId: null,
       }),
     );
   }, 20_000);
