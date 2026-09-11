@@ -22,6 +22,7 @@ vi.mock("@/app/dashboard/products/cost-actions", () => ({
 
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   vi.clearAllMocks();
 });
 

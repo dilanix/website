@@ -7,6 +7,7 @@ import type { AnomalyStatus, CoreAnomaly } from "@/lib/core/api";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { summarizeScope } from "./scope-editor";
 import { cn } from "@/lib/utils";
+import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 
 const STATUS_FILTERS: { id: AnomalyStatus | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -14,6 +15,10 @@ const STATUS_FILTERS: { id: AnomalyStatus | "all"; label: string }[] = [
   { id: "acknowledged", label: "Acknowledged" },
   { id: "resolved", label: "Resolved" },
 ];
+
+function isAnomalyFilter(value: unknown): value is AnomalyStatus | "all" {
+  return STATUS_FILTERS.some((filter) => filter.id === value);
+}
 
 function severityTone(severity: CoreAnomaly["severity"]) {
   if (severity === "high") return "warning" as const;
@@ -52,7 +57,11 @@ export function AnomaliesClient({
   const [anomalies, setAnomalies] = useState(() =>
     sortAnomalies(initialAnomalies),
   );
-  const [filter, setFilter] = useState<AnomalyStatus | "all">("all");
+  const [filter, setFilter] = useDashboardFilterState<AnomalyStatus | "all">(
+    "cost.anomalies.status",
+    "all",
+    isAnomalyFilter,
+  );
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -64,7 +73,10 @@ export function AnomaliesClient({
     [anomalies, filter],
   );
 
-  function transition(anomaly: CoreAnomaly, status: "acknowledged" | "resolved") {
+  function transition(
+    anomaly: CoreAnomaly,
+    status: "acknowledged" | "resolved",
+  ) {
     setError("");
     startTransition(async () => {
       const result = await updateAnomalyStatusAction(anomaly.id, status);
@@ -85,8 +97,8 @@ export function AnomaliesClient({
     <div className="flex flex-col gap-5">
       <p className="text-muted-foreground max-w-2xl text-sm leading-6">
         Detected hourly by comparing yesterday&apos;s whole-organization spend
-        against a trailing 7-day average. Flags a deviation of 50% or more
-        (and at least 1 currency unit).
+        against a trailing 7-day average. Flags a deviation of 50% or more (and
+        at least 1 currency unit).
       </p>
 
       <div
@@ -131,7 +143,9 @@ export function AnomaliesClient({
       {visible.length === 0 ? (
         <EmptyState
           title={
-            filter === "all" ? "No anomalies detected" : `No ${filter} anomalies`
+            filter === "all"
+              ? "No anomalies detected"
+              : `No ${filter} anomalies`
           }
           description="When spend deviates sharply from the trailing 7-day average, it shows up here within the hour."
         />
@@ -139,7 +153,10 @@ export function AnomaliesClient({
         <div className="border-border-soft overflow-hidden rounded-xl border">
           <div className="divide-border-soft divide-y">
             {visible.map((anomaly) => (
-              <div key={anomaly.id} className="flex flex-wrap items-start justify-between gap-4 p-4">
+              <div
+                key={anomaly.id}
+                className="flex flex-wrap items-start justify-between gap-4 p-4"
+              >
                 <div className="flex min-w-0 items-start gap-3">
                   <span
                     className={cn(
@@ -172,8 +189,8 @@ export function AnomaliesClient({
                     </div>
                     <p className="text-muted-foreground mt-1 text-xs">
                       {formatDate(anomaly.period_start)} · deviation{" "}
-                      {Number(anomaly.deviation_percent).toFixed(0)}% ·
-                      detected {formatDate(anomaly.detected_at)}
+                      {Number(anomaly.deviation_percent).toFixed(0)}% · detected{" "}
+                      {formatDate(anomaly.detected_at)}
                     </p>
                     <p className="text-muted-foreground mt-1 text-xs">
                       Scope: {summarizeScope(anomaly.scope)}

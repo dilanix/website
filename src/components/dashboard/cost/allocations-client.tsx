@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { Pencil, Plus, Tags, Trash2, X } from "lucide-react";
 import {
   createAllocationAction,
@@ -18,9 +24,23 @@ import { DestructiveActionDialog } from "@/components/dashboard/destructive-acti
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { AllocationBreakdownPanel } from "./allocation-breakdown-panel";
 import { ScopeEditor, summarizeScope } from "./scope-editor";
+import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 
 function sortAllocations(allocations: CoreAllocation[]) {
   return [...allocations].sort((left, right) => left.priority - right.priority);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isCostUsageMetric(value: unknown): value is CostUsageMetric {
+  return [
+    "billed_cost",
+    "effective_cost",
+    "list_cost",
+    "contracted_cost",
+  ].includes(String(value));
 }
 
 function startIso(date: string) {
@@ -215,14 +235,30 @@ export function AllocationsClient({
   const [breakdown, setBreakdown] = useState<CoreAllocationBreakdown | null>(
     initialBreakdown,
   );
-  const [periodStart, setPeriodStart] = useState(initialPeriodStart);
-  const [periodEnd, setPeriodEnd] = useState(initialPeriodEnd);
-  const [metric, setMetric] = useState<CostUsageMetric>("effective_cost");
+  const [periodStart, setPeriodStart, { restored: periodStartRestored }] =
+    useDashboardFilterState(
+      "cost.allocations.period-start",
+      initialPeriodStart,
+      isString,
+    );
+  const [periodEnd, setPeriodEnd, { restored: periodEndRestored }] =
+    useDashboardFilterState(
+      "cost.allocations.period-end",
+      initialPeriodEnd,
+      isString,
+    );
+  const [metric, setMetric, { restored: metricRestored }] =
+    useDashboardFilterState<CostUsageMetric>(
+      "cost.allocations.metric",
+      "effective_cost",
+      isCostUsageMetric,
+    );
   const [resultMetric, setResultMetric] =
     useState<CostUsageMetric>("effective_cost");
   const [breakdownError, setBreakdownError] = useState("");
   const [breakdownPending, startBreakdownTransition] = useTransition();
   const breakdownAvailable = initialBreakdown !== null;
+  const restoredBreakdownApplied = useRef(false);
 
   function refreshBreakdown() {
     if (!breakdownAvailable) return;
@@ -246,6 +282,35 @@ export function AllocationsClient({
       }
     });
   }
+  const restoreBreakdown = useEffectEvent(() => {
+    refreshBreakdown();
+  });
+
+  useEffect(() => {
+    if (
+      restoredBreakdownApplied.current ||
+      (!periodStartRestored && !periodEndRestored && !metricRestored)
+    ) {
+      return;
+    }
+    restoredBreakdownApplied.current = true;
+    if (
+      periodStart !== initialPeriodStart ||
+      periodEnd !== initialPeriodEnd ||
+      metric !== "effective_cost"
+    ) {
+      window.setTimeout(restoreBreakdown, 0);
+    }
+  }, [
+    initialPeriodEnd,
+    initialPeriodStart,
+    metric,
+    metricRestored,
+    periodEnd,
+    periodEndRestored,
+    periodStart,
+    periodStartRestored,
+  ]);
 
   function toggleEnabled(allocation: CoreAllocation) {
     setError("");

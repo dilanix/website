@@ -80,6 +80,13 @@ export default async function CostsPage({
   });
 
   const query = await searchParams;
+  const hasExplicitSummaryFilters = [
+    query.basis,
+    query.service,
+    query.period,
+    query.start,
+    query.end,
+  ].some((value) => value !== undefined);
   const requestedId = requestedConnectionId(query.connection);
   const selectedConnection =
     costConnections.find((connection) => connection.id === requestedId) ??
@@ -266,6 +273,7 @@ export default async function CostsPage({
               initialPeriod={initialPeriod}
               initialCustomStart={stringParam(query.start)}
               initialCustomEnd={stringParam(query.end)}
+              preferInitialFilters={hasExplicitSummaryFilters}
             />
           </Section>
           {focusCostUsageEnabled ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useTransition } from "react";
+import { useEffect, useMemo, useTransition } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -10,6 +10,11 @@ import type {
   CoreIntegrationConnection,
 } from "@/lib/core/api";
 import { StatusBadge } from "./primitives";
+import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
 
 function statusTone(status: CoreIntegrationConnection["status"]) {
   if (status === "connected") return "success" as const;
@@ -35,6 +40,9 @@ export function CloudConnectionSelector({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const storageKey = `cloud-connection:${basePath}`;
+  const [storedConnectionId, setStoredConnectionId, { restored }] =
+    useDashboardFilterState(storageKey, selectedConnectionId, isString);
   const integrationsById = useMemo(
     () =>
       new Map(integrations.map((integration) => [integration.id, integration])),
@@ -57,6 +65,39 @@ export function CloudConnectionSelector({
   const unmatchedConnections = connections.filter(
     (connection) => !integrationsById.has(connection.integration_id),
   );
+
+  useEffect(() => {
+    const requestedConnectionId = searchParams.get("connection");
+    if (requestedConnectionId) {
+      if (
+        storedConnectionId !== requestedConnectionId &&
+        connections.some((item) => item.id === requestedConnectionId)
+      ) {
+        setStoredConnectionId(requestedConnectionId);
+      }
+      return;
+    }
+    if (
+      !restored ||
+      storedConnectionId === selectedConnectionId ||
+      !connections.some((item) => item.id === storedConnectionId)
+    ) {
+      return;
+    }
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("connection", storedConnectionId);
+    router.replace(`${basePath}?${next}` as Route);
+  }, [
+    basePath,
+    connections,
+    restored,
+    router,
+    searchParams,
+    selectedConnectionId,
+    storageKey,
+    storedConnectionId,
+    setStoredConnectionId,
+  ]);
 
   return (
     <section className="border-border-soft bg-card-strong/60 flex flex-col justify-between gap-4 rounded-2xl border p-4 shadow-[0_16px_40px_var(--shadow-card)] sm:flex-row sm:items-center">
@@ -115,6 +156,7 @@ export function CloudConnectionSelector({
             disabled={pending}
             onChange={(event) => {
               const connectionId = event.target.value;
+              setStoredConnectionId(connectionId);
               const nextSearchParams = new URLSearchParams(
                 searchParams.toString(),
               );

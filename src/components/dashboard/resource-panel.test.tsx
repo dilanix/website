@@ -8,7 +8,10 @@ vi.mock("@/app/dashboard/integrations/actions", () => ({
   listResourceFiltersAction: vi.fn(),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 
 const resource: CoreResource = {
   id: "resource-1",

@@ -1972,6 +1972,11 @@ export interface CoreCostOverviewService {
   amount: string;
 }
 
+export interface CoreCostOverviewChargeCategory {
+  category: string;
+  amount: string;
+}
+
 export interface CoreCostOverviewCurrency {
   currency: string;
   current_total: string;
@@ -1982,6 +1987,10 @@ export interface CoreCostOverviewCurrency {
    * `top_services` + `other_total` reconciles exactly to `current_total`. Can
    * be negative (e.g. a credit/refund sorts outside the top-N). */
   other_total: string;
+  /** FOCUS `charge_category` split (`Usage`, `Credit`, `Tax`, ...) — sums
+   * exactly to `current_total`. Surfaces why a total can be near-zero (a
+   * credit netting out usage) directly, instead of only via `/dashboard/costs`. */
+  by_charge_category: CoreCostOverviewChargeCategory[];
 }
 
 export interface CoreCostOverview {

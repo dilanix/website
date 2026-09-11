@@ -1,7 +1,15 @@
 "use client";
 import type { Route } from "next";
 import Link from "next/link";
-import { type ReactNode, useMemo, useState, useTransition } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { ArrowUpDown, ChevronDown, RefreshCw, Search } from "lucide-react";
 import type { CoreResource, CoreResourceFilterOptions } from "@/lib/core/api";
 import {
@@ -20,6 +28,7 @@ import {
 import { EmptyState, StatusBadge } from "./primitives";
 import { ResourceCategoryIcon } from "./resource-category-icon";
 import { cn } from "@/lib/utils";
+import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 
 /** One labeled cluster of filter chips (e.g. "Category" or "Status") — grouping
  * keeps unrelated filter dimensions visually distinct instead of reading as one
@@ -170,6 +179,35 @@ export interface ResourcePanelFilters {
 export type ResourceSortKey =
   "name" | "provider" | "region" | "status" | "lastSeen";
 
+function isNullableString(value: unknown) {
+  return value === null || typeof value === "string";
+}
+
+function isResourcePanelFilters(value: unknown): value is ResourcePanelFilters {
+  if (!value || typeof value !== "object") return false;
+  const filters = value as Record<string, unknown>;
+  return (
+    isNullableString(filters.category) &&
+    isNullableString(filters.resourceType) &&
+    isNullableString(filters.region) &&
+    typeof filters.lifecycleStatus === "string"
+  );
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isResourceSortKey(value: unknown): value is ResourceSortKey {
+  return ["name", "provider", "region", "status", "lastSeen"].includes(
+    String(value),
+  );
+}
+
+function isSortDirection(value: unknown): value is "asc" | "desc" {
+  return value === "asc" || value === "desc";
+}
+
 function updateResourceUrl(values: Record<string, string | null>) {
   const url = new URL(window.location.href);
   Object.entries(values).forEach(([key, value]) => {
@@ -215,6 +253,7 @@ export function ResourcePanel({
   initialSearchQuery = "",
   initialSort = "lastSeen",
   initialSortDirection,
+  preferInitialFilters = false,
 }: {
   connectionId: string;
   initialResources: CoreResource[];
@@ -232,28 +271,52 @@ export function ResourcePanel({
   initialSearchQuery?: string;
   initialSort?: ResourceSortKey;
   initialSortDirection?: "asc" | "desc";
+  preferInitialFilters?: boolean;
 }) {
   const [resources, setResources] = useState(initialResources);
   const [total, setTotal] = useState(initialTotal);
   const [filterOptions, setFilterOptions] = useState(initialFilterOptions);
-  const [filters, setFilters] = useState<ResourcePanelFilters>({
+  const initialResolvedFilters: ResourcePanelFilters = {
     category: initialFilters?.category ?? null,
     resourceType: initialFilters?.resourceType ?? null,
     region: initialFilters?.region ?? null,
     // Mirrors the backend's own default (PR #6): the common view is "what
     // exists right now" — `missing`/`out_of_scope` history is opt-in.
     lifecycleStatus: initialFilters?.lifecycleStatus ?? "active",
-  });
-  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
-  const [sortKey, setSortKey] = useState<ResourceSortKey>(initialSort);
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">(
+  };
+  const [filters, setFilters, { restored: filtersRestored }] =
+    useDashboardFilterState<ResourcePanelFilters>(
+      `resources:${connectionId}:filters`,
+      initialResolvedFilters,
+      isResourcePanelFilters,
+      { fallbackPriority: preferInitialFilters },
+    );
+  const [searchQuery, setSearchQuery] = useDashboardFilterState(
+    `resources:${connectionId}:search`,
+    initialSearchQuery,
+    isString,
+    { fallbackPriority: preferInitialFilters },
+  );
+  const [sortKey, setSortKey] = useDashboardFilterState<ResourceSortKey>(
+    `resources:${connectionId}:sort`,
+    initialSort,
+    isResourceSortKey,
+    { fallbackPriority: preferInitialFilters },
+  );
+  const [sortDirection, setSortDirection] = useDashboardFilterState<
+    "asc" | "desc"
+  >(
+    `resources:${connectionId}:direction`,
     initialSortDirection ?? (initialSort === "lastSeen" ? "desc" : "asc"),
+    isSortDirection,
+    { fallbackPriority: preferInitialFilters },
   );
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+  const restoredFiltersApplied = useRef(false);
 
   function reload(next: ResourcePanelFilters) {
     setRefreshing(true);
@@ -289,6 +352,42 @@ export function ResourcePanel({
       }
     });
   }
+  const restoreFilters = useEffectEvent((next: ResourcePanelFilters) => {
+    reload(next);
+  });
+
+  useEffect(() => {
+    if (!filtersRestored || restoredFiltersApplied.current) return;
+    restoredFiltersApplied.current = true;
+    updateResourceUrl({
+      category: filters.category,
+      type: filters.resourceType,
+      region: filters.region,
+      lifecycle:
+        filters.lifecycleStatus === "active" ? null : filters.lifecycleStatus,
+      q: searchQuery.trim() || null,
+      sort: sortKey,
+      direction: sortDirection,
+    });
+    if (
+      filters.category !== initialResolvedFilters.category ||
+      filters.resourceType !== initialResolvedFilters.resourceType ||
+      filters.region !== initialResolvedFilters.region ||
+      filters.lifecycleStatus !== initialResolvedFilters.lifecycleStatus
+    ) {
+      window.setTimeout(() => restoreFilters(filters), 0);
+    }
+  }, [
+    filters,
+    filtersRestored,
+    initialResolvedFilters.category,
+    initialResolvedFilters.lifecycleStatus,
+    initialResolvedFilters.region,
+    initialResolvedFilters.resourceType,
+    searchQuery,
+    sortDirection,
+    sortKey,
+  ]);
 
   function selectCategory(next: string | null) {
     // A type chosen under the previous category may not exist under the new

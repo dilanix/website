@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useTransition } from "react";
+import { useEffect, useMemo, useTransition } from "react";
 import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, Cloud, LoaderCircle } from "lucide-react";
@@ -8,12 +8,27 @@ import type {
   CoreIntegrationConnection,
   CoreIntegrationTarget,
 } from "@/lib/core/api";
+import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 
 const COST_ANALYTICS_PATHS = new Set([
   "/dashboard/products/cost",
   "/dashboard/products/cost/explorer",
   "/dashboard/products/cost/allocations",
 ]);
+
+interface StoredCostDataScope {
+  connectionId: string | null;
+  targetId: string | null;
+}
+
+function isStoredCostDataScope(value: unknown): value is StoredCostDataScope {
+  if (!value || typeof value !== "object") return false;
+  const scope = value as Record<string, unknown>;
+  return (
+    (scope.connectionId === null || typeof scope.connectionId === "string") &&
+    (scope.targetId === null || typeof scope.targetId === "string")
+  );
+}
 
 export function CostDataScopeSelector({
   connections,
@@ -26,6 +41,12 @@ export function CostDataScopeSelector({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const [storedScope, setStoredScope, { restored }] =
+    useDashboardFilterState<StoredCostDataScope>(
+      "cost.data-scope",
+      { connectionId: null, targetId: null },
+      isStoredCostDataScope,
+    );
   const targetsByConnection = useMemo(() => {
     const result = new Map<string, CoreIntegrationTarget[]>();
     for (const target of targets) {
@@ -35,8 +56,6 @@ export function CostDataScopeSelector({
     }
     return result;
   }, [targets]);
-
-  if (!COST_ANALYTICS_PATHS.has(pathname)) return null;
 
   const requestedConnectionId = searchParams.get("connection");
   const requestedTargetId = searchParams.get("target");
@@ -54,6 +73,52 @@ export function CostDataScopeSelector({
     (requestedConnectionId && !selectedConnection) ||
     (requestedTargetId && !selectedTarget),
   );
+
+  useEffect(() => {
+    if (!COST_ANALYTICS_PATHS.has(pathname)) return;
+    if (requestedConnectionId) {
+      if (
+        !invalidSelection &&
+        (storedScope.connectionId !== requestedConnectionId ||
+          storedScope.targetId !== requestedTargetId)
+      ) {
+        setStoredScope({
+          connectionId: requestedConnectionId,
+          targetId: requestedTargetId,
+        });
+      }
+      return;
+    }
+    if (!restored || !storedScope.connectionId) return;
+    const connection = connections.find(
+      (item) => item.id === storedScope.connectionId,
+    );
+    const target = storedScope.targetId
+      ? targets.find(
+          (item) =>
+            item.id === storedScope.targetId &&
+            item.connection_id === storedScope.connectionId,
+        )
+      : undefined;
+    if (!connection || (storedScope.targetId && !target)) return;
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("connection", connection.id);
+    if (target) next.set("target", target.id);
+    router.replace(`${pathname}?${next}` as Route, { scroll: false });
+  }, [
+    connections,
+    invalidSelection,
+    pathname,
+    requestedConnectionId,
+    requestedTargetId,
+    restored,
+    router,
+    searchParams,
+    setStoredScope,
+    storedScope.connectionId,
+    storedScope.targetId,
+    targets,
+  ]);
   const selectedValue = invalidSelection
     ? "invalid"
     : selectedTarget
@@ -69,12 +134,18 @@ export function CostDataScopeSelector({
 
   function selectScope(value: string) {
     const next = new URLSearchParams(searchParams.toString());
+    let persisted: StoredCostDataScope = {
+      connectionId: null,
+      targetId: null,
+    };
     if (value === "all") {
       next.delete("connection");
       next.delete("target");
     } else if (value.startsWith("connection:")) {
-      next.set("connection", value.slice("connection:".length));
+      const connectionId = value.slice("connection:".length);
+      next.set("connection", connectionId);
       next.delete("target");
+      persisted = { connectionId, targetId: null };
     } else if (value.startsWith("target:")) {
       const target = targets.find(
         (item) => item.id === value.slice("target:".length),
@@ -82,7 +153,12 @@ export function CostDataScopeSelector({
       if (!target) return;
       next.set("connection", target.connection_id);
       next.set("target", target.id);
+      persisted = {
+        connectionId: target.connection_id,
+        targetId: target.id,
+      };
     }
+    setStoredScope(persisted);
     const query = next.toString();
     startTransition(() => {
       router.replace(`${pathname}${query ? `?${query}` : ""}` as Route, {
@@ -90,6 +166,8 @@ export function CostDataScopeSelector({
       });
     });
   }
+
+  if (!COST_ANALYTICS_PATHS.has(pathname)) return null;
 
   return (
     <section className="border-border-soft bg-dashboard-panel flex flex-col justify-between gap-3 rounded-2xl border p-4 shadow-[0_16px_44px_var(--shadow-card)] sm:flex-row sm:items-center">

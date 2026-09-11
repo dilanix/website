@@ -59,7 +59,17 @@ each panel explains the gap otherwise.
 The Cost product dashboard at `/dashboard/products/cost` uses Core's
 organization-wide Cost module analytics endpoints. Its Overview reads
 `GET .../cost/overview` for current-calendar-month spend, the equal-length
-previous-period comparison, and per-currency top services while retaining the
+previous-period comparison, per-currency top services (with an explicit
+"Other services & credits" remainder so the visible breakdown always
+reconciles to the header total), and a "By charge type" panel (the FOCUS
+`Usage`/`Credit`/`Tax`/... split, `by_charge_category`) that makes a
+near-zero net total's usage/credit offsetting visible directly, instead of
+only inferable by comparing against `/dashboard/costs`. Overview also notes
+that its totals include provider credits and, when a single connection is
+selected, shows that connection's AWS Cost Explorer-sourced total
+(`GET .../costs/totals`, credits/refunds excluded, matching the AWS Console's
+own default) alongside the FOCUS-based net total, linking to
+`/dashboard/costs` for the full breakdown — while retaining the
 Budget/Allocation/Anomaly management summary. The dedicated Explorer route at
 `/dashboard/products/cost/explorer` reads `POST .../cost/explorer/query` and the
 saved-view execution endpoint, with metric, daily/weekly/monthly granularity,
@@ -77,6 +87,13 @@ shared Cost data scope as optional `connection_id`/`target_id` backend filters.
 The selector only offers connections with an active per-connection
 `billing.read` capability; the default combines all accessible connections,
 while preserving the selected scope in the URL across Cost product tabs.
+
+Dashboard data filters are also persisted in browser `localStorage`, scoped by
+the effective organization. This includes connection/target scope, Resources
+search and filters, billing filters, Cost Explorer and Allocation breakdown
+controls, anomaly status, and resource metric selectors. Restored filters are
+re-applied after refresh and when navigating between dashboard pages; explicit
+URL query parameters take precedence so shared deep links remain deterministic.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

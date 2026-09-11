@@ -1,7 +1,14 @@
 "use client";
 
 import { Activity, RefreshCw } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { listMetricDatapointsAction } from "@/app/dashboard/integrations/actions";
 import type {
   CoreMetricDatapoint,
@@ -10,6 +17,11 @@ import type {
   CoreMetricUtilizationSummaryListResponse,
 } from "@/lib/core/api";
 import { EmptyState, Metric } from "./primitives";
+import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
 
 interface MetricDefinition {
   key: string;
@@ -233,22 +245,40 @@ export function ResourceMetricsPanel({
   initialMetricSummary: CoreMetricUtilizationSummaryListResponse;
   initialMetrics: CoreMetricDatapointListResponse;
 }) {
-  const [selectedResourceId, setSelectedResourceId] = useState(resourceId);
+  const [
+    selectedResourceId,
+    setSelectedResourceId,
+    { restored: resourceRestored },
+  ] = useDashboardFilterState(
+    `metrics:${connectionId}:${resourceId}:resource`,
+    resourceId,
+    isString,
+  );
+  const effectiveSelectedResourceId = resourceOptions
+    ? resourceOptions.some((option) => option.id === selectedResourceId)
+      ? selectedResourceId
+      : (resourceOptions[0]?.id ?? resourceId)
+    : resourceId;
   const definitions = useMemo(
     () =>
       definitionsFrom(
         initialMetricSummary.items.filter(
-          (summary) => summary.resource_id === selectedResourceId,
+          (summary) => summary.resource_id === effectiveSelectedResourceId,
         ),
       ),
-    [initialMetricSummary.items, selectedResourceId],
+    [effectiveSelectedResourceId, initialMetricSummary.items],
   );
   const initialSummary = initialMetricSummary.items.find(
     (summary) => summary.resource_id === resourceId,
   );
   const initialKey = initialSummary ? definitionKey(initialSummary) : "";
   const initialCacheKey = `${resourceId}\u0001${initialKey}`;
-  const [selectedKey, setSelectedKey] = useState(initialKey);
+  const [selectedKey, setSelectedKey, { restored: metricRestored }] =
+    useDashboardFilterState(
+      `metrics:${connectionId}:${resourceId}:metric`,
+      initialKey,
+      isString,
+    );
   const [pointsByKey, setPointsByKey] = useState<
     Record<string, CoreMetricDatapoint[]>
   >(() =>
@@ -264,12 +294,20 @@ export function ResourceMetricsPanel({
   );
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
-  const selected = definitions.find((item) => item.key === selectedKey);
-  const selectedCacheKey = `${selectedResourceId}\u0001${selectedKey}`;
+  const effectiveSelectedKey = definitions.some(
+    (definition) => definition.key === selectedKey,
+  )
+    ? selectedKey
+    : (definitions[0]?.key ?? "");
+  const selected = definitions.find(
+    (item) => item.key === effectiveSelectedKey,
+  );
+  const selectedCacheKey = `${effectiveSelectedResourceId}\u0001${effectiveSelectedKey}`;
   const points = pointsByKey[selectedCacheKey] ?? [];
   const ordered = [...points].sort((a, b) =>
     b.timestamp.localeCompare(a.timestamp),
   );
+  const restoredMetricApplied = useRef(false);
 
   function loadMetric(nextResourceId: string, definition: MetricDefinition) {
     const cacheKey = `${nextResourceId}\u0001${definition.key}`;
@@ -296,13 +334,18 @@ export function ResourceMetricsPanel({
       }
     });
   }
+  const restoreMetric = useEffectEvent(
+    (nextResourceId: string, definition: MetricDefinition) => {
+      loadMetric(nextResourceId, definition);
+    },
+  );
 
   function selectMetric(key: string) {
     setSelectedKey(key);
     const definition = definitions.find((item) => item.key === key);
     if (!definition) return;
     setError("");
-    loadMetric(selectedResourceId, definition);
+    loadMetric(effectiveSelectedResourceId, definition);
   }
 
   function selectResource(nextResourceId: string) {
@@ -317,6 +360,22 @@ export function ResourceMetricsPanel({
     setSelectedKey(nextDefinition?.key ?? "");
     if (nextDefinition) loadMetric(nextResourceId, nextDefinition);
   }
+
+  useEffect(() => {
+    if (
+      restoredMetricApplied.current ||
+      (!resourceRestored && !metricRestored)
+    ) {
+      return;
+    }
+    restoredMetricApplied.current = true;
+    if (selected) {
+      window.setTimeout(
+        () => restoreMetric(effectiveSelectedResourceId, selected),
+        0,
+      );
+    }
+  }, [effectiveSelectedResourceId, metricRestored, resourceRestored, selected]);
 
   if (definitions.length === 0 && !resourceOptions) {
     return (
@@ -349,7 +408,7 @@ export function ResourceMetricsPanel({
               {resourceSelectorLabel}
             </span>
             <select
-              value={selectedResourceId}
+              value={effectiveSelectedResourceId}
               disabled={pending}
               onChange={(event) => selectResource(event.target.value)}
               className="border-foreground/15 bg-background h-10 w-full rounded-lg border px-3 text-sm disabled:opacity-60"
@@ -373,7 +432,7 @@ export function ResourceMetricsPanel({
             Metric series
           </span>
           <select
-            value={selectedKey}
+            value={effectiveSelectedKey}
             disabled={pending || definitions.length === 0}
             onChange={(event) => selectMetric(event.target.value)}
             className="border-foreground/15 bg-background h-10 w-full rounded-lg border px-3 text-sm disabled:opacity-60"

@@ -75,6 +75,15 @@ export default async function ResourcesPage({
   });
 
   const query = await searchParams;
+  const hasExplicitFilters = [
+    query.category,
+    query.type,
+    query.region,
+    query.lifecycle,
+    query.q,
+    query.sort,
+    query.direction,
+  ].some((value) => value !== undefined);
   const requestedId = requestedConnectionId(query.connection);
   const selectedConnection =
     resourceConnections.find((connection) => connection.id === requestedId) ??
@@ -230,8 +239,7 @@ export default async function ResourcesPage({
         <p className="border-accent/30 bg-accent/5 text-accent flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm">
           <span>
             This connection is not verified, so new resource data cannot sync.
-            You&apos;re viewing the last data collected before it was
-            disabled.
+            You&apos;re viewing the last data collected before it was disabled.
           </span>
           <Link
             href={`/dashboard/integrations/${selectedConnection.id}?tab=settings`}
@@ -257,6 +265,7 @@ export default async function ResourcesPage({
           initialSearchQuery={stringParam(query.q)}
           initialSort={initialSort}
           initialSortDirection={initialSortDirection}
+          preferInitialFilters={hasExplicitFilters}
         />
       </Section>
     </div>

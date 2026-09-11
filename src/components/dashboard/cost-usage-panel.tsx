@@ -1,5 +1,12 @@
 "use client";
-import { type FormEvent, useState, useTransition } from "react";
+import {
+  type FormEvent,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { ChevronDown, RefreshCw, Search } from "lucide-react";
@@ -18,6 +25,7 @@ import { EmptyState, StatusBadge } from "./primitives";
 import { FilterChip } from "./cost-summary-panel";
 import { cn } from "@/lib/utils";
 import { ResourceMetadata } from "./resource-metadata";
+import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 
 function costValue(value: string | null, currency: string | null) {
   if (value === null) return null;
@@ -214,13 +222,29 @@ interface CostUsageFilters {
   billingAccountId: string;
 }
 
+function isCostUsageFilters(value: unknown): value is CostUsageFilters {
+  if (!value || typeof value !== "object") return false;
+  const filters = value as Record<string, unknown>;
+  return (
+    typeof filters.serviceName === "string" &&
+    typeof filters.billingAccountId === "string"
+  );
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isCostUsageMetric(value: unknown): value is CostUsageMetric {
+  return COST_USAGE_METRIC_FILTER_ORDER.includes(value as CostUsageMetric);
+}
+
 /**
  * Raw FOCUS detail-row browser — the `billing.cost_usage` counterpart to
  * `CostSummaryPanel`. Deliberately simpler: no URL-persisted filter state (this
- * panel's filters are independent of, and would otherwise collide in the query
- * string with, `CostSummaryPanel`'s own `service`/`basis` params), and no period
- * picker of its own — FOCUS rows are browsed by service/account here, with
- * period-level totals already covered by `UnifiedCostTotals` above.
+ * panel's filters are independent of `CostSummaryPanel`'s own filters and are
+ * persisted under their own localStorage key. There is no period picker of its
+ * own — period-level totals are already covered by `UnifiedCostTotals` above.
  */
 export function CostUsagePanel({
   connectionId,
@@ -248,18 +272,33 @@ export function CostUsagePanel({
 }) {
   const [costUsage, setCostUsage] = useState(initialCostUsage);
   const [total, setTotal] = useState(initialTotal);
-  const [metric, setMetric] = useState<CostUsageMetric>("effective_cost");
-  const [filters, setFilters] = useState<CostUsageFilters>({
-    serviceName: "",
-    billingAccountId: "",
-  });
-  const [serviceNameInput, setServiceNameInput] = useState("");
-  const [billingAccountInput, setBillingAccountInput] = useState("");
+  const [metric, setMetric] = useDashboardFilterState<CostUsageMetric>(
+    `costs:${connectionId}:usage-metric`,
+    "effective_cost",
+    isCostUsageMetric,
+  );
+  const [filters, setFilters, { restored: filtersRestored }] =
+    useDashboardFilterState<CostUsageFilters>(
+      `costs:${connectionId}:usage-filters`,
+      { serviceName: "", billingAccountId: "" },
+      isCostUsageFilters,
+    );
+  const [serviceNameInput, setServiceNameInput] = useDashboardFilterState(
+    `costs:${connectionId}:usage-service-input`,
+    "",
+    isString,
+  );
+  const [billingAccountInput, setBillingAccountInput] = useDashboardFilterState(
+    `costs:${connectionId}:usage-account-input`,
+    "",
+    isString,
+  );
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const restoredFiltersApplied = useRef(false);
 
   function reload(next: CostUsageFilters) {
     setRefreshing(true);
@@ -279,6 +318,17 @@ export function CostUsagePanel({
       }
     });
   }
+  const restoreFilters = useEffectEvent((next: CostUsageFilters) => {
+    reload(next);
+  });
+
+  useEffect(() => {
+    if (!filtersRestored || restoredFiltersApplied.current) return;
+    restoredFiltersApplied.current = true;
+    if (filters.serviceName || filters.billingAccountId) {
+      window.setTimeout(() => restoreFilters(filters), 0);
+    }
+  }, [filters, filtersRestored]);
 
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -1,6 +1,13 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { Bookmark, Play, Search } from "lucide-react";
@@ -23,6 +30,7 @@ import {
   SCOPE_DIMENSION_LABELS,
   ScopeEditor,
 } from "@/components/dashboard/cost/scope-editor";
+import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 
 const METRIC_LABELS: Record<CostUsageMetric, string> = {
   billed_cost: "Billed cost",
@@ -42,6 +50,57 @@ type GroupByDimension = Exclude<ScopeDimension, "tag">;
 const GROUP_BY_DIMENSIONS = (
   Object.keys(SCOPE_DIMENSION_LABELS) as ScopeDimension[]
 ).filter((dimension): dimension is GroupByDimension => dimension !== "tag");
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isCostUsageMetric(value: unknown): value is CostUsageMetric {
+  return typeof value === "string" && value in METRIC_LABELS;
+}
+
+function isExplorerGranularity(value: unknown): value is ExplorerGranularity {
+  return typeof value === "string" && value in GRANULARITY_LABELS;
+}
+
+function isGroupBy(value: unknown): value is CostExplorerGroupByField[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (field) =>
+        field &&
+        typeof field === "object" &&
+        "dimension" in field &&
+        typeof field.dimension === "string" &&
+        field.dimension in SCOPE_DIMENSION_LABELS &&
+        (!("tag_key" in field) ||
+          field.tag_key === null ||
+          typeof field.tag_key === "string"),
+    )
+  );
+}
+
+function isScope(value: unknown): value is CoreScopeCondition[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (condition) =>
+        condition &&
+        typeof condition === "object" &&
+        "dimension" in condition &&
+        typeof condition.dimension === "string" &&
+        condition.dimension in SCOPE_DIMENSION_LABELS &&
+        "operator" in condition &&
+        ["eq", "in", "not_in"].includes(String(condition.operator)) &&
+        "value" in condition &&
+        (typeof condition.value === "string" ||
+          (Array.isArray(condition.value) &&
+            condition.value.every(
+              (item: unknown) => typeof item === "string",
+            ))),
+    )
+  );
+}
 
 function startIso(date: string) {
   return new Date(`${date}T00:00:00.000Z`).toISOString();
@@ -120,19 +179,56 @@ export function CostExplorerClient({
     result.dataScopeKey === dataScopeKey ? result.items : initialItems;
   const resultMetric =
     result.dataScopeKey === dataScopeKey ? result.metric : "effective_cost";
-  const [periodStart, setPeriodStart] = useState(initialPeriodStart);
-  const [periodEnd, setPeriodEnd] = useState(initialPeriodEnd);
-  const [metric, setMetric] = useState<CostUsageMetric>("effective_cost");
-  const [granularity, setGranularity] = useState<ExplorerGranularity>("daily");
-  const [groupBy, setGroupBy] = useState<CostExplorerGroupByField[]>([
-    { dimension: "service_name" },
-  ]);
-  const [tagGroupKey, setTagGroupKey] = useState("");
-  const [scope, setScope] = useState<CoreScopeCondition[]>([]);
+  const [periodStart, setPeriodStart, { restored: periodStartRestored }] =
+    useDashboardFilterState(
+      "cost.explorer.period-start",
+      initialPeriodStart,
+      isString,
+    );
+  const [periodEnd, setPeriodEnd, { restored: periodEndRestored }] =
+    useDashboardFilterState(
+      "cost.explorer.period-end",
+      initialPeriodEnd,
+      isString,
+    );
+  const [metric, setMetric, { restored: metricRestored }] =
+    useDashboardFilterState<CostUsageMetric>(
+      "cost.explorer.metric",
+      "effective_cost",
+      isCostUsageMetric,
+    );
+  const [granularity, setGranularity, { restored: granularityRestored }] =
+    useDashboardFilterState<ExplorerGranularity>(
+      "cost.explorer.granularity",
+      "daily",
+      isExplorerGranularity,
+    );
+  const [groupBy, setGroupBy, { restored: groupByRestored }] =
+    useDashboardFilterState<CostExplorerGroupByField[]>(
+      "cost.explorer.group-by",
+      [{ dimension: "service_name" }],
+      isGroupBy,
+    );
+  const [tagGroupKey, setTagGroupKey] = useDashboardFilterState(
+    "cost.explorer.tag-key",
+    "",
+    isString,
+  );
+  const [scope, setScope, { restored: scopeRestored }] =
+    useDashboardFilterState<CoreScopeCondition[]>(
+      "cost.explorer.scope",
+      [],
+      isScope,
+    );
   const [scopeEditorKey, setScopeEditorKey] = useState(0);
-  const [selectedSavedViewId, setSelectedSavedViewId] = useState("");
+  const [selectedSavedViewId, setSelectedSavedViewId] = useDashboardFilterState(
+    "cost.explorer.saved-view",
+    "",
+    isString,
+  );
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const restoredQueryApplied = useRef(false);
   const resultScopeLabel = targetId
     ? `Target ${targetId.slice(0, 8)}…`
     : connectionId
@@ -208,6 +304,9 @@ export function CostExplorerClient({
       setSelectedSavedViewId("");
     });
   }
+  const restoreQuery = useEffectEvent(() => {
+    runQuery();
+  });
 
   function runSavedView() {
     const view = savedViews.find((item) => item.id === selectedSavedViewId);
@@ -238,6 +337,45 @@ export function CostExplorerClient({
       });
     });
   }
+
+  useEffect(() => {
+    if (
+      restoredQueryApplied.current ||
+      (!periodStartRestored &&
+        !periodEndRestored &&
+        !metricRestored &&
+        !granularityRestored &&
+        !groupByRestored &&
+        !scopeRestored)
+    ) {
+      return;
+    }
+    restoredQueryApplied.current = true;
+    const differsFromInitialQuery =
+      periodStart !== initialPeriodStart ||
+      periodEnd !== initialPeriodEnd ||
+      metric !== "effective_cost" ||
+      granularity !== "daily" ||
+      JSON.stringify(groupBy) !==
+        JSON.stringify([{ dimension: "service_name" }]) ||
+      scope.length > 0;
+    if (differsFromInitialQuery) window.setTimeout(restoreQuery, 0);
+  }, [
+    granularity,
+    granularityRestored,
+    groupBy,
+    groupByRestored,
+    initialPeriodEnd,
+    initialPeriodStart,
+    metric,
+    metricRestored,
+    periodEnd,
+    periodEndRestored,
+    periodStart,
+    periodStartRestored,
+    scope,
+    scopeRestored,
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -351,7 +489,7 @@ export function CostExplorerClient({
         <div className="mt-5">
           <span className="mb-2 block text-sm font-medium">Filters</span>
           <ScopeEditor
-            key={scopeEditorKey}
+            key={`${scopeEditorKey}:${scopeRestored ? "restored" : "default"}`}
             initialValue={scope}
             onChange={setScope}
             disabled={pending}

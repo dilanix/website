@@ -1,4 +1,5 @@
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { DashboardFilterStorageProvider } from "@/lib/dashboard/filter-storage";
 import {
   listOrganizationCapabilities,
   listOrganizationProducts,
@@ -38,7 +39,11 @@ export default async function DashboardLayout({
         .filter((capability) => capability.access_status === "active")
         .map((capability) => capability.code)}
     >
-      {children}
+      <DashboardFilterStorageProvider
+        namespace={organization?.organization_id ?? `user:${me.email}`}
+      >
+        {children}
+      </DashboardFilterStorageProvider>
     </DashboardShell>
   );
 }

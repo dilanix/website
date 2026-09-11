@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import {
@@ -15,11 +16,13 @@ import {
 import {
   CoreApiError,
   getCostOverview,
+  getUnifiedCostTotals,
   listAllocations,
   listAnomalies,
   listBudgets,
   listReports,
   listSavedViews,
+  type CoreUnifiedCostTotals,
 } from "@/lib/core/api";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
@@ -47,7 +50,7 @@ export async function CostOverview({
   if (connectionId) scopeQuery.set("connection", connectionId);
   if (targetId) scopeQuery.set("target", targetId);
   const scopeSuffix = scopeQuery.size ? `?${scopeQuery.toString()}` : "";
-  const [overview, budgets, allocations, anomalies, savedViews, reports] =
+  const [overview, budgets, allocations, anomalies, savedViews, reports, unifiedTotals] =
     await Promise.all([
       getCostOverview(organizationId, token, {
         periodStart: periodStart.toISOString(),
@@ -70,6 +73,15 @@ export async function CostOverview({
       listAnomalies(organizationId, token),
       listSavedViews(organizationId, token),
       listReports(organizationId, token),
+      // Only available for a single selected connection — AWS Cost Explorer
+      // has no cross-account aggregate, unlike the org-wide FOCUS overview above.
+      connectionId
+        ? getUnifiedCostTotals(organizationId, connectionId, token, {
+            periodStart: periodStart.toISOString(),
+            periodEnd: now.toISOString(),
+            targetId,
+          }).catch((): CoreUnifiedCostTotals | null => null)
+        : Promise.resolve<CoreUnifiedCostTotals | null>(null),
     ]);
 
   const enabledBudgets = budgets.items.filter((budget) => budget.enabled);
@@ -140,7 +152,16 @@ export async function CostOverview({
             </h2>
             <p className="text-muted-foreground mt-1 text-xs">
               Current calendar month compared with the immediately preceding
-              period of equal length.
+              period of equal length. Includes provider credits and
+              discounts — for an AWS Console-style total with credits
+              excluded, see{" "}
+              <Link
+                href={`/dashboard/costs${scopeSuffix}` as Route}
+                className="text-accent font-medium"
+              >
+                Dashboard → Costs
+              </Link>
+              .
             </p>
           </div>
           <Link
@@ -202,6 +223,33 @@ export async function CostOverview({
               })}
             </div>
 
+            {unifiedTotals ? (
+              <div className="border-border-soft bg-dashboard-panel mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 shadow-[0_16px_44px_var(--shadow-card)]">
+                <div>
+                  <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+                    AWS Console-style total · this connection
+                  </p>
+                  <p className="mt-0.5 text-sm font-medium">
+                    {unifiedTotals.currency
+                      ? formatAmount(
+                          Number(unifiedTotals.total_amount),
+                          unifiedTotals.currency,
+                        )
+                      : "No data"}{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (credits excluded)
+                    </span>
+                  </p>
+                </div>
+                <Link
+                  href={`/dashboard/costs${scopeSuffix}` as Route}
+                  className="text-accent inline-flex items-center gap-1 text-xs font-semibold"
+                >
+                  Full breakdown <ArrowRight size={13} />
+                </Link>
+              </div>
+            ) : null}
+
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               {overview.by_currency.map((currency) => {
                 const otherAmount = Number(currency.other_total);
@@ -212,66 +260,114 @@ export async function CostOverview({
                   Math.abs(otherAmount),
                   1,
                 );
+                const maxCategoryAmount = Math.max(
+                  ...currency.by_charge_category.map((item) =>
+                    Math.abs(Number(item.amount)),
+                  ),
+                  1,
+                );
                 return (
-                  <div
-                    key={currency.currency}
-                    className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
-                  >
-                    <h3 className="text-sm font-semibold">
-                      Top services · {currency.currency}
-                    </h3>
-                    {currency.top_services.length === 0 ? (
-                      <p className="text-muted-foreground mt-3 text-sm">
-                        No service breakdown is available.
-                      </p>
-                    ) : (
-                      <div className="mt-4 space-y-3">
-                        {currency.top_services.map((service, index) => {
-                          const amount = Number(service.amount);
-                          return (
-                            <div
-                              key={`${service.service_name ?? "unassigned"}-${index}`}
-                              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
-                            >
-                              <span className="truncate text-xs font-medium">
-                                {service.service_name ?? "Unassigned service"}
+                  <Fragment key={currency.currency}>
+                    <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
+                      <h3 className="text-sm font-semibold">
+                        Top services · {currency.currency}
+                      </h3>
+                      {currency.top_services.length === 0 ? (
+                        <p className="text-muted-foreground mt-3 text-sm">
+                          No service breakdown is available.
+                        </p>
+                      ) : (
+                        <div className="mt-4 space-y-3">
+                          {currency.top_services.map((service, index) => {
+                            const amount = Number(service.amount);
+                            return (
+                              <div
+                                key={`${service.service_name ?? "unassigned"}-${index}`}
+                                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
+                              >
+                                <span className="truncate text-xs font-medium">
+                                  {service.service_name ?? "Unassigned service"}
+                                </span>
+                                <span className="font-mono text-xs">
+                                  {formatAmount(amount, currency.currency)}
+                                </span>
+                                <span className="bg-foreground/5 col-span-2 h-1.5 overflow-hidden rounded-full">
+                                  <span
+                                    className="bg-accent block h-full rounded-full"
+                                    style={{
+                                      width: `${(Math.abs(amount) / maxServiceAmount) * 100}%`,
+                                      opacity: 1 - index * 0.12,
+                                    }}
+                                  />
+                                </span>
+                              </div>
+                            );
+                          })}
+                          {otherAmount !== 0 ? (
+                            <div className="border-foreground/10 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t pt-3">
+                              <span className="text-muted-foreground truncate text-xs font-medium">
+                                Other services &amp; credits
                               </span>
-                              <span className="font-mono text-xs">
-                                {formatAmount(amount, currency.currency)}
+                              <span className="text-muted-foreground font-mono text-xs">
+                                {formatAmount(otherAmount, currency.currency)}
                               </span>
                               <span className="bg-foreground/5 col-span-2 h-1.5 overflow-hidden rounded-full">
                                 <span
-                                  className="bg-accent block h-full rounded-full"
+                                  className="bg-foreground/30 block h-full rounded-full"
                                   style={{
-                                    width: `${(Math.abs(amount) / maxServiceAmount) * 100}%`,
-                                    opacity: 1 - index * 0.12,
+                                    width: `${(Math.abs(otherAmount) / maxServiceAmount) * 100}%`,
                                   }}
                                 />
                               </span>
                             </div>
-                          );
-                        })}
-                        {otherAmount !== 0 ? (
-                          <div className="border-foreground/10 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t pt-3">
-                            <span className="text-muted-foreground truncate text-xs font-medium">
-                              Other services &amp; credits
-                            </span>
-                            <span className="text-muted-foreground font-mono text-xs">
-                              {formatAmount(otherAmount, currency.currency)}
-                            </span>
-                            <span className="bg-foreground/5 col-span-2 h-1.5 overflow-hidden rounded-full">
-                              <span
-                                className="bg-foreground/30 block h-full rounded-full"
-                                style={{
-                                  width: `${(Math.abs(otherAmount) / maxServiceAmount) * 100}%`,
-                                }}
-                              />
-                            </span>
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
-                  </div>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
+                      <h3 className="text-sm font-semibold">
+                        By charge type · {currency.currency}
+                      </h3>
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        Usage minus credits/discounts nets to the total above.
+                      </p>
+                      {currency.by_charge_category.length === 0 ? (
+                        <p className="text-muted-foreground mt-3 text-sm">
+                          No charge-type breakdown is available.
+                        </p>
+                      ) : (
+                        <div className="mt-4 space-y-3">
+                          {currency.by_charge_category.map((item) => {
+                            const amount = Number(item.amount);
+                            return (
+                              <div
+                                key={item.category}
+                                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
+                              >
+                                <span className="truncate text-xs font-medium">
+                                  {item.category}
+                                </span>
+                                <span
+                                  className={`font-mono text-xs ${amount < 0 ? "text-emerald-600 dark:text-emerald-400" : ""}`}
+                                >
+                                  {formatAmount(amount, currency.currency)}
+                                </span>
+                                <span className="bg-foreground/5 col-span-2 h-1.5 overflow-hidden rounded-full">
+                                  <span
+                                    className={`block h-full rounded-full ${amount < 0 ? "bg-emerald-500" : "bg-accent"}`}
+                                    style={{
+                                      width: `${(Math.abs(amount) / maxCategoryAmount) * 100}%`,
+                                    }}
+                                  />
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </Fragment>
                 );
               })}
             </div>

@@ -7,7 +7,10 @@ vi.mock("@/app/dashboard/integrations/actions", () => ({
   listCostUsageAction: vi.fn(),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 
 const row: CoreCostUsage = {
   id: "usage-1",

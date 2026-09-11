@@ -2,7 +2,10 @@
 import {
   type FormEvent,
   type ReactNode,
+  useEffect,
+  useEffectEvent,
   useMemo,
+  useRef,
   useState,
   useTransition,
 } from "react";
@@ -26,6 +29,7 @@ import {
 import { EmptyState, StatusBadge } from "./primitives";
 import { CostSummaryTotals } from "./cost-summary-totals";
 import { cn } from "@/lib/utils";
+import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 
 export function FilterChip({
   active,
@@ -102,6 +106,26 @@ interface CostSummaryFilters {
   serviceName: string;
 }
 
+function isCostSummaryFilters(value: unknown): value is CostSummaryFilters {
+  if (!value || typeof value !== "object") return false;
+  const filters = value as Record<string, unknown>;
+  return (
+    typeof filters.costBasis === "string" &&
+    COST_BASIS_FILTER_ORDER.includes(filters.costBasis as CostBasis) &&
+    typeof filters.serviceName === "string"
+  );
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isPeriod(value: unknown): value is PeriodPresetId | "custom" {
+  return (
+    value === "custom" || PERIOD_PRESETS.some((preset) => preset.id === value)
+  );
+}
+
 export function CostSummaryPanel({
   connectionId,
   costReadEnabled,
@@ -113,6 +137,7 @@ export function CostSummaryPanel({
   initialPeriod = "30d",
   initialCustomStart = "",
   initialCustomEnd = "",
+  preferInitialFilters = false,
 }: {
   connectionId: string;
   /** Whether `billing.read` is enabled on this connection — Core's read API
@@ -128,24 +153,50 @@ export function CostSummaryPanel({
   initialPeriod?: PeriodPresetId | "custom";
   initialCustomStart?: string;
   initialCustomEnd?: string;
+  preferInitialFilters?: boolean;
 }) {
   const [costSummaries, setCostSummaries] = useState(initialCostSummaries);
   const [total, setTotal] = useState(initialTotal);
-  const [filters, setFilters] = useState<CostSummaryFilters>({
+  const initialResolvedFilters: CostSummaryFilters = {
     costBasis: initialCostBasis,
     serviceName: initialServiceName,
-  });
-  const [serviceNameInput, setServiceNameInput] = useState(initialServiceName);
-  const [presetId, setPresetId] = useState<PeriodPresetId | "custom">(
-    initialPeriod,
+  };
+  const [filters, setFilters, { restored: filtersRestored }] =
+    useDashboardFilterState<CostSummaryFilters>(
+      `costs:${connectionId}:summary-filters`,
+      initialResolvedFilters,
+      isCostSummaryFilters,
+      { fallbackPriority: preferInitialFilters },
+    );
+  const [serviceNameInput, setServiceNameInput] = useDashboardFilterState(
+    `costs:${connectionId}:summary-service-input`,
+    initialServiceName,
+    isString,
+    { fallbackPriority: preferInitialFilters },
   );
-  const [customStart, setCustomStart] = useState(initialCustomStart);
-  const [customEnd, setCustomEnd] = useState(initialCustomEnd);
+  const [presetId, setPresetId] = useDashboardFilterState<
+    PeriodPresetId | "custom"
+  >(`costs:${connectionId}:summary-period`, initialPeriod, isPeriod, {
+    fallbackPriority: preferInitialFilters,
+  });
+  const [customStart, setCustomStart] = useDashboardFilterState(
+    `costs:${connectionId}:summary-start`,
+    initialCustomStart,
+    isString,
+    { fallbackPriority: preferInitialFilters },
+  );
+  const [customEnd, setCustomEnd] = useDashboardFilterState(
+    `costs:${connectionId}:summary-end`,
+    initialCustomEnd,
+    isString,
+    { fallbackPriority: preferInitialFilters },
+  );
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const restoredFiltersApplied = useRef(false);
 
   const range: DateRange | null = useMemo(() => {
     if (presetId === "custom") {
@@ -180,6 +231,35 @@ export function CostSummaryPanel({
       }
     });
   }
+  const restoreFilters = useEffectEvent((next: CostSummaryFilters) => {
+    reload(next);
+  });
+
+  useEffect(() => {
+    if (!filtersRestored || restoredFiltersApplied.current) return;
+    restoredFiltersApplied.current = true;
+    updateCostsUrl({
+      basis: filters.costBasis,
+      service: filters.serviceName || null,
+      period: presetId === "30d" ? null : presetId,
+      start: presetId === "custom" ? customStart : null,
+      end: presetId === "custom" ? customEnd : null,
+    });
+    if (
+      filters.costBasis !== initialResolvedFilters.costBasis ||
+      filters.serviceName !== initialResolvedFilters.serviceName
+    ) {
+      window.setTimeout(() => restoreFilters(filters), 0);
+    }
+  }, [
+    customEnd,
+    customStart,
+    filters,
+    filtersRestored,
+    initialResolvedFilters.costBasis,
+    initialResolvedFilters.serviceName,
+    presetId,
+  ]);
 
   function selectCostBasis(next: CostBasis) {
     const nextFilters = { ...filters, costBasis: next };

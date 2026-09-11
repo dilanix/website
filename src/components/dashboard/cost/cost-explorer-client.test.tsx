@@ -20,6 +20,7 @@ vi.mock("@/app/dashboard/products/cost-actions", () => ({
 
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   vi.clearAllMocks();
 });
 
@@ -52,6 +53,33 @@ const savedView: CoreSavedView = {
 };
 
 describe("CostExplorerClient", () => {
+  it("restores saved query controls and re-runs the matching query", async () => {
+    localStorage.setItem(
+      "dilanix.dashboard.filters.v1:anonymous:cost.explorer.metric",
+      JSON.stringify("billed_cost"),
+    );
+    vi.mocked(queryCostExplorerAction).mockResolvedValue({
+      data: { items: [point] },
+    });
+
+    render(
+      <CostExplorerClient
+        initialItems={[]}
+        initialPeriodStart="2026-09-01"
+        initialPeriodEnd="2026-09-11"
+        savedViews={[]}
+        connectionId={null}
+        targetId={null}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(queryCostExplorerAction).toHaveBeenCalledWith(
+        expect.objectContaining({ metric: "billed_cost" }),
+      ),
+    );
+  }, 20_000);
+
   it("replaces stale rows when the selected connection changes", async () => {
     const { rerender } = render(
       <CostExplorerClient

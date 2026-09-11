@@ -28,6 +28,7 @@ vi.mock("next/navigation", () => ({
 
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   navigation.pathname = "/dashboard/products/cost/explorer";
   navigation.query = "";
   navigation.replace.mockReset();
@@ -64,6 +65,24 @@ const target: CoreIntegrationTarget = {
 };
 
 describe("CostDataScopeSelector", () => {
+  it("restores a saved connection scope when the URL has no scope", async () => {
+    localStorage.setItem(
+      "dilanix.dashboard.filters.v1:anonymous:cost.data-scope",
+      JSON.stringify({ connectionId: connection.id, targetId: null }),
+    );
+
+    render(
+      <CostDataScopeSelector connections={[connection]} targets={[target]} />,
+    );
+
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith(
+        `/dashboard/products/cost/explorer?connection=${connection.id}`,
+        { scroll: false },
+      ),
+    );
+  });
+
   it("writes a nested connection and target scope to the URL", async () => {
     render(
       <CostDataScopeSelector connections={[connection]} targets={[target]} />,
