@@ -1549,6 +1549,529 @@ export function getUnifiedCostTotals(
   );
 }
 
+/**
+ * Cost management module (`src/modules/cost` in Core) — Budgets, Allocations,
+ * Anomalies, Saved Views, and Reports. Gated by both an org-level RBAC
+ * permission (`cost.read` / `cost.manage`) and the `product.cost` entitlement;
+ * unlike `billing.read`-gated cost data above, this is pure configuration —
+ * definitions, not spend rows — and none of it is paginated (every list route
+ * returns every row for the organization).
+ */
+export type ScopeDimension =
+  | "provider_name"
+  | "billing_account_id"
+  | "sub_account_id"
+  | "service_category"
+  | "service_name"
+  | "region_id"
+  | "resource_id"
+  | "resource_type"
+  | "charge_category"
+  | "tag";
+
+export type ScopeOperator = "eq" | "in" | "not_in";
+
+/** `tag_key` must be set iff `dimension === "tag"`, and omitted otherwise. */
+export interface CoreScopeCondition {
+  dimension: ScopeDimension;
+  tag_key?: string | null;
+  operator: ScopeOperator;
+  value: string | string[];
+}
+
+export type BudgetPeriod = "monthly" | "quarterly" | "annual" | "custom";
+
+export interface CoreBudget {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string | null;
+  amount: string;
+  currency: string;
+  period: BudgetPeriod;
+  period_start: string | null;
+  period_end: string | null;
+  alert_thresholds: number[];
+  /** Which `alert_thresholds` have already fired an email for the current
+   * period — job-managed, read-only. */
+  notified_thresholds: number[];
+  recipients: string[];
+  enabled: boolean;
+  scope: CoreScopeCondition[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreBudgetListResponse {
+  items: CoreBudget[];
+}
+
+export interface CreateBudgetInput {
+  name: string;
+  description?: string | null;
+  amount: string;
+  currency: string;
+  period?: BudgetPeriod;
+  period_start?: string | null;
+  period_end?: string | null;
+  alert_thresholds?: number[];
+  recipients?: string[];
+  scope?: CoreScopeCondition[];
+}
+
+export interface UpdateBudgetInput {
+  name?: string;
+  description?: string | null;
+  amount?: string;
+  currency?: string;
+  period?: BudgetPeriod;
+  period_start?: string | null;
+  period_end?: string | null;
+  alert_thresholds?: number[];
+  recipients?: string[];
+  enabled?: boolean;
+  scope?: CoreScopeCondition[];
+}
+
+export function listBudgets(organizationId: string, token: string) {
+  return coreRequest<CoreBudgetListResponse>(
+    `/v1/organizations/${organizationId}/cost/budgets`,
+    token,
+  );
+}
+
+export function getBudget(
+  organizationId: string,
+  budgetId: string,
+  token: string,
+) {
+  return coreRequest<CoreBudget>(
+    `/v1/organizations/${organizationId}/cost/budgets/${budgetId}`,
+    token,
+  );
+}
+
+export function createBudget(
+  organizationId: string,
+  token: string,
+  input: CreateBudgetInput,
+) {
+  return coreRequest<CoreBudget>(
+    `/v1/organizations/${organizationId}/cost/budgets`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateBudget(
+  organizationId: string,
+  budgetId: string,
+  token: string,
+  input: UpdateBudgetInput,
+) {
+  return coreRequest<CoreBudget>(
+    `/v1/organizations/${organizationId}/cost/budgets/${budgetId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function deleteBudget(
+  organizationId: string,
+  budgetId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/cost/budgets/${budgetId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export interface CoreAllocation {
+  id: string;
+  organization_id: string;
+  name: string;
+  target_label: string;
+  priority: number;
+  enabled: boolean;
+  scope: CoreScopeCondition[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreAllocationListResponse {
+  items: CoreAllocation[];
+}
+
+export interface CreateAllocationInput {
+  name: string;
+  target_label: string;
+  priority?: number;
+  scope?: CoreScopeCondition[];
+}
+
+export interface UpdateAllocationInput {
+  name?: string;
+  target_label?: string;
+  priority?: number;
+  enabled?: boolean;
+  scope?: CoreScopeCondition[];
+}
+
+export function listAllocations(organizationId: string, token: string) {
+  return coreRequest<CoreAllocationListResponse>(
+    `/v1/organizations/${organizationId}/cost/allocations`,
+    token,
+  );
+}
+
+export function getAllocation(
+  organizationId: string,
+  allocationId: string,
+  token: string,
+) {
+  return coreRequest<CoreAllocation>(
+    `/v1/organizations/${organizationId}/cost/allocations/${allocationId}`,
+    token,
+  );
+}
+
+export function createAllocation(
+  organizationId: string,
+  token: string,
+  input: CreateAllocationInput,
+) {
+  return coreRequest<CoreAllocation>(
+    `/v1/organizations/${organizationId}/cost/allocations`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateAllocation(
+  organizationId: string,
+  allocationId: string,
+  token: string,
+  input: UpdateAllocationInput,
+) {
+  return coreRequest<CoreAllocation>(
+    `/v1/organizations/${organizationId}/cost/allocations/${allocationId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function deleteAllocation(
+  organizationId: string,
+  allocationId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/cost/allocations/${allocationId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export type AnomalySeverity = "low" | "medium" | "high";
+export type AnomalyStatus = "open" | "acknowledged" | "resolved";
+
+export interface CoreAnomaly {
+  id: string;
+  organization_id: string;
+  detected_at: string;
+  period_start: string;
+  period_end: string;
+  expected_amount: string;
+  actual_amount: string;
+  currency: string;
+  deviation_percent: string;
+  severity: AnomalySeverity;
+  status: AnomalyStatus;
+  acknowledged_at: string | null;
+  resolved_at: string | null;
+  /** Always `[]` today — anomaly detection only ever runs at the
+   * whole-organization level, despite this column existing for future
+   * per-scope detection. */
+  scope: CoreScopeCondition[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreAnomalyListResponse {
+  items: CoreAnomaly[];
+}
+
+export function listAnomalies(
+  organizationId: string,
+  token: string,
+  statusFilter?: AnomalyStatus | null,
+) {
+  const query = statusFilter
+    ? `?${new URLSearchParams({ status_filter: statusFilter }).toString()}`
+    : "";
+  return coreRequest<CoreAnomalyListResponse>(
+    `/v1/organizations/${organizationId}/cost/anomalies${query}`,
+    token,
+  );
+}
+
+export function getAnomaly(
+  organizationId: string,
+  anomalyId: string,
+  token: string,
+) {
+  return coreRequest<CoreAnomaly>(
+    `/v1/organizations/${organizationId}/cost/anomalies/${anomalyId}`,
+    token,
+  );
+}
+
+/** `status` must not be `"open"` — only the detection job may set that. */
+export function updateAnomalyStatus(
+  organizationId: string,
+  anomalyId: string,
+  token: string,
+  status: "acknowledged" | "resolved",
+) {
+  return coreRequest<CoreAnomaly>(
+    `/v1/organizations/${organizationId}/cost/anomalies/${anomalyId}/status`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    },
+  );
+}
+
+export type ExplorerGranularity = "daily" | "weekly" | "monthly";
+export type SavedViewVisibility = "private" | "organization";
+
+export interface CoreSavedView {
+  id: string;
+  organization_id: string;
+  created_by_user_id: string | null;
+  name: string;
+  description: string | null;
+  group_by: ScopeDimension[];
+  granularity: ExplorerGranularity;
+  visibility: SavedViewVisibility;
+  scope: CoreScopeCondition[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreSavedViewListResponse {
+  items: CoreSavedView[];
+}
+
+export interface CreateSavedViewInput {
+  name: string;
+  description?: string | null;
+  /** Must not include `"tag"` — tag has no `tag_key` to group by. */
+  group_by?: ScopeDimension[];
+  granularity?: ExplorerGranularity;
+  visibility?: SavedViewVisibility;
+  scope?: CoreScopeCondition[];
+}
+
+export interface UpdateSavedViewInput {
+  name?: string;
+  description?: string | null;
+  group_by?: ScopeDimension[];
+  granularity?: ExplorerGranularity;
+  visibility?: SavedViewVisibility;
+  scope?: CoreScopeCondition[];
+}
+
+export function listSavedViews(organizationId: string, token: string) {
+  return coreRequest<CoreSavedViewListResponse>(
+    `/v1/organizations/${organizationId}/cost/saved-views`,
+    token,
+  );
+}
+
+export function getSavedView(
+  organizationId: string,
+  savedViewId: string,
+  token: string,
+) {
+  return coreRequest<CoreSavedView>(
+    `/v1/organizations/${organizationId}/cost/saved-views/${savedViewId}`,
+    token,
+  );
+}
+
+export function createSavedView(
+  organizationId: string,
+  token: string,
+  input: CreateSavedViewInput,
+) {
+  return coreRequest<CoreSavedView>(
+    `/v1/organizations/${organizationId}/cost/saved-views`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateSavedView(
+  organizationId: string,
+  savedViewId: string,
+  token: string,
+  input: UpdateSavedViewInput,
+) {
+  return coreRequest<CoreSavedView>(
+    `/v1/organizations/${organizationId}/cost/saved-views/${savedViewId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function deleteSavedView(
+  organizationId: string,
+  savedViewId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/cost/saved-views/${savedViewId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export type ReportFormat = "csv" | "pdf";
+
+export interface CoreReport {
+  id: string;
+  organization_id: string;
+  created_by_user_id: string | null;
+  name: string;
+  description: string | null;
+  format: ReportFormat;
+  recipients: string[];
+  schedule_cron: string | null;
+  /** Always `null` today — Core never computes this from `schedule_cron` yet,
+   * and there is no generation/delivery job. Report definitions are pure
+   * CRUD until that ships. */
+  next_run_at: string | null;
+  enabled: boolean;
+  scope: CoreScopeCondition[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreReportListResponse {
+  items: CoreReport[];
+}
+
+export interface CreateReportInput {
+  name: string;
+  description?: string | null;
+  format?: ReportFormat;
+  recipients?: string[];
+  schedule_cron?: string | null;
+  scope?: CoreScopeCondition[];
+}
+
+export interface UpdateReportInput {
+  name?: string;
+  description?: string | null;
+  format?: ReportFormat;
+  recipients?: string[];
+  schedule_cron?: string | null;
+  enabled?: boolean;
+  scope?: CoreScopeCondition[];
+}
+
+export function listReports(organizationId: string, token: string) {
+  return coreRequest<CoreReportListResponse>(
+    `/v1/organizations/${organizationId}/cost/reports`,
+    token,
+  );
+}
+
+export function getReport(
+  organizationId: string,
+  reportId: string,
+  token: string,
+) {
+  return coreRequest<CoreReport>(
+    `/v1/organizations/${organizationId}/cost/reports/${reportId}`,
+    token,
+  );
+}
+
+export function createReport(
+  organizationId: string,
+  token: string,
+  input: CreateReportInput,
+) {
+  return coreRequest<CoreReport>(
+    `/v1/organizations/${organizationId}/cost/reports`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateReport(
+  organizationId: string,
+  reportId: string,
+  token: string,
+  input: UpdateReportInput,
+) {
+  return coreRequest<CoreReport>(
+    `/v1/organizations/${organizationId}/cost/reports/${reportId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function deleteReport(
+  organizationId: string,
+  reportId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/cost/reports/${reportId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
 export interface CoreMetricDatapoint {
   id: string;
   resource_id: string;

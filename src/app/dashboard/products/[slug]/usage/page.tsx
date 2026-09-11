@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { TrendingDown, TrendingUp, Minus } from "lucide-react";
 import { getProductBySlug } from "@/lib/data/products";
 import { getUsageBreakdown } from "@/lib/data/dashboard";
+import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { cn } from "@/lib/utils";
+import { CostUsage } from "@/components/dashboard/cost/cost-usage";
 
 export async function generateMetadata({
   params,
@@ -19,6 +21,14 @@ export default async function ProductUsagePage({
   params,
 }: PageProps<"/dashboard/products/[slug]/usage">) {
   const { slug } = await params;
+
+  if (slug === "cost") {
+    const { token, organization } = await requireDashboardOrganization();
+    return (
+      <CostUsage organizationId={organization.organization_id} token={token} />
+    );
+  }
+
   const rows = await getUsageBreakdown(slug);
 
   if (!rows) {

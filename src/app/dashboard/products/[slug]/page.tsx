@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { TrendingDown } from "lucide-react";
 import { getProductBySlug } from "@/lib/data/products";
 import { getDashboardOverview } from "@/lib/data/dashboard";
+import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { AnimatedNumber } from "@/components/common/animated-number";
 import { Sparkline } from "@/components/product/sparkline";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { CostOverview } from "@/components/dashboard/cost/cost-overview";
 
 export async function generateMetadata({
   params,
@@ -22,6 +24,14 @@ export default async function ProductOverviewPage({
   params,
 }: PageProps<"/dashboard/products/[slug]">) {
   const { slug } = await params;
+
+  if (slug === "cost") {
+    const { token, organization } = await requireDashboardOrganization();
+    return (
+      <CostOverview organizationId={organization.organization_id} token={token} />
+    );
+  }
+
   const overview = await getDashboardOverview(slug);
 
   if (!overview) {
