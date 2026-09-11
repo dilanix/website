@@ -1863,6 +1863,102 @@ export function updateAnomalyStatus(
 }
 
 export type ExplorerGranularity = "daily" | "weekly" | "monthly";
+
+export interface CostExplorerGroupByField {
+  dimension: ScopeDimension;
+  tag_key?: string | null;
+}
+
+export interface CostExplorerQueryInput {
+  period_start: string;
+  period_end: string;
+  metric?: CostUsageMetric;
+  granularity?: ExplorerGranularity | null;
+  group_by?: CostExplorerGroupByField[];
+  scope?: CoreScopeCondition[];
+}
+
+export interface CoreCostExplorerPoint {
+  bucket_start: string;
+  bucket_end: string;
+  currency: string;
+  amount: string;
+  group: Record<string, string | null>;
+}
+
+export interface CoreCostExplorerResponse {
+  items: CoreCostExplorerPoint[];
+}
+
+export function queryCostExplorer(
+  organizationId: string,
+  token: string,
+  input: CostExplorerQueryInput,
+) {
+  return coreRequest<CoreCostExplorerResponse>(
+    `/v1/organizations/${organizationId}/cost/explorer/query`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function runCostExplorerSavedView(
+  organizationId: string,
+  savedViewId: string,
+  token: string,
+  params: { periodStart: string; periodEnd: string },
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  return coreRequest<CoreCostExplorerResponse>(
+    `/v1/organizations/${organizationId}/cost/explorer/saved-views/${savedViewId}?${query.toString()}`,
+    token,
+  );
+}
+
+export interface CoreCostOverviewService {
+  service_name: string | null;
+  amount: string;
+}
+
+export interface CoreCostOverviewCurrency {
+  currency: string;
+  current_total: string;
+  previous_total: string;
+  change_percent: number | null;
+  top_services: CoreCostOverviewService[];
+}
+
+export interface CoreCostOverview {
+  period_start: string;
+  period_end: string;
+  previous_period_start: string;
+  previous_period_end: string;
+  by_currency: CoreCostOverviewCurrency[];
+}
+
+export function getCostOverview(
+  organizationId: string,
+  token: string,
+  params: { periodStart: string; periodEnd: string; topN?: number },
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  if (params.topN !== undefined) query.set("top_n", String(params.topN));
+  return coreRequest<CoreCostOverview>(
+    `/v1/organizations/${organizationId}/cost/overview?${query.toString()}`,
+    token,
+  );
+}
+
 export type SavedViewVisibility = "private" | "organization";
 
 export interface CoreSavedView {

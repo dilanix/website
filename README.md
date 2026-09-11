@@ -56,6 +56,16 @@ rather than returning an empty page (unlike the Resources tab), so the page only
 fetches them server-side once that capability is already known to be enabled;
 each panel explains the gap otherwise.
 
+The Cost product dashboard at `/dashboard/products/cost` uses Core's
+organization-wide Cost module analytics endpoints. Its Overview reads
+`GET .../cost/overview` for current-calendar-month spend, the equal-length
+previous-period comparison, and per-currency top services while retaining the
+Budget/Allocation/Anomaly management summary. The dedicated Explorer route at
+`/dashboard/products/cost/explorer` reads `POST .../cost/explorer/query` and the
+saved-view execution endpoint, with metric, daily/weekly/monthly granularity,
+multi-dimension grouping (including tag keys), and the shared Cost scope-filter
+DSL. The former Cost `/usage` route redirects to Explorer.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

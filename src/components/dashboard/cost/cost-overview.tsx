@@ -5,11 +5,16 @@ import {
   Bookmark,
   CircleDollarSign,
   FileText,
+  Minus,
   Tags,
+  TrendingDown,
+  TrendingUp,
   TriangleAlert,
   Wallet,
 } from "lucide-react";
 import {
+  CoreApiError,
+  getCostOverview,
   listAllocations,
   listAnomalies,
   listBudgets,
@@ -17,10 +22,10 @@ import {
   listSavedViews,
 } from "@/lib/core/api";
 import { StatCard } from "@/components/dashboard/stat-card";
-import { StatusBadge } from "@/components/dashboard/primitives";
+import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 
 function formatAmount(amount: number, currency: string) {
-  return `${amount.toLocaleString("en-US", { maximumFractionDigits: 0 })} ${currency}`;
+  return `${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency}`;
 }
 
 export async function CostOverview({
@@ -30,8 +35,26 @@ export async function CostOverview({
   organizationId: string;
   token: string;
 }) {
-  const [budgets, allocations, anomalies, savedViews, reports] =
+  const now = new Date();
+  const periodStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  );
+  const [overview, budgets, allocations, anomalies, savedViews, reports] =
     await Promise.all([
+      getCostOverview(organizationId, token, {
+        periodStart: periodStart.toISOString(),
+        periodEnd: now.toISOString(),
+        topN: 5,
+      }).catch((error: unknown) => {
+        if (
+          error instanceof CoreApiError &&
+          error.status === 403 &&
+          error.message.includes("aws.billing.cost_usage")
+        ) {
+          return null;
+        }
+        throw error;
+      }),
       listBudgets(organizationId, token),
       listAllocations(organizationId, token),
       listAnomalies(organizationId, token),
@@ -99,32 +122,164 @@ export async function CostOverview({
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Budgeted spend"
-          value={
-            budgetedByCurrency.size === 0 ? (
-              "—"
-            ) : (
-              <span className="text-lg">
-                {[...budgetedByCurrency.entries()]
-                  .map(([currency, amount]) => formatAmount(amount, currency))
-                  .join(" + ")}
-              </span>
-            )
-          }
-        />
-        <StatCard
-          label="Budgets at risk"
-          tone={budgetsAtRisk > 0 ? "default" : "success"}
-          value={budgetsAtRisk}
-        />
-        <StatCard
-          label="Open anomalies"
-          tone={openAnomalies.length > 0 ? "default" : "success"}
-          value={openAnomalies.length}
-        />
-        <StatCard label="Allocations enabled" value={enabledAllocations} />
+      <div>
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">
+              Spend overview
+            </h2>
+            <p className="text-muted-foreground mt-1 text-xs">
+              Current calendar month compared with the immediately preceding
+              period of equal length.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/products/cost/explorer"
+            className="text-accent inline-flex items-center gap-1 text-xs font-semibold"
+          >
+            Open Explorer <ArrowRight size={13} />
+          </Link>
+        </div>
+
+        {overview === null ? (
+          <div className="mt-4">
+            <EmptyState
+              title="Cost analytics is unavailable"
+              description="This organization does not have the FOCUS cost-usage capability granted yet. Existing budgets, anomalies, and other cost-management configuration remain available below."
+            />
+          </div>
+        ) : overview.by_currency.length === 0 ? (
+          <div className="mt-4">
+            <EmptyState
+              title="No cost data this month"
+              description="Run a billing sync for a connected provider, then return here to see organization-wide spend."
+            />
+          </div>
+        ) : (
+          <>
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {overview.by_currency.map((currency) => {
+                const change = currency.change_percent;
+                const ChangeIcon =
+                  change === null || change === 0
+                    ? Minus
+                    : change > 0
+                      ? TrendingUp
+                      : TrendingDown;
+                return (
+                  <StatCard
+                    key={currency.currency}
+                    label={`${currency.currency} spend this month`}
+                    tone={change !== null && change < 0 ? "success" : "default"}
+                    value={
+                      <>
+                        <span className="block">
+                          {formatAmount(
+                            Number(currency.current_total),
+                            currency.currency,
+                          )}
+                        </span>
+                        <span className="mt-1 flex items-center gap-1 text-xs font-normal tracking-normal">
+                          <ChangeIcon size={12} />
+                          {change === null
+                            ? "No previous spend"
+                            : `${Math.abs(change).toFixed(1)}% vs previous period`}
+                        </span>
+                      </>
+                    }
+                  />
+                );
+              })}
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              {overview.by_currency.map((currency) => {
+                const maxServiceAmount = Math.max(
+                  ...currency.top_services.map((service) =>
+                    Math.abs(Number(service.amount)),
+                  ),
+                  1,
+                );
+                return (
+                  <div
+                    key={currency.currency}
+                    className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
+                  >
+                    <h3 className="text-sm font-semibold">
+                      Top services · {currency.currency}
+                    </h3>
+                    {currency.top_services.length === 0 ? (
+                      <p className="text-muted-foreground mt-3 text-sm">
+                        No service breakdown is available.
+                      </p>
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        {currency.top_services.map((service, index) => {
+                          const amount = Number(service.amount);
+                          return (
+                            <div
+                              key={`${service.service_name ?? "unassigned"}-${index}`}
+                              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
+                            >
+                              <span className="truncate text-xs font-medium">
+                                {service.service_name ?? "Unassigned service"}
+                              </span>
+                              <span className="font-mono text-xs">
+                                {formatAmount(amount, currency.currency)}
+                              </span>
+                              <span className="bg-foreground/5 col-span-2 h-1.5 overflow-hidden rounded-full">
+                                <span
+                                  className="bg-accent block h-full rounded-full"
+                                  style={{
+                                    width: `${(Math.abs(amount) / maxServiceAmount) * 100}%`,
+                                    opacity: 1 - index * 0.12,
+                                  }}
+                                />
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div>
+        <h2 className="mb-4 text-lg font-semibold tracking-tight">
+          Cost management
+        </h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="Budgeted spend"
+            value={
+              budgetedByCurrency.size === 0 ? (
+                "—"
+              ) : (
+                <span className="text-lg">
+                  {[...budgetedByCurrency.entries()]
+                    .map(([currency, amount]) => formatAmount(amount, currency))
+                    .join(" + ")}
+                </span>
+              )
+            }
+          />
+          <StatCard
+            label="Budgets at risk"
+            tone={budgetsAtRisk > 0 ? "default" : "success"}
+            value={budgetsAtRisk}
+          />
+          <StatCard
+            label="Open anomalies"
+            tone={openAnomalies.length > 0 ? "default" : "success"}
+            value={openAnomalies.length}
+          />
+          <StatCard label="Allocations enabled" value={enabledAllocations} />
+        </div>
       </div>
 
       <div>
@@ -167,8 +322,8 @@ export async function CostOverview({
         </h2>
         {recentAnomalies.length === 0 ? (
           <p className="text-muted-foreground mt-3 text-sm">
-            No anomalies detected yet — checked hourly against a trailing
-            7-day spend average.
+            No anomalies detected yet — checked hourly against a trailing 7-day
+            spend average.
           </p>
         ) : (
           <ul className="border-border-soft mt-4 divide-y rounded-xl border">

@@ -14,6 +14,8 @@ import {
   deleteBudget,
   deleteReport,
   deleteSavedView,
+  queryCostExplorer,
+  runCostExplorerSavedView,
   updateAllocation,
   updateAnomalyStatus,
   updateBudget,
@@ -22,9 +24,11 @@ import {
   type CoreAllocation,
   type CoreAnomaly,
   type CoreBudget,
+  type CoreCostExplorerResponse,
   type CoreReport,
   type CoreSavedView,
   type CoreScopeCondition,
+  type CostExplorerQueryInput,
 } from "@/lib/core/api";
 
 export type CostActionResult<T = undefined> = {
@@ -113,16 +117,103 @@ function toScopeInput(scope: CoreScopeCondition[]) {
   }));
 }
 
+const explorerGroupBySchema = z
+  .object({
+    dimension: scopeConditionSchema.shape.dimension,
+    tag_key: z.string().trim().min(1).max(200).nullable().optional(),
+  })
+  .refine(
+    (field) =>
+      field.dimension === "tag" ? Boolean(field.tag_key) : !field.tag_key,
+    {
+      message:
+        "A tag key is required for tag grouping, and must be left blank otherwise.",
+      path: ["tag_key"],
+    },
+  );
+
+const explorerQuerySchema = z
+  .object({
+    period_start: z.iso.datetime(),
+    period_end: z.iso.datetime(),
+    metric: z.enum([
+      "billed_cost",
+      "effective_cost",
+      "list_cost",
+      "contracted_cost",
+    ]),
+    granularity: z.enum(["daily", "weekly", "monthly"]).nullable(),
+    group_by: z.array(explorerGroupBySchema).max(10),
+    scope: scopeSchema,
+  })
+  .refine(
+    (input) => Date.parse(input.period_end) > Date.parse(input.period_start),
+    {
+      message: "The period end must be after its start.",
+      path: ["period_end"],
+    },
+  );
+
+export async function queryCostExplorerAction(
+  input: CostExplorerQueryInput,
+): Promise<CostActionResult<CoreCostExplorerResponse>> {
+  const parsed = explorerQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await queryCostExplorer(organizationId, token, {
+      ...parsed.data,
+      scope: toScopeInput(parsed.data.scope),
+    });
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const savedViewQuerySchema = z
+  .object({
+    savedViewId: idSchema,
+    periodStart: z.iso.datetime(),
+    periodEnd: z.iso.datetime(),
+  })
+  .refine(
+    (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
+    {
+      message: "The period end must be after its start.",
+      path: ["periodEnd"],
+    },
+  );
+
+export async function runCostExplorerSavedViewAction(
+  input: z.infer<typeof savedViewQuerySchema>,
+): Promise<CostActionResult<CoreCostExplorerResponse>> {
+  const parsed = savedViewQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await runCostExplorerSavedView(
+      organizationId,
+      parsed.data.savedViewId,
+      token,
+      {
+        periodStart: parsed.data.periodStart,
+        periodEnd: parsed.data.periodEnd,
+      },
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Budgets
 // ---------------------------------------------------------------------------
 
-const budgetPeriodSchema = z.enum([
-  "monthly",
-  "quarterly",
-  "annual",
-  "custom",
-]);
+const budgetPeriodSchema = z.enum(["monthly", "quarterly", "annual", "custom"]);
 const currencySchema = z
   .string()
   .trim()
@@ -135,9 +226,7 @@ const amountSchema = z
     const parsed = Number(value);
     return Number.isFinite(parsed) && parsed > 0;
   }, "Amount must be a number greater than 0.");
-const alertThresholdsSchema = z
-  .array(z.number().min(0).max(1000))
-  .max(20);
+const alertThresholdsSchema = z.array(z.number().min(0).max(1000)).max(20);
 
 const budgetInputSchema = z
   .object({

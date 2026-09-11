@@ -23,12 +23,13 @@ function ActiveUnderline() {
 
 /**
  * Extra tabs a product can declare beyond the generic Overview/Usage/Docs
- * three every product gets. Cost is the only product with its own module
- * today (Budgets/Allocations/Anomalies/Saved Views/Reports, backed by
- * `src/modules/cost` in Core) — add further slugs here as they gain one.
+ * set. Cost is the only product with its own module today; its Explorer
+ * replaces generic Usage, and its management tabs are backed by
+ * `src/modules/cost` in Core. Add further slugs here as they gain a module.
  */
 const PRODUCT_EXTRA_TABS: Record<string, { label: string; path: string }[]> = {
   cost: [
+    { label: "Explorer", path: "explorer" },
     { label: "Budgets", path: "budgets" },
     { label: "Allocations", path: "allocations" },
     { label: "Anomalies", path: "anomalies" },
@@ -44,7 +45,7 @@ export function ProductTabs({ slug }: { slug: string }) {
   const tabs = [
     { label: "Overview", path: "" },
     ...(PRODUCT_EXTRA_TABS[slug] ?? []),
-    { label: "Usage", path: "usage" },
+    ...(slug === "cost" ? [] : [{ label: "Usage", path: "usage" }]),
     { label: "Documentation", path: "docs" },
   ];
 

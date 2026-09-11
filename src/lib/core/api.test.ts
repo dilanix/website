@@ -91,6 +91,77 @@ describe("coreRequest", () => {
   });
 });
 
+describe("cost analytics", () => {
+  it("posts an organization-wide Explorer query", async () => {
+    const mockResponse = { items: [] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { queryCostExplorer } = await import("./api");
+    const input = {
+      period_start: "2026-09-01T00:00:00.000Z",
+      period_end: "2026-09-12T00:00:00.000Z",
+      metric: "effective_cost" as const,
+      granularity: "daily" as const,
+      group_by: [{ dimension: "service_name" as const }],
+      scope: [],
+    };
+    const result = await queryCostExplorer("org-123", "test-token", input);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/v1/organizations/org-123/cost/explorer/query"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify(input),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("requests the overview period and top-services limit", async () => {
+    const mockResponse = {
+      period_start: "2026-09-01T00:00:00Z",
+      period_end: "2026-09-11T00:00:00Z",
+      previous_period_start: "2026-08-22T00:00:00Z",
+      previous_period_end: "2026-09-01T00:00:00Z",
+      by_currency: [],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCostOverview } = await import("./api");
+    const result = await getCostOverview("org-123", "test-token", {
+      periodStart: "2026-09-01T00:00:00Z",
+      periodEnd: "2026-09-11T00:00:00Z",
+      topN: 5,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/overview?period_start=2026-09-01T00%3A00%3A00Z&period_end=2026-09-11T00%3A00%3A00Z&top_n=5",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+});
+
 describe("sync", () => {
   it("starts a sync with the requested datasets", async () => {
     const mockRun = {
