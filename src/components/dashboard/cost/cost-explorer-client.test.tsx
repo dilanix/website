@@ -146,6 +146,61 @@ describe("CostExplorerClient", () => {
     );
   }, 20_000);
 
+  it("shows a By charge type panel and a Detailed table view alongside the summary", async () => {
+    vi.mocked(queryCostExplorerAction).mockImplementation(async (input) => {
+      const isChargeCategoryQuery = input.group_by.some(
+        (field) => field.dimension === "charge_category",
+      );
+      return isChargeCategoryQuery
+        ? {
+            data: {
+              items: [
+                {
+                  bucket_start: "2026-09-01T00:00:00Z",
+                  bucket_end: "2026-09-12T00:00:00Z",
+                  currency: "USD",
+                  amount: "107.907766",
+                  group: { charge_category: "Usage" },
+                },
+                {
+                  bucket_start: "2026-09-01T00:00:00Z",
+                  bucket_end: "2026-09-12T00:00:00Z",
+                  currency: "USD",
+                  amount: "-107.845599",
+                  group: { charge_category: "Credit" },
+                },
+              ],
+            },
+          }
+        : { data: { items: [point] } };
+    });
+
+    render(
+      <CostExplorerClient
+        initialItems={[]}
+        initialPeriodStart="2026-09-01"
+        initialPeriodEnd="2026-09-11"
+        savedViews={[]}
+        connectionId={null}
+        targetId={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Run query" }));
+
+    expect(await screen.findByText("By charge type")).toBeTruthy();
+    expect(screen.getByText("Usage")).toBeTruthy();
+    expect(screen.getByText("107.91 USD")).toBeTruthy();
+    expect(screen.getByText("Credit")).toBeTruthy();
+    expect(screen.getByText("-107.85 USD")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Detailed" }));
+
+    expect(screen.getByRole("columnheader", { name: "Service" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Currency" })).toBeTruthy();
+    expect(screen.getByText("Amazon EC2")).toBeTruthy();
+  }, 20_000);
+
   it("runs a saved view for the selected period", async () => {
     vi.mocked(runCostExplorerSavedViewAction).mockResolvedValue({
       data: { items: [point] },

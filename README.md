@@ -67,15 +67,35 @@ plus a custom range — re-querying `GET .../cost/overview`
 (built from `POST .../cost/explorer/query` with an empty `group_by`,
 granularity chosen by the selected period's length), per-currency top
 services (with an explicit "Other services & credits" remainder so the
-visible breakdown always reconciles to the header total), and a "By charge
+visible breakdown always reconciles to the header total), a "By charge
 type" panel (the FOCUS `Usage`/`Credit`/`Tax`/... split, `by_charge_category`)
 that makes a near-zero net total's usage/credit offsetting visible directly,
-from the product's own data — while retaining the Budget/Allocation/Anomaly
-management summary below. The dedicated Explorer route at
+and a "Net cost breakdown" panel (`financial_breakdown`) reconciling the
+header total into named `gross_usage`/`tax`/`credits`/`other_adjustments`
+buckets down to `net_cost`, plus an informational discount-vs-list-price
+figure shown only when Core reports one (never folded into the reconciling
+buckets, to avoid double-counting a discount the header total already
+reflects) — while retaining the Budget/Allocation/Anomaly
+management summary below. The header stat cards also show each currency's
+absolute change (`absolute_delta`) alongside the existing percentage. The
+dedicated Explorer route at
 `/dashboard/products/cost/explorer` reads `POST .../cost/explorer/query` and the
 saved-view execution endpoint, with metric, daily/weekly/monthly granularity,
 multi-dimension grouping (including tag keys), and the shared Cost scope-filter
-DSL. The former Cost `/usage` route redirects to Explorer.
+DSL. The former Cost `/usage` route redirects to Explorer. Every query also
+fires a second, parallel `cost/explorer/query` grouped only by
+`charge_category` (`granularity: null`, i.e. one total per category for the
+whole period) to render its own "By charge type" panel — the same
+Usage/Credit/Tax context Overview shows, now available for any Explorer query
+too, so a near-zero or unexpectedly small result is never a mystery. Results
+render in one of two view modes (`Summary`/`Detailed` tabs, persisted like the
+other Explorer controls): `Summary` is the existing grouped bar-chart table;
+`Detailed` is a flat, spreadsheet-style table with one column per group
+dimension actually present on the rows (read from the results themselves, not
+the current `group_by` selection, so a saved view's own grouping renders
+correctly too) plus `Currency` and `Amount` — closer to `/dashboard/costs`'s
+own "Service costs" table. Both views share one "Load more" control (250 rows
+at a time) instead of a hard first-250 cutoff.
 
 The Cost Allocations screen also reads
 `GET .../cost/allocations/breakdown` for a period/metric showback or chargeback

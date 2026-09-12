@@ -35,10 +35,19 @@ const overview: CoreCostOverview = {
       currency: "USD",
       current_total: "20.00",
       previous_total: "10.00",
+      absolute_delta: "10.00",
       change_percent: 100,
       top_services: [{ service_name: "Amazon EC2", amount: "20.00" }],
       other_total: "0.00",
       by_charge_category: [{ category: "Usage", amount: "20.00" }],
+      financial_breakdown: {
+        gross_usage: "20.00",
+        tax: "0.00",
+        credits: "0.00",
+        other_adjustments: "0.00",
+        net_cost: "20.00",
+        discount_amount: null,
+      },
     },
   ],
 };
@@ -93,6 +102,28 @@ describe("SpendOverviewClient", () => {
       ),
     );
     expect(await screen.findByText("5.00 USD")).toBeTruthy();
+  });
+
+  it("re-queries both overview and trend with the newly selected metric", async () => {
+    vi.mocked(getCostOverviewAction).mockResolvedValue({ data: overview });
+    vi.mocked(queryCostExplorerAction).mockResolvedValue({
+      data: { items: [] },
+    });
+
+    renderClient();
+
+    fireEvent.change(screen.getByLabelText("Metric"), {
+      target: { value: "list_cost" },
+    });
+
+    await waitFor(() =>
+      expect(getCostOverviewAction).toHaveBeenCalledWith(
+        expect.objectContaining({ metric: "list_cost" }),
+      ),
+    );
+    expect(queryCostExplorerAction).toHaveBeenCalledWith(
+      expect.objectContaining({ metric: "list_cost" }),
+    );
   });
 
   it("rejects an incomplete custom range without querying", () => {

@@ -1977,10 +1977,27 @@ export interface CoreCostOverviewChargeCategory {
   amount: string;
 }
 
+export interface CoreCostOverviewFinancialBreakdown {
+  gross_usage: string;
+  tax: string;
+  credits: string;
+  other_adjustments: string;
+  /** Always equals `current_total` — the four fields above reconcile to it
+   * exactly. */
+  net_cost: string;
+  /** This period's `list_cost` total minus `current_total` — informational
+   * only, deliberately excluded from the four reconciling fields above (it
+   * would double-count a discount `current_total` already reflects). `null`
+   * when the selected metric already is `list_cost`, or no row in this
+   * currency has a `list_cost` to compare against. */
+  discount_amount: string | null;
+}
+
 export interface CoreCostOverviewCurrency {
   currency: string;
   current_total: string;
   previous_total: string;
+  absolute_delta: string;
   change_percent: number | null;
   top_services: CoreCostOverviewService[];
   /** `current_total` minus the sum of `top_services` — always present, so
@@ -1991,6 +2008,7 @@ export interface CoreCostOverviewCurrency {
    * exactly to `current_total`. Surfaces why a total can be near-zero (a
    * credit netting out usage) directly, instead of only via `/dashboard/costs`. */
   by_charge_category: CoreCostOverviewChargeCategory[];
+  financial_breakdown: CoreCostOverviewFinancialBreakdown;
 }
 
 export interface CoreCostOverview {
@@ -2010,6 +2028,8 @@ export function getCostOverview(
     connectionId?: string | null;
     targetId?: string | null;
     topN?: number;
+    /** Defaults server-side to `effective_cost`. */
+    metric?: CostUsageMetric | null;
   },
 ) {
   const query = new URLSearchParams({
@@ -2019,6 +2039,7 @@ export function getCostOverview(
   if (params.connectionId) query.set("connection_id", params.connectionId);
   if (params.targetId) query.set("target_id", params.targetId);
   if (params.topN !== undefined) query.set("top_n", String(params.topN));
+  if (params.metric) query.set("metric", params.metric);
   return coreRequest<CoreCostOverview>(
     `/v1/organizations/${organizationId}/cost/overview?${query.toString()}`,
     token,

@@ -81,6 +81,12 @@ function isGroupBy(value: unknown): value is CostExplorerGroupByField[] {
   );
 }
 
+type ExplorerViewMode = "summary" | "detailed";
+
+function isExplorerViewMode(value: unknown): value is ExplorerViewMode {
+  return value === "summary" || value === "detailed";
+}
+
 function isScope(value: unknown): value is CoreScopeCondition[] {
   return (
     Array.isArray(value) &&
@@ -164,15 +170,25 @@ export function CostExplorerClient({
     dataScopeKey: string;
     items: CoreCostExplorerPoint[];
     metric: CostUsageMetric;
+    chargeCategoryTotals: CoreCostExplorerPoint[];
   }>(() => ({
     dataScopeKey,
     items: initialItems,
     metric: "effective_cost",
+    chargeCategoryTotals: [],
   }));
   const items =
     result.dataScopeKey === dataScopeKey ? result.items : initialItems;
   const resultMetric =
     result.dataScopeKey === dataScopeKey ? result.metric : "effective_cost";
+  const chargeCategoryTotals =
+    result.dataScopeKey === dataScopeKey ? result.chargeCategoryTotals : [];
+  const [viewMode, setViewMode] = useDashboardFilterState<ExplorerViewMode>(
+    "cost.explorer.view-mode",
+    "summary",
+    isExplorerViewMode,
+  );
+  const [visibleCount, setVisibleCount] = useState(250);
   const [periodStart, setPeriodStart, { restored: periodStartRestored }] =
     useDashboardFilterState(
       "cost.explorer.period-start",
@@ -251,6 +267,22 @@ export function CostExplorerClient({
     [items],
   );
 
+  // One column per group dimension actually present on the result rows —
+  // read from the rows themselves (not the current `groupBy` selection) so a
+  // saved view's own grouping renders correctly too.
+  const groupColumns = useMemo(() => {
+    const keys = new Set<string>();
+    for (const item of items) {
+      for (const key of Object.keys(item.group)) keys.add(key);
+    }
+    return [...keys].map((key) => ({
+      key,
+      label: key.startsWith("tag:")
+        ? key
+        : (SCOPE_DIMENSION_LABELS[key as ScopeDimension] ?? key),
+    }));
+  }, [items]);
+
   function toggleGroupBy(dimension: GroupByDimension) {
     setGroupBy((current) =>
       current.some((field) => field.dimension === dimension)
@@ -279,21 +311,38 @@ export function CostExplorerClient({
       return;
     }
     startTransition(async () => {
-      const result = await queryCostExplorerAction({
-        period_start: startIso(periodStart),
-        period_end: inclusiveEndIso(periodEnd),
-        metric,
-        connection_id: connectionId,
-        target_id: targetId,
-        granularity,
-        group_by: groupBy,
-        scope,
-      });
-      if (result.error) return setError(result.error);
+      const [queryResult, chargeCategoryResult] = await Promise.all([
+        queryCostExplorerAction({
+          period_start: startIso(periodStart),
+          period_end: inclusiveEndIso(periodEnd),
+          metric,
+          connection_id: connectionId,
+          target_id: targetId,
+          granularity,
+          group_by: groupBy,
+          scope,
+        }),
+        // Always by charge_category alone, regardless of the chosen group_by
+        // above — a standing "why is this near zero" answer for the current
+        // period/scope, same idea as Overview's own by_charge_category.
+        queryCostExplorerAction({
+          period_start: startIso(periodStart),
+          period_end: inclusiveEndIso(periodEnd),
+          metric,
+          connection_id: connectionId,
+          target_id: targetId,
+          granularity: null,
+          group_by: [{ dimension: "charge_category" }],
+          scope,
+        }),
+      ]);
+      if (queryResult.error) return setError(queryResult.error);
+      setVisibleCount(250);
       setResult({
         dataScopeKey,
-        items: result.data?.items ?? [],
+        items: queryResult.data?.items ?? [],
         metric,
+        chargeCategoryTotals: chargeCategoryResult.data?.items ?? [],
       });
       setSelectedSavedViewId("");
     });
@@ -316,18 +365,32 @@ export function CostExplorerClient({
     setScope(view.scope);
     setScopeEditorKey((current) => current + 1);
     startTransition(async () => {
-      const result = await runCostExplorerSavedViewAction({
-        savedViewId: view.id,
-        periodStart: startIso(periodStart),
-        periodEnd: inclusiveEndIso(periodEnd),
-        connectionId,
-        targetId,
-      });
-      if (result.error) return setError(result.error);
+      const [savedViewResult, chargeCategoryResult] = await Promise.all([
+        runCostExplorerSavedViewAction({
+          savedViewId: view.id,
+          periodStart: startIso(periodStart),
+          periodEnd: inclusiveEndIso(periodEnd),
+          connectionId,
+          targetId,
+        }),
+        queryCostExplorerAction({
+          period_start: startIso(periodStart),
+          period_end: inclusiveEndIso(periodEnd),
+          metric: "effective_cost",
+          connection_id: connectionId,
+          target_id: targetId,
+          granularity: null,
+          group_by: [{ dimension: "charge_category" }],
+          scope: view.scope,
+        }),
+      ]);
+      if (savedViewResult.error) return setError(savedViewResult.error);
+      setVisibleCount(250);
       setResult({
         dataScopeKey,
-        items: result.data?.items ?? [],
+        items: savedViewResult.data?.items ?? [],
         metric: "effective_cost",
+        chargeCategoryTotals: chargeCategoryResult.data?.items ?? [],
       });
     });
   }
@@ -564,28 +627,137 @@ export function CostExplorerClient({
             <StatCard label="Result rows" value={items.length} />
           </div>
 
-          <div className="border-border-soft bg-dashboard-panel overflow-x-auto rounded-2xl border shadow-[0_16px_44px_var(--shadow-card)]">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead>
-                <tr className="border-foreground/10 border-b">
-                  <th className="text-muted-foreground px-4 py-3 font-medium">
-                    Period
-                  </th>
-                  <th className="text-muted-foreground px-4 py-3 font-medium">
-                    Group
-                  </th>
-                  <th className="text-muted-foreground px-4 py-3 text-right font-medium">
-                    Amount
-                  </th>
-                  <th className="text-muted-foreground w-40 px-4 py-3 font-medium">
-                    Relative cost
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.slice(0, 250).map((point, index) => {
-                  const amount = Number(point.amount);
-                  return (
+          {chargeCategoryTotals.length > 0 ? (
+            <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
+              <h3 className="text-sm font-semibold">By charge type</h3>
+              <p className="text-muted-foreground mt-1 text-xs">
+                Usage minus credits/discounts nets to the totals above — a
+                near-zero total usually means a provider credit is offsetting
+                usage, not that nothing was spent.
+              </p>
+              <div className="mt-4 grid gap-x-8 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+                {chargeCategoryTotals.map((point) => (
+                  <div
+                    key={`${point.currency}-${point.group.charge_category}`}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span className="text-muted-foreground">
+                      {point.group.charge_category ?? "Uncategorized"}
+                    </span>
+                    <span
+                      className={`font-mono text-xs ${Number(point.amount) < 0 ? "text-emerald-600 dark:text-emerald-400" : ""}`}
+                    >
+                      {formatAmount(Number(point.amount), point.currency)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setViewMode("summary")}
+              className={
+                viewMode === "summary"
+                  ? "border-accent/30 bg-accent/10 text-accent rounded-full border px-3 py-1.5 text-xs font-medium"
+                  : "border-foreground/10 text-muted-foreground hover:text-foreground rounded-full border px-3 py-1.5 text-xs font-medium"
+              }
+            >
+              Summary
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("detailed")}
+              className={
+                viewMode === "detailed"
+                  ? "border-accent/30 bg-accent/10 text-accent rounded-full border px-3 py-1.5 text-xs font-medium"
+                  : "border-foreground/10 text-muted-foreground hover:text-foreground rounded-full border px-3 py-1.5 text-xs font-medium"
+              }
+            >
+              Detailed
+            </button>
+          </div>
+
+          {viewMode === "summary" ? (
+            <div className="border-border-soft bg-dashboard-panel overflow-x-auto rounded-2xl border shadow-[0_16px_44px_var(--shadow-card)]">
+              <table className="w-full min-w-[720px] text-left text-sm">
+                <thead>
+                  <tr className="border-foreground/10 border-b">
+                    <th className="text-muted-foreground px-4 py-3 font-medium">
+                      Period
+                    </th>
+                    <th className="text-muted-foreground px-4 py-3 font-medium">
+                      Group
+                    </th>
+                    <th className="text-muted-foreground px-4 py-3 text-right font-medium">
+                      Amount
+                    </th>
+                    <th className="text-muted-foreground w-40 px-4 py-3 font-medium">
+                      Relative cost
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.slice(0, visibleCount).map((point, index) => {
+                    const amount = Number(point.amount);
+                    return (
+                      <tr
+                        key={`${point.bucket_start}-${point.currency}-${groupLabel(point)}-${index}`}
+                        className="border-foreground/5 border-b last:border-0"
+                      >
+                        <td className="text-muted-foreground px-4 py-3 text-xs whitespace-nowrap">
+                          {formatBucket(point, Boolean(granularity))}
+                        </td>
+                        <td className="text-foreground px-4 py-3">
+                          {groupLabel(point)}
+                        </td>
+                        <td className="text-foreground px-4 py-3 text-right font-mono whitespace-nowrap">
+                          {formatAmount(amount, point.currency)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="bg-foreground/5 block h-1.5 overflow-hidden rounded-full">
+                            <span
+                              className="bg-accent block h-full rounded-full"
+                              style={{
+                                width: `${maxAmount ? (Math.abs(amount) / maxAmount) * 100 : 0}%`,
+                              }}
+                            />
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="border-border-soft bg-dashboard-panel overflow-x-auto rounded-2xl border shadow-[0_16px_44px_var(--shadow-card)]">
+              <table className="w-full min-w-[720px] text-left text-sm">
+                <thead>
+                  <tr className="border-foreground/10 border-b">
+                    <th className="text-muted-foreground px-4 py-3 font-medium">
+                      Period
+                    </th>
+                    {groupColumns.map((column) => (
+                      <th
+                        key={column.key}
+                        className="text-muted-foreground px-4 py-3 font-medium"
+                      >
+                        {column.label}
+                      </th>
+                    ))}
+                    <th className="text-muted-foreground px-4 py-3 font-medium">
+                      Currency
+                    </th>
+                    <th className="text-muted-foreground px-4 py-3 text-right font-medium">
+                      Amount
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.slice(0, visibleCount).map((point, index) => (
                     <tr
                       key={`${point.bucket_start}-${point.currency}-${groupLabel(point)}-${index}`}
                       className="border-foreground/5 border-b last:border-0"
@@ -593,34 +765,38 @@ export function CostExplorerClient({
                       <td className="text-muted-foreground px-4 py-3 text-xs whitespace-nowrap">
                         {formatBucket(point, Boolean(granularity))}
                       </td>
-                      <td className="text-foreground px-4 py-3">
-                        {groupLabel(point)}
+                      {groupColumns.map((column) => (
+                        <td
+                          key={column.key}
+                          className="text-foreground px-4 py-3"
+                        >
+                          {point.group[column.key] ?? "Unassigned"}
+                        </td>
+                      ))}
+                      <td className="text-muted-foreground px-4 py-3">
+                        {point.currency}
                       </td>
                       <td className="text-foreground px-4 py-3 text-right font-mono whitespace-nowrap">
-                        {formatAmount(amount, point.currency)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="bg-foreground/5 block h-1.5 overflow-hidden rounded-full">
-                          <span
-                            className="bg-accent block h-full rounded-full"
-                            style={{
-                              width: `${maxAmount ? (Math.abs(amount) / maxAmount) * 100 : 0}%`,
-                            }}
-                          />
-                        </span>
+                        {formatAmount(Number(point.amount), point.currency)}
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {items.length > 250 ? (
-              <p className="text-muted-foreground border-foreground/10 border-t px-4 py-3 text-xs">
-                Showing the first 250 of {items.length} result rows. Narrow the
-                period or increase granularity to reduce the result.
-              </p>
-            ) : null}
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {items.length > visibleCount ? (
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((current) => current + 250)}
+                className="border-foreground/15 hover:bg-foreground/5 rounded-lg border px-4 py-2 text-xs font-medium"
+              >
+                Load more ({items.length - visibleCount} remaining)
+              </button>
+            </div>
+          ) : null}
         </>
       )}
     </div>

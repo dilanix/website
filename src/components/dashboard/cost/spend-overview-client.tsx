@@ -18,6 +18,7 @@ import {
 import type {
   CoreCostExplorerPoint,
   CoreCostOverview,
+  CostUsageMetric,
   ExplorerGranularity,
 } from "@/lib/core/api";
 import {
@@ -35,6 +36,13 @@ import { formatAmount } from "@/components/dashboard/cost/format";
 
 type OverviewPeriodId = PeriodPresetId | "custom";
 
+const METRIC_LABELS: Record<CostUsageMetric, string> = {
+  billed_cost: "Billed cost",
+  effective_cost: "Effective cost",
+  list_cost: "List cost",
+  contracted_cost: "Contracted cost",
+};
+
 function isOverviewPeriodId(value: unknown): value is OverviewPeriodId {
   return (
     value === "custom" ||
@@ -45,6 +53,10 @@ function isOverviewPeriodId(value: unknown): value is OverviewPeriodId {
 
 function isDateString(value: unknown): value is string {
   return typeof value === "string";
+}
+
+function isCostUsageMetric(value: unknown): value is CostUsageMetric {
+  return typeof value === "string" && value in METRIC_LABELS;
 }
 
 function trendGranularityFor(range: DateRange): ExplorerGranularity {
@@ -121,6 +133,12 @@ export function SpendOverviewClient({
     useDashboardFilterState("cost.overview.custom-start", "", isDateString);
   const [customEnd, setCustomEnd, { restored: customEndRestored }] =
     useDashboardFilterState("cost.overview.custom-end", "", isDateString);
+  const [metric, setMetric, { restored: metricRestored }] =
+    useDashboardFilterState<CostUsageMetric>(
+      "cost.overview.metric",
+      "effective_cost",
+      isCostUsageMetric,
+    );
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const dataScopeKey = `${connectionId ?? "all"}:${targetId ?? "all"}`;
@@ -149,18 +167,23 @@ export function SpendOverviewClient({
     return presetRange(preset);
   }
 
-  // Accepts an explicit range so a preset button's click handler can query
-  // the newly clicked preset immediately, rather than the stale `preset`
-  // this render's closure still holds right after calling `setPreset`.
-  function runQuery(rangeOverride?: DateRange) {
+  // Accepts an explicit range/metric so a preset button's or the metric
+  // select's own change handler can query the newly chosen value
+  // immediately, rather than the stale `preset`/`metric` this render's
+  // closure still holds right after calling `setPreset`/`setMetric`.
+  function runQuery(
+    rangeOverride?: DateRange,
+    metricOverride?: CostUsageMetric,
+  ) {
     const range = rangeOverride ?? activeRange();
     if (!range) {
       setError("Choose a valid start and end date.");
       return;
     }
     setError("");
+    const activeMetric = metricOverride ?? metric;
     const { periodStart, periodEnd } = rangeToIso(range);
-    const rangeKey = `${periodStart}:${periodEnd}`;
+    const rangeKey = `${periodStart}:${periodEnd}:${activeMetric}`;
     startTransition(async () => {
       const [overviewResult, trendResult] = await Promise.all([
         getCostOverviewAction({
@@ -169,11 +192,12 @@ export function SpendOverviewClient({
           connectionId,
           targetId,
           topN: 5,
+          metric: activeMetric,
         }),
         queryCostExplorerAction({
           period_start: periodStart,
           period_end: periodEnd,
-          metric: "effective_cost",
+          metric: activeMetric,
           connection_id: connectionId,
           target_id: targetId,
           granularity: trendGranularityFor(range),
@@ -198,13 +222,19 @@ export function SpendOverviewClient({
   useEffect(() => {
     if (
       restoredQueryApplied.current ||
-      (!presetRestored && !customStartRestored && !customEndRestored)
+      (!presetRestored &&
+        !customStartRestored &&
+        !customEndRestored &&
+        !metricRestored)
     ) {
       return;
     }
     restoredQueryApplied.current = true;
     const differsFromInitial =
-      preset !== "30d" || customStart !== "" || customEnd !== "";
+      preset !== "30d" ||
+      customStart !== "" ||
+      customEnd !== "" ||
+      metric !== "effective_cost";
     if (differsFromInitial) window.setTimeout(restoreQuery, 0);
   }, [
     preset,
@@ -213,6 +243,8 @@ export function SpendOverviewClient({
     customStartRestored,
     customEnd,
     customEndRestored,
+    metric,
+    metricRestored,
   ]);
 
   const displayedRange = activeRange() ?? presetRange("30d");
@@ -285,6 +317,25 @@ export function SpendOverviewClient({
             Custom
           </button>
         </div>
+        <label className="text-muted-foreground ml-auto flex items-center gap-2 text-xs">
+          Metric
+          <select
+            value={metric}
+            disabled={pending}
+            onChange={(event) => {
+              const nextMetric = event.target.value as CostUsageMetric;
+              setMetric(nextMetric);
+              runQuery(undefined, nextMetric);
+            }}
+            className="border-foreground/15 bg-background focus:border-accent text-foreground h-9 rounded-lg border px-2.5 text-xs outline-none disabled:opacity-60"
+          >
+            {(Object.keys(METRIC_LABELS) as CostUsageMetric[]).map((value) => (
+              <option key={value} value={value}>
+                {METRIC_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </label>
         {preset === "custom" ? (
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -372,7 +423,7 @@ export function SpendOverviewClient({
                           <ChangeIcon size={12} />
                           {change === null
                             ? "No previous spend"
-                            : `${Math.abs(change).toFixed(1)}% vs previous period`}
+                            : `${formatAmount(Math.abs(Number(currency.absolute_delta)), currency.currency)} (${Math.abs(change).toFixed(1)}%) vs previous period`}
                         </span>
                       </>
                     }
@@ -478,6 +529,65 @@ export function SpendOverviewClient({
               );
               return (
                 <Fragment key={currency.currency}>
+                  <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)] lg:col-span-2">
+                    <h3 className="text-sm font-semibold">
+                      Net cost breakdown · {currency.currency}
+                    </h3>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      Gross usage plus tax, credits, and other adjustments
+                      reconciles exactly to net cost — the effective amount
+                      billed after every credit, discount, and tax.
+                    </p>
+                    <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+                      {(
+                        [
+                          [
+                            "Gross usage",
+                            currency.financial_breakdown.gross_usage,
+                          ],
+                          ["Tax", currency.financial_breakdown.tax],
+                          ["Credits", currency.financial_breakdown.credits],
+                          [
+                            "Other adjustments",
+                            currency.financial_breakdown.other_adjustments,
+                          ],
+                        ] as const
+                      ).map(([label, amount]) => {
+                        const value = Number(amount);
+                        return (
+                          <div key={label}>
+                            <span className="text-muted-foreground block text-xs">
+                              {label}
+                            </span>
+                            <span
+                              className={`font-mono text-sm ${value < 0 ? "text-emerald-600 dark:text-emerald-400" : ""}`}
+                            >
+                              {formatAmount(value, currency.currency)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="border-foreground/10 mt-4 flex flex-wrap items-baseline justify-between gap-2 border-t pt-3">
+                      <span className="text-sm font-semibold">Net cost</span>
+                      <span className="font-mono text-sm font-semibold">
+                        {formatAmount(
+                          Number(currency.financial_breakdown.net_cost),
+                          currency.currency,
+                        )}
+                      </span>
+                    </div>
+                    {currency.financial_breakdown.discount_amount !== null ? (
+                      <p className="text-muted-foreground mt-2 text-xs">
+                        Discount vs. list price:{" "}
+                        {formatAmount(
+                          Number(currency.financial_breakdown.discount_amount),
+                          currency.currency,
+                        )}
+                      </p>
+                    ) : null}
+                  </div>
+
                   <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
                     <h3 className="text-sm font-semibold">
                       Top services · {currency.currency}
@@ -541,7 +651,7 @@ export function SpendOverviewClient({
                       By charge type · {currency.currency}
                     </h3>
                     <p className="text-muted-foreground mt-1 text-xs">
-                      Usage minus credits/discounts nets to the total above.
+                      Raw FOCUS category detail behind the breakdown above.
                     </p>
                     {currency.by_charge_category.length === 0 ? (
                       <p className="text-muted-foreground mt-3 text-sm">
