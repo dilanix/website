@@ -10,7 +10,6 @@ import {
   Wallet,
 } from "lucide-react";
 import {
-  CoreApiError,
   getCostOverview,
   listAllocations,
   listAnomalies,
@@ -61,15 +60,6 @@ export async function CostOverview({
       connectionId,
       targetId,
       topN: 5,
-    }).catch((error: unknown) => {
-      if (
-        error instanceof CoreApiError &&
-        error.status === 403 &&
-        error.message.includes("aws.billing.cost_usage")
-      ) {
-        return null;
-      }
-      throw error;
     }),
     listBudgets(organizationId, token),
     listAllocations(organizationId, token),

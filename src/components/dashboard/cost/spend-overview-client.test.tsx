@@ -30,6 +30,7 @@ const overview: CoreCostOverview = {
   period_end: "2026-09-11T00:00:00Z",
   previous_period_start: "2026-07-13T00:00:00Z",
   previous_period_end: "2026-08-12T00:00:00Z",
+  source: "cost_usage",
   by_currency: [
     {
       currency: "USD",

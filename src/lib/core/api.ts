@@ -2008,7 +2008,9 @@ export interface CoreCostOverviewCurrency {
    * exactly to `current_total`. Surfaces why a total can be near-zero (a
    * credit netting out usage) directly, instead of only via `/dashboard/costs`. */
   by_charge_category: CoreCostOverviewChargeCategory[];
-  financial_breakdown: CoreCostOverviewFinancialBreakdown;
+  /** `null` only when `CoreCostOverview.source` is `"cost_summary"` — Cost
+   * Explorer data has no FOCUS `charge_category` to reconcile from. */
+  financial_breakdown: CoreCostOverviewFinancialBreakdown | null;
 }
 
 export interface CoreCostOverview {
@@ -2016,6 +2018,13 @@ export interface CoreCostOverview {
   period_end: string;
   previous_period_start: string;
   previous_period_end: string;
+  /** Which dataset actually answered — `"cost_summary"` only when this
+   * organization doesn't have `billing.cost_usage`'s `aws.billing.cost_usage`
+   * grant yet, in which case `by_currency[].financial_breakdown` is `null`
+   * and `by_charge_category` is empty (Cost Explorer data can't provide
+   * either). Always disclosed, matching `CoreUnifiedCostTotals.source`'s own
+   * convention on `/dashboard/costs`. */
+  source: BillingCostSource;
   by_currency: CoreCostOverviewCurrency[];
 }
 

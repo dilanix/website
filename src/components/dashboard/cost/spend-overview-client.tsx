@@ -31,6 +31,7 @@ import {
 } from "@/lib/billing/cost-summaries";
 import { EmptyState } from "@/components/dashboard/primitives";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { SourceBadge } from "@/components/dashboard/unified-cost-totals";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 import { formatAmount } from "@/components/dashboard/cost/format";
 
@@ -267,9 +268,12 @@ export function SpendOverviewClient({
     <div>
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">
-            Spend overview
-          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-semibold tracking-tight">
+              Spend overview
+            </h2>
+            {overview ? <SourceBadge source={overview.source} /> : null}
+          </div>
           <p className="text-muted-foreground mt-1 text-xs">
             {periodLabel} vs. the immediately preceding period of equal length.
             Includes provider credits and discounts, broken down below by charge
@@ -533,59 +537,74 @@ export function SpendOverviewClient({
                     <h3 className="text-sm font-semibold">
                       Net cost breakdown · {currency.currency}
                     </h3>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      Gross usage plus tax, credits, and other adjustments
-                      reconciles exactly to net cost — the effective amount
-                      billed after every credit, discount, and tax.
-                    </p>
-                    <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
-                      {(
-                        [
-                          [
-                            "Gross usage",
-                            currency.financial_breakdown.gross_usage,
-                          ],
-                          ["Tax", currency.financial_breakdown.tax],
-                          ["Credits", currency.financial_breakdown.credits],
-                          [
-                            "Other adjustments",
-                            currency.financial_breakdown.other_adjustments,
-                          ],
-                        ] as const
-                      ).map(([label, amount]) => {
-                        const value = Number(amount);
-                        return (
-                          <div key={label}>
-                            <span className="text-muted-foreground block text-xs">
-                              {label}
-                            </span>
-                            <span
-                              className={`font-mono text-sm ${value < 0 ? "text-emerald-600 dark:text-emerald-400" : ""}`}
-                            >
-                              {formatAmount(value, currency.currency)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="border-foreground/10 mt-4 flex flex-wrap items-baseline justify-between gap-2 border-t pt-3">
-                      <span className="text-sm font-semibold">Net cost</span>
-                      <span className="font-mono text-sm font-semibold">
-                        {formatAmount(
-                          Number(currency.financial_breakdown.net_cost),
-                          currency.currency,
-                        )}
-                      </span>
-                    </div>
-                    {currency.financial_breakdown.discount_amount !== null ? (
-                      <p className="text-muted-foreground mt-2 text-xs">
-                        Discount vs. list price:{" "}
-                        {formatAmount(
-                          Number(currency.financial_breakdown.discount_amount),
-                          currency.currency,
-                        )}
+                    {currency.financial_breakdown === null ? (
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        Detailed breakdown unavailable — showing Cost Explorer
+                        totals. Connect FOCUS billing export for a full
+                        gross/tax/credits/net reconciliation.
                       </p>
-                    ) : null}
+                    ) : (
+                      <>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          Gross usage plus tax, credits, and other adjustments
+                          reconciles exactly to net cost — the effective amount
+                          billed after every credit, discount, and tax.
+                        </p>
+                        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+                          {(
+                            [
+                              [
+                                "Gross usage",
+                                currency.financial_breakdown.gross_usage,
+                              ],
+                              ["Tax", currency.financial_breakdown.tax],
+                              ["Credits", currency.financial_breakdown.credits],
+                              [
+                                "Other adjustments",
+                                currency.financial_breakdown.other_adjustments,
+                              ],
+                            ] as const
+                          ).map(([label, amount]) => {
+                            const value = Number(amount);
+                            return (
+                              <div key={label}>
+                                <span className="text-muted-foreground block text-xs">
+                                  {label}
+                                </span>
+                                <span
+                                  className={`font-mono text-sm ${value < 0 ? "text-emerald-600 dark:text-emerald-400" : ""}`}
+                                >
+                                  {formatAmount(value, currency.currency)}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="border-foreground/10 mt-4 flex flex-wrap items-baseline justify-between gap-2 border-t pt-3">
+                          <span className="text-sm font-semibold">
+                            Net cost
+                          </span>
+                          <span className="font-mono text-sm font-semibold">
+                            {formatAmount(
+                              Number(currency.financial_breakdown.net_cost),
+                              currency.currency,
+                            )}
+                          </span>
+                        </div>
+                        {currency.financial_breakdown.discount_amount !==
+                        null ? (
+                          <p className="text-muted-foreground mt-2 text-xs">
+                            Discount vs. list price:{" "}
+                            {formatAmount(
+                              Number(
+                                currency.financial_breakdown.discount_amount,
+                              ),
+                              currency.currency,
+                            )}
+                          </p>
+                        ) : null}
+                      </>
+                    )}
                   </div>
 
                   <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">

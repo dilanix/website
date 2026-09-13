@@ -13,8 +13,15 @@ import { cn } from "@/lib/utils";
 
 /** `cost_usage` (FOCUS) is the richer, complete-coverage source; `cost_summary`
  * (Cost Explorer) is the always-available fallback — badge tone follows that,
- * matching `StatusBadge`'s own "success = the better state" convention. */
-function SourceBadge({ source }: { source: CoreUnifiedCostTotals["source"] }) {
+ * matching `StatusBadge`'s own "success = the better state" convention.
+ * Exported for reuse by the Cost product's own Overview
+ * (`components/dashboard/cost/spend-overview-client.tsx`), which discloses
+ * the same `BillingCostSource` on its own, separate `cost/overview` read. */
+export function SourceBadge({
+  source,
+}: {
+  source: CoreUnifiedCostTotals["source"];
+}) {
   return (
     <StatusBadge status={source === "cost_usage" ? "success" : "neutral"}>
       {source === "cost_usage" ? "FOCUS" : "Cost Explorer"}

@@ -250,12 +250,6 @@ const overviewQuerySchema = z
     path: ["targetId"],
   });
 
-/**
- * `data: null` (not `error`) when the organization has no `billing.cost_usage`
- * grant yet — mirrors `CostOverview`'s own "this is a real, expected empty
- * state" handling, so a re-query on period change doesn't flash an error
- * banner for the same gap the initial server render already treats as normal.
- */
 export async function getCostOverviewAction(
   input: z.infer<typeof overviewQuerySchema>,
 ): Promise<CostActionResult<CoreCostOverview | null>> {
@@ -274,13 +268,6 @@ export async function getCostOverviewAction(
     });
     return { data };
   } catch (error) {
-    if (
-      error instanceof CoreApiError &&
-      error.status === 403 &&
-      error.message.includes("aws.billing.cost_usage")
-    ) {
-      return { data: null };
-    }
     return { error: message(error) };
   }
 }
