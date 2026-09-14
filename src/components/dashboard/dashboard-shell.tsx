@@ -77,6 +77,7 @@ const navGroups = [
         href: "/dashboard/api-keys",
         icon: KeyRound,
         organizationRequired: true,
+        requiredCapability: "platform.api_keys",
       },
       {
         label: "Settings",

@@ -68,6 +68,7 @@ describe("DashboardShell", () => {
           "aws.inventory.read",
           "aws.billing.read",
           "platform.application",
+          "platform.api_keys",
         ]}
       >
         <p>Organization dashboard</p>
@@ -96,6 +97,7 @@ describe("DashboardShell", () => {
         activeCapabilityCodes={[
           "aws.inventory.read",
           "aws.billing.read",
+          "platform.api_keys",
         ]}
       >
         <p>Organization dashboard</p>
@@ -108,6 +110,30 @@ describe("DashboardShell", () => {
     expect(screen.getByRole("link", { name: "Costs" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Integrations" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "API Keys" })).toBeTruthy();
+  });
+
+  it("hides API Keys without platform.api_keys capability", () => {
+    render(
+      <DashboardShell
+        user={user}
+        organization={{ name: "Analytical Engines" }}
+        products={[]}
+        activeCapabilityCodes={[
+          "aws.inventory.read",
+          "aws.billing.read",
+          "platform.application",
+        ]}
+      >
+        <p>Organization dashboard</p>
+      </DashboardShell>,
+    );
+
+    expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Applications" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Costs" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Integrations" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "API Keys" })).toBeNull();
   });
 
   it("hides capability-owned navigation without an organization grant", () => {
@@ -125,6 +151,7 @@ describe("DashboardShell", () => {
     expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Applications" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Costs" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "API Keys" })).toBeNull();
   });
 
   it("groups active products into a single linked list", () => {
@@ -151,9 +178,11 @@ describe("DashboardShell", () => {
     expect(screen.queryByRole("link", { name: "Docs" })).toBeNull();
     expect(screen.getByText("Workflow automation")).toBeTruthy();
     expect(screen.getByText("Cloud cost management")).toBeTruthy();
+
     const navigation = within(
       screen.getByRole("navigation", { name: "Dashboard navigation" }),
     );
+
     expect(
       navigation
         .getByText("Products")
