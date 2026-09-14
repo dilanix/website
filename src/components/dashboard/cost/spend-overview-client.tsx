@@ -25,8 +25,8 @@ import {
   PERIOD_PRESETS,
   customRange,
   formatCostPeriod,
+  monthToDateRange,
   presetRange,
-  previousRange,
   type DateRange,
   type PeriodPresetId,
 } from "@/lib/billing/cost-summaries";
@@ -41,7 +41,19 @@ import {
   resolveBudgetPeriod,
 } from "@/components/dashboard/cost/budget-pacing";
 
-type OverviewPeriodId = PeriodPresetId | "custom";
+type OverviewPresetId = PeriodPresetId | "mtd";
+type OverviewPeriodId = OverviewPresetId | "custom";
+
+const OVERVIEW_PERIOD_PRESETS: ReadonlyArray<{
+  id: OverviewPresetId;
+  label: string;
+}> = [
+  { id: "mtd", label: "Month to date" },
+  ...PERIOD_PRESETS.map((preset) => ({
+    id: preset.id,
+    label: preset.id === "30d" ? "30 days" : preset.label,
+  })),
+];
 
 // Overview's headline KPIs and trend are always the canonical, non-selectable
 // `effective_cost` measure — matching Core's own fixed `_CANONICAL_COST_USAGE_METRIC`
@@ -54,8 +66,12 @@ function isOverviewPeriodId(value: unknown): value is OverviewPeriodId {
   return (
     value === "custom" ||
     (typeof value === "string" &&
-      PERIOD_PRESETS.some((preset) => preset.id === value))
+      OVERVIEW_PERIOD_PRESETS.some((preset) => preset.id === value))
   );
+}
+
+function overviewPresetRange(preset: OverviewPresetId): DateRange {
+  return preset === "mtd" ? monthToDateRange() : presetRange(preset);
 }
 
 function isDateString(value: unknown): value is string {
@@ -81,21 +97,29 @@ function rangeToIso(range: DateRange) {
   };
 }
 
+/** Core periods use an exclusive end. Coverage copy is user-facing, so show
+ * the final included UTC calendar day instead of the next boundary. */
+function formatCoveragePeriod(periodStart: string, periodEnd: string) {
+  const inclusiveEnd = new Date(new Date(periodEnd).getTime() - 1);
+  return formatCostPeriod(periodStart, inclusiveEnd.toISOString());
+}
+
 interface OverviewResult {
   rangeKey: string;
   dataScopeKey: string;
   overview: CoreCostOverview | null;
   trendPoints: CoreCostExplorerPoint[];
   previousTrendPoints: CoreCostExplorerPoint[];
+  trendAvailable: boolean;
+  previousTrendAvailable: boolean;
 }
 
 /** Sums a set of `CoreCostExplorerPoint.amount` — always FOCUS/`cost_usage`
  * sourced (`cost/explorer/query`'s own canonical `effective_cost` metric),
- * unlike `CoreCostOverview.by_currency[].current_total`, which can silently
- * come from `cost_summary` instead when Core judges FOCUS coverage
- * incomplete for the period. The headline totals below always use this sum
- * instead, so they read as the real FOCUS state even when it's $0 — never a
- * `cost_summary` number quietly standing in for it. */
+ * unlike `CoreCostOverview.by_currency[].current_total`, which can come from
+ * the disclosed `cost_summary` fallback when no complete trailing FOCUS range
+ * exists. The headline totals below use this sum only with confirmed complete
+ * FOCUS coverage, so a real zero stays distinct from unavailable data. */
 function sumAmounts(points: CoreCostExplorerPoint[]) {
   return points.reduce((sum, point) => sum + Number(point.amount), 0);
 }
@@ -149,22 +173,27 @@ function buildPacingChart(
     y: yFor(point.cumulative),
     point,
   }));
-  const actualPolyline = actualMarkers
-    .map(({ x, y }) => `${x},${y}`)
-    .join(" ");
+  const actualPolyline = actualMarkers.map(({ x, y }) => `${x},${y}`).join(" ");
   const forecastPolyline = series.forecastTail
     ? series.forecastTail
         .map((point) => `${xFor(point.date)},${yFor(point.cumulative)}`)
         .join(" ")
     : null;
 
-  return { actualMarkers, actualPolyline, forecastPolyline, budgetLineY: yFor(budgetAmount) };
+  return {
+    actualMarkers,
+    actualPolyline,
+    forecastPolyline,
+    budgetLineY: yFor(budgetAmount),
+  };
 }
 
 export function SpendOverviewClient({
   initialOverview,
   initialTrendPoints,
   initialPreviousTrendPoints,
+  initialTrendAvailable,
+  initialPreviousTrendAvailable,
   initialRange,
   connectionId,
   targetId,
@@ -174,6 +203,8 @@ export function SpendOverviewClient({
   initialOverview: CoreCostOverview | null;
   initialTrendPoints: CoreCostExplorerPoint[];
   initialPreviousTrendPoints: CoreCostExplorerPoint[];
+  initialTrendAvailable: boolean;
+  initialPreviousTrendAvailable: boolean;
   initialRange: DateRange;
   connectionId: string | null;
   targetId: string | null;
@@ -184,7 +215,7 @@ export function SpendOverviewClient({
   const [preset, setPreset, { restored: presetRestored }] =
     useDashboardFilterState<OverviewPeriodId>(
       "cost.overview.period",
-      "30d",
+      "mtd",
       isOverviewPeriodId,
     );
   const [customStart, setCustomStart, { restored: customStartRestored }] =
@@ -200,6 +231,8 @@ export function SpendOverviewClient({
     overview: initialOverview,
     trendPoints: initialTrendPoints,
     previousTrendPoints: initialPreviousTrendPoints,
+    trendAvailable: initialTrendAvailable,
+    previousTrendAvailable: initialPreviousTrendAvailable,
   });
   const restoredQueryApplied = useRef(false);
   // Falls back to the freshly server-fetched initial props when the connection/
@@ -215,13 +248,21 @@ export function SpendOverviewClient({
     result.dataScopeKey === dataScopeKey
       ? result.previousTrendPoints
       : initialPreviousTrendPoints;
+  const trendAvailable =
+    result.dataScopeKey === dataScopeKey
+      ? result.trendAvailable
+      : initialTrendAvailable;
+  const previousTrendAvailable =
+    result.dataScopeKey === dataScopeKey
+      ? result.previousTrendAvailable
+      : initialPreviousTrendAvailable;
 
   function activeRange(): DateRange | null {
     if (preset === "custom") {
       if (!customStart || !customEnd || customEnd < customStart) return null;
       return customRange(customStart, customEnd);
     }
-    return presetRange(preset);
+    return overviewPresetRange(preset);
   }
 
   // Accepts an explicit range so a preset button's own change handler can query
@@ -235,50 +276,61 @@ export function SpendOverviewClient({
     }
     setError("");
     const { periodStart, periodEnd } = rangeToIso(range);
-    const previous = previousRange(range);
-    const {
-      periodStart: previousPeriodStart,
-      periodEnd: previousPeriodEnd,
-    } = rangeToIso(previous);
     const rangeKey = `${periodStart}:${periodEnd}`;
     startTransition(async () => {
-      const [overviewResult, trendResult, previousTrendResult] =
-        await Promise.all([
-          getCostOverviewAction({
-            periodStart,
-            periodEnd,
-            connectionId,
-            targetId,
-            topN: 5,
-          }),
-          queryCostExplorerAction({
-            period_start: periodStart,
-            period_end: periodEnd,
-            metric: CANONICAL_METRIC,
-            connection_id: connectionId,
-            target_id: targetId,
-            granularity: TREND_GRANULARITY,
-            group_by: [],
-            scope: [],
-          }),
-          queryCostExplorerAction({
-            period_start: previousPeriodStart,
-            period_end: previousPeriodEnd,
-            metric: CANONICAL_METRIC,
-            connection_id: connectionId,
-            target_id: targetId,
-            granularity: null,
-            group_by: [],
-            scope: [],
-          }),
-        ]);
+      const overviewResult = await getCostOverviewAction({
+        periodStart,
+        periodEnd,
+        connectionId,
+        targetId,
+        topN: 5,
+      });
       if (overviewResult.error) return setError(overviewResult.error);
+
+      const nextOverview = overviewResult.data ?? null;
+      if (nextOverview?.source !== "cost_usage") {
+        setResult({
+          rangeKey,
+          dataScopeKey,
+          overview: nextOverview,
+          trendPoints: [],
+          previousTrendPoints: [],
+          trendAvailable: false,
+          previousTrendAvailable: false,
+        });
+        return;
+      }
+
+      const [trendResult, previousTrendResult] = await Promise.all([
+        queryCostExplorerAction({
+          period_start: nextOverview.period_start,
+          period_end: nextOverview.period_end,
+          metric: CANONICAL_METRIC,
+          connection_id: connectionId,
+          target_id: targetId,
+          granularity: TREND_GRANULARITY,
+          group_by: [],
+          scope: [],
+        }),
+        queryCostExplorerAction({
+          period_start: nextOverview.previous_period_start,
+          period_end: nextOverview.previous_period_end,
+          metric: CANONICAL_METRIC,
+          connection_id: connectionId,
+          target_id: targetId,
+          granularity: null,
+          group_by: [],
+          scope: [],
+        }),
+      ]);
       setResult({
         rangeKey,
         dataScopeKey,
-        overview: overviewResult.data ?? null,
+        overview: nextOverview,
         trendPoints: trendResult.data?.items ?? [],
         previousTrendPoints: previousTrendResult.data?.items ?? [],
+        trendAvailable: Boolean(trendResult.data),
+        previousTrendAvailable: Boolean(previousTrendResult.data),
       });
     });
   }
@@ -296,7 +348,7 @@ export function SpendOverviewClient({
     }
     restoredQueryApplied.current = true;
     const differsFromInitial =
-      preset !== "30d" || customStart !== "" || customEnd !== "";
+      preset !== "mtd" || customStart !== "" || customEnd !== "";
     if (differsFromInitial) window.setTimeout(restoreQuery, 0);
   }, [
     preset,
@@ -307,13 +359,28 @@ export function SpendOverviewClient({
     customEndRestored,
   ]);
 
-  const displayedRange = activeRange() ?? presetRange("30d");
+  const displayedRange = activeRange() ?? monthToDateRange();
   const periodLabel = formatCostPeriod(
     displayedRange.start.toISOString(),
     displayedRange.end.toISOString(),
   );
   const { periodStart: displayedPeriodStart, periodEnd: displayedPeriodEnd } =
     rangeToIso(displayedRange);
+  const displayedRangeKey = `${displayedPeriodStart}:${displayedPeriodEnd}`;
+  const activeResultRangeKey =
+    result.dataScopeKey === dataScopeKey ? result.rangeKey : initialRangeKey;
+  const resultMatchesDisplayedRange =
+    activeResultRangeKey === displayedRangeKey;
+  const hasCompleteFocusCoverage =
+    resultMatchesDisplayedRange && overview?.source === "cost_usage";
+  const focusPeriodStart = hasCompleteFocusCoverage
+    ? overview.period_start
+    : null;
+  const focusPeriodEnd = hasCompleteFocusCoverage ? overview.period_end : null;
+  const focusCoverageLabel =
+    focusPeriodStart && focusPeriodEnd
+      ? `FOCUS coverage: ${formatCoveragePeriod(focusPeriodStart, focusPeriodEnd)}`
+      : null;
 
   // ---------------------------------------------------------------------
   // Breakdown by dimension (provider / billing account / region)
@@ -323,20 +390,25 @@ export function SpendOverviewClient({
     CoreCostExplorerPoint[]
   >([]);
   const [dimensionPending, setDimensionPending] = useState(false);
+  const [dimensionError, setDimensionError] = useState(false);
   const dimensionCacheRef = useRef(new Map<string, CoreCostExplorerPoint[]>());
 
   useEffect(() => {
-    const cacheKey = `${displayedPeriodStart}:${displayedPeriodEnd}:${dataScopeKey}:${dimension}`;
+    if (!focusPeriodStart || !focusPeriodEnd) return;
+    const cacheKey = `${focusPeriodStart}:${focusPeriodEnd}:${dataScopeKey}:${dimension}`;
     const cached = dimensionCacheRef.current.get(cacheKey);
     if (cached) {
       setDimensionPoints(cached);
+      setDimensionPending(false);
+      setDimensionError(false);
       return;
     }
     let cancelled = false;
     setDimensionPending(true);
+    setDimensionError(false);
     queryCostExplorerAction({
-      period_start: displayedPeriodStart,
-      period_end: displayedPeriodEnd,
+      period_start: focusPeriodStart,
+      period_end: focusPeriodEnd,
       metric: CANONICAL_METRIC,
       connection_id: connectionId,
       target_id: targetId,
@@ -346,16 +418,17 @@ export function SpendOverviewClient({
     }).then((response) => {
       if (cancelled) return;
       const items = response.data?.items ?? [];
-      dimensionCacheRef.current.set(cacheKey, items);
+      if (response.data) dimensionCacheRef.current.set(cacheKey, items);
       setDimensionPoints(items);
+      setDimensionError(Boolean(response.error) || !response.data);
       setDimensionPending(false);
     });
     return () => {
       cancelled = true;
     };
   }, [
-    displayedPeriodStart,
-    displayedPeriodEnd,
+    focusPeriodStart,
+    focusPeriodEnd,
     dataScopeKey,
     dimension,
     connectionId,
@@ -440,8 +513,7 @@ export function SpendOverviewClient({
   for (const point of previousTrendPoints) {
     previousTotalByCurrency.set(
       point.currency,
-      (previousTotalByCurrency.get(point.currency) ?? 0) +
-        Number(point.amount),
+      (previousTotalByCurrency.get(point.currency) ?? 0) + Number(point.amount),
     );
   }
 
@@ -453,7 +525,7 @@ export function SpendOverviewClient({
             <h2 className="text-lg font-semibold tracking-tight">
               Spend overview
             </h2>
-            {overview ? <SourceBadge source="cost_usage" /> : null}
+            {overview ? <SourceBadge source={overview.source} /> : null}
           </div>
           <p className="text-muted-foreground mt-1 text-xs">
             {periodLabel} vs. the immediately preceding period of equal length.
@@ -471,14 +543,14 @@ export function SpendOverviewClient({
 
       <div className="border-border-soft bg-dashboard-panel mt-4 flex flex-wrap items-center gap-3 rounded-2xl border p-3 shadow-[0_16px_44px_var(--shadow-card)]">
         <div className="flex flex-wrap gap-1.5">
-          {PERIOD_PRESETS.map((option) => (
+          {OVERVIEW_PERIOD_PRESETS.map((option) => (
             <button
               key={option.id}
               type="button"
               disabled={pending}
               onClick={() => {
                 setPreset(option.id);
-                runQuery(presetRange(option.id));
+                runQuery(overviewPresetRange(option.id));
               }}
               className={
                 preset === option.id
@@ -559,6 +631,22 @@ export function SpendOverviewClient({
               : "mt-4 transition-opacity"
           }
         >
+          <p className="text-muted-foreground mb-3 text-xs">
+            Current period spend and the dimension breakdown use FOCUS only.{" "}
+            {focusCoverageLabel ? (
+              <span className="text-foreground font-medium">
+                {focusCoverageLabel}.
+              </span>
+            ) : resultMatchesDisplayedRange ? (
+              <span className="text-foreground font-medium">
+                Complete FOCUS coverage is unavailable for this period.
+              </span>
+            ) : (
+              <span className="text-foreground font-medium">
+                Resolving coverage…
+              </span>
+            )}
+          </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {overview.by_currency.map((currency, index) => {
               const currentTotal = sumAmounts(
@@ -585,19 +673,52 @@ export function SpendOverviewClient({
                 >
                   <StatCard
                     label={`${currency.currency} · Current period`}
-                    tone={change !== null && change < 0 ? "success" : "default"}
+                    tone={
+                      hasCompleteFocusCoverage &&
+                      trendAvailable &&
+                      change !== null &&
+                      change < 0
+                        ? "success"
+                        : "default"
+                    }
                     value={
-                      <>
-                        <span className="block">
-                          {formatAmount(currentTotal, currency.currency)}
+                      !resultMatchesDisplayedRange ? (
+                        <span className="text-base tracking-normal">
+                          Loading…
                         </span>
-                        <span className="mt-1 flex items-center gap-1 text-xs font-normal tracking-normal">
-                          <ChangeIcon size={12} />
-                          {change === null
-                            ? "No previous spend"
-                            : `${formatAmount(Math.abs(absoluteDelta), currency.currency)} (${Math.abs(change).toFixed(1)}%) vs previous period`}
-                        </span>
-                      </>
+                      ) : !hasCompleteFocusCoverage ? (
+                        <>
+                          <span className="block text-base tracking-normal">
+                            Unavailable
+                          </span>
+                          <span className="text-muted-foreground mt-1 block text-xs font-normal tracking-normal">
+                            FOCUS coverage is incomplete
+                          </span>
+                        </>
+                      ) : !trendAvailable ? (
+                        <>
+                          <span className="block text-base tracking-normal">
+                            Unavailable
+                          </span>
+                          <span className="text-muted-foreground mt-1 block text-xs font-normal tracking-normal">
+                            FOCUS query failed
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="block">
+                            {formatAmount(currentTotal, currency.currency)}
+                          </span>
+                          <span className="mt-1 flex items-center gap-1 text-xs font-normal tracking-normal">
+                            <ChangeIcon size={12} />
+                            {!previousTrendAvailable
+                              ? "Previous period unavailable"
+                              : change === null
+                                ? "No previous spend"
+                                : `${formatAmount(Math.abs(absoluteDelta), currency.currency)} (${Math.abs(change).toFixed(1)}%) vs previous period`}
+                          </span>
+                        </>
+                      )
                     }
                   />
                 </div>
@@ -605,159 +726,178 @@ export function SpendOverviewClient({
             })}
           </div>
 
-          {[...budgetsByCurrency.entries()].map(([currency, currencyBudgets]) => {
-            const activeBudgetId =
-              activeBudgetByCurrency[currency] ?? currencyBudgets[0]!.id;
-            const activeBudget =
-              currencyBudgets.find((budget) => budget.id === activeBudgetId) ??
-              currencyBudgets[0]!;
-            const budgetAmount = Number(activeBudget.amount);
-            const period = resolveBudgetPeriod(activeBudget);
-            const points = pacingByBudgetId[activeBudget.id] ?? [];
-            const pending = pacingPendingIds.has(activeBudget.id);
-            const series = buildPacingSeries(points, period);
-            const { actualMarkers, actualPolyline, forecastPolyline, budgetLineY } =
-              buildPacingChart(series, budgetAmount, period);
-            const overBudget =
-              series.projectedTotal !== null &&
-              series.projectedTotal > budgetAmount;
-            const lastActual = series.actual[series.actual.length - 1];
-            return (
-              <div
-                key={`${result.rangeKey}-pacing-${currency}`}
-                className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold">
-                    Budget pacing · {currency}
-                  </h3>
-                  {currencyBudgets.length > 1 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {currencyBudgets.map((budget) => (
-                        <button
-                          key={budget.id}
-                          type="button"
-                          onClick={() =>
-                            setActiveBudgetByCurrency((prev) => ({
-                              ...prev,
-                              [currency]: budget.id,
-                            }))
-                          }
-                          className={
-                            budget.id === activeBudgetId
-                              ? "border-accent/30 bg-accent/10 text-accent rounded-full border px-3 py-1.5 text-xs font-medium"
-                              : "border-foreground/10 text-muted-foreground hover:text-foreground rounded-full border px-3 py-1.5 text-xs font-medium"
-                          }
-                        >
-                          {budget.name}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-                {series.projectedTotal !== null ? (
-                  <p
-                    className={`mt-1 text-xs ${overBudget ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}
-                  >
-                    {formatAmount(series.projectedTotal, currency)} projected
-                    by {formatDayLabel(period.end.toISOString())} vs.{" "}
-                    {formatAmount(budgetAmount, currency)} budget
-                  </p>
-                ) : lastActual ? (
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {formatAmount(lastActual.cumulative, currency)} spent of{" "}
-                    {formatAmount(budgetAmount, currency)} budget for this
-                    period.
-                  </p>
-                ) : null}
-                {points.length === 0 ? (
-                  <p className="text-muted-foreground mt-3 text-sm">
-                    {pending
-                      ? "Loading…"
-                      : "No spend recorded yet for this budget's scope."}
-                  </p>
-                ) : (
-                  <>
-                    <svg
-                      viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-                      preserveAspectRatio="none"
-                      className="mt-3 h-32 w-full overflow-visible"
-                      aria-label={`${currency} budget pacing for ${activeBudget.name}`}
-                      role="img"
+          {[...budgetsByCurrency.entries()].map(
+            ([currency, currencyBudgets]) => {
+              const activeBudgetId =
+                activeBudgetByCurrency[currency] ?? currencyBudgets[0]!.id;
+              const activeBudget =
+                currencyBudgets.find(
+                  (budget) => budget.id === activeBudgetId,
+                ) ?? currencyBudgets[0]!;
+              const budgetAmount = Number(activeBudget.amount);
+              const period = resolveBudgetPeriod(activeBudget);
+              const points = pacingByBudgetId[activeBudget.id] ?? [];
+              const pending = pacingPendingIds.has(activeBudget.id);
+              const series = buildPacingSeries(points, period);
+              const {
+                actualMarkers,
+                actualPolyline,
+                forecastPolyline,
+                budgetLineY,
+              } = buildPacingChart(series, budgetAmount, period);
+              const overBudget =
+                series.projectedTotal !== null &&
+                series.projectedTotal > budgetAmount;
+              const lastActual = series.actual[series.actual.length - 1];
+              return (
+                <div
+                  key={`${result.rangeKey}-pacing-${currency}`}
+                  className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold">
+                      Budget pacing · {currency}
+                    </h3>
+                    {currencyBudgets.length > 1 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {currencyBudgets.map((budget) => (
+                          <button
+                            key={budget.id}
+                            type="button"
+                            onClick={() =>
+                              setActiveBudgetByCurrency((prev) => ({
+                                ...prev,
+                                [currency]: budget.id,
+                              }))
+                            }
+                            className={
+                              budget.id === activeBudgetId
+                                ? "border-accent/30 bg-accent/10 text-accent rounded-full border px-3 py-1.5 text-xs font-medium"
+                                : "border-foreground/10 text-muted-foreground hover:text-foreground rounded-full border px-3 py-1.5 text-xs font-medium"
+                            }
+                          >
+                            {budget.name}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  {series.projectedTotal !== null ? (
+                    <p
+                      className={`mt-1 text-xs ${overBudget ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}
                     >
-                      <line
-                        x1="0"
-                        x2={CHART_WIDTH}
-                        y1={budgetLineY}
-                        y2={budgetLineY}
-                        stroke="var(--accent-secondary)"
-                        strokeWidth="1.5"
-                        strokeDasharray="4 3"
-                      />
-                      <polyline
-                        points={actualPolyline}
-                        fill="none"
-                        stroke="var(--accent)"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      {forecastPolyline ? (
-                        <polyline
-                          points={forecastPolyline}
-                          fill="none"
-                          stroke={overBudget ? "#f59e0b" : "var(--accent)"}
-                          strokeWidth="2"
-                          strokeDasharray="5 4"
-                          strokeLinecap="round"
-                        />
-                      ) : null}
-                      {actualMarkers.map(({ x, y, point }) => (
-                        <circle
-                          key={point.date}
-                          cx={x}
-                          cy={y}
-                          r={3}
-                          fill="var(--accent)"
-                          stroke="var(--dashboard-panel)"
-                          strokeWidth="1.5"
-                        >
-                          <title>
-                            {formatDayLabel(point.date)}:{" "}
-                            {formatAmount(point.cumulative, currency)}
-                          </title>
-                        </circle>
-                      ))}
-                    </svg>
-                    <p className="text-muted-foreground mt-2 text-[11px]">
-                      {formatDayLabel(period.start.toISOString())}–
-                      {formatDayLabel(period.end.toISOString())} · dashed line
-                      is the {formatAmount(budgetAmount, currency)} budget
-                      target
-                      {forecastPolyline
-                        ? "; the lighter dashed tail is an estimate — a trailing 7-day daily average projected across the rest of the period, not a statistical forecast"
-                        : ""}
-                      .
+                      {formatAmount(series.projectedTotal, currency)} projected
+                      by {formatDayLabel(period.end.toISOString())} vs.{" "}
+                      {formatAmount(budgetAmount, currency)} budget
                     </p>
-                  </>
-                )}
-              </div>
-            );
-          })}
+                  ) : lastActual ? (
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {formatAmount(lastActual.cumulative, currency)} spent of{" "}
+                      {formatAmount(budgetAmount, currency)} budget for this
+                      period.
+                    </p>
+                  ) : null}
+                  {points.length === 0 ? (
+                    <p className="text-muted-foreground mt-3 text-sm">
+                      {pending
+                        ? "Loading…"
+                        : "No spend recorded yet for this budget's scope."}
+                    </p>
+                  ) : (
+                    <>
+                      <svg
+                        viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+                        preserveAspectRatio="none"
+                        className="mt-3 h-32 w-full overflow-visible"
+                        aria-label={`${currency} budget pacing for ${activeBudget.name}`}
+                        role="img"
+                      >
+                        <line
+                          x1="0"
+                          x2={CHART_WIDTH}
+                          y1={budgetLineY}
+                          y2={budgetLineY}
+                          stroke="var(--accent-secondary)"
+                          strokeWidth="1.5"
+                          strokeDasharray="4 3"
+                        />
+                        <polyline
+                          points={actualPolyline}
+                          fill="none"
+                          stroke="var(--accent)"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        {forecastPolyline ? (
+                          <polyline
+                            points={forecastPolyline}
+                            fill="none"
+                            stroke={overBudget ? "#f59e0b" : "var(--accent)"}
+                            strokeWidth="2"
+                            strokeDasharray="5 4"
+                            strokeLinecap="round"
+                          />
+                        ) : null}
+                        {actualMarkers.map(({ x, y, point }) => (
+                          <circle
+                            key={point.date}
+                            cx={x}
+                            cy={y}
+                            r={3}
+                            fill="var(--accent)"
+                            stroke="var(--dashboard-panel)"
+                            strokeWidth="1.5"
+                          >
+                            <title>
+                              {formatDayLabel(point.date)}:{" "}
+                              {formatAmount(point.cumulative, currency)}
+                            </title>
+                          </circle>
+                        ))}
+                      </svg>
+                      <p className="text-muted-foreground mt-2 text-[11px]">
+                        {formatDayLabel(period.start.toISOString())}–
+                        {formatDayLabel(period.end.toISOString())} · dashed line
+                        is the {formatAmount(budgetAmount, currency)} budget
+                        target
+                        {forecastPolyline
+                          ? "; the lighter dashed tail is an estimate — a trailing 7-day daily average projected across the rest of the period, not a statistical forecast"
+                          : ""}
+                        .
+                      </p>
+                    </>
+                  )}
+                </div>
+              );
+            },
+          )}
 
           <div className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold">Breakdown by dimension</h3>
+              <div>
+                <h3 className="text-sm font-semibold">
+                  Breakdown by dimension
+                </h3>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  {focusCoverageLabel
+                    ? `${focusCoverageLabel}.`
+                    : resultMatchesDisplayedRange
+                      ? "Complete FOCUS coverage is unavailable for this period."
+                      : "Resolving FOCUS coverage…"}
+                </p>
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {BREAKDOWN_DIMENSIONS.map((option) => (
                   <button
                     key={option}
                     type="button"
+                    disabled={!hasCompleteFocusCoverage || dimensionPending}
                     onClick={() => setDimension(option)}
                     className={
                       option === dimension
-                        ? "border-accent/30 bg-accent/10 text-accent rounded-full border px-3 py-1.5 text-xs font-medium"
-                        : "border-foreground/10 text-muted-foreground hover:text-foreground rounded-full border px-3 py-1.5 text-xs font-medium"
+                        ? "border-accent/30 bg-accent/10 text-accent rounded-full border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                        : "border-foreground/10 text-muted-foreground hover:text-foreground rounded-full border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                     }
                   >
                     {SCOPE_DIMENSION_LABELS[option]}
@@ -765,12 +905,24 @@ export function SpendOverviewClient({
                 ))}
               </div>
             </div>
-            {dimensionPending ? (
+            {!resultMatchesDisplayedRange ? (
               <p className="text-muted-foreground mt-3 text-sm">Loading…</p>
+            ) : !hasCompleteFocusCoverage ? (
+              <p className="text-muted-foreground mt-3 text-sm">
+                This FOCUS-only breakdown is unavailable until the selected
+                period has complete coverage.
+              </p>
+            ) : dimensionPending ? (
+              <p className="text-muted-foreground mt-3 text-sm">Loading…</p>
+            ) : dimensionError ? (
+              <p className="text-muted-foreground mt-3 text-sm">
+                The FOCUS breakdown could not be loaded. Try again.
+              </p>
             ) : (
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 {overview.by_currency.map((currency) => {
-                  const points = dimensionByCurrency.get(currency.currency) ?? [];
+                  const points =
+                    dimensionByCurrency.get(currency.currency) ?? [];
                   const grouped = new Map<string, number>();
                   for (const point of points) {
                     const label = point.group[dimension] ?? "Unassigned";

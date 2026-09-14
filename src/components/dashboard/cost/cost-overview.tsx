@@ -18,7 +18,7 @@ import {
   listSavedViews,
   queryCostExplorer,
 } from "@/lib/core/api";
-import { presetRange, previousRange } from "@/lib/billing/cost-summaries";
+import { monthToDateRange } from "@/lib/billing/cost-summaries";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { StatusBadge } from "@/components/dashboard/primitives";
 import { SpendOverviewClient } from "@/components/dashboard/cost/spend-overview-client";
@@ -35,67 +35,64 @@ export async function CostOverview({
   connectionId: string | null;
   targetId: string | null;
 }) {
-  // "30d" (a rolling window, not calendar-month-to-date) matches the default
-  // `SpendOverviewClient` itself renders, so the first paint never mismatches
-  // what a client-side re-query for the same default would produce.
-  const initialRange = presetRange("30d");
+  // FOCUS completeness is tracked at calendar-month grain, so the default
+  // view stays within the current month's partition. The client uses this same
+  // range as its default so hydration and later re-queries remain aligned.
+  const initialRange = monthToDateRange();
   const scopeQuery = new URLSearchParams();
   if (connectionId) scopeQuery.set("connection", connectionId);
   if (targetId) scopeQuery.set("target", targetId);
   const scopeSuffix = scopeQuery.size ? `?${scopeQuery.toString()}` : "";
   const periodStartIso = initialRange.start.toISOString();
   const periodEndIso = initialRange.end.toISOString();
-  const initialPreviousRange = previousRange(initialRange);
-  const [
-    overview,
-    budgets,
-    allocations,
-    anomalies,
-    savedViews,
-    reports,
-    trend,
-    previousTrend,
-  ] = await Promise.all([
-    getCostOverview(organizationId, token, {
-      periodStart: periodStartIso,
-      periodEnd: periodEndIso,
-      connectionId,
-      targetId,
-      topN: 5,
-    }),
+  const overviewPromise = getCostOverview(organizationId, token, {
+    periodStart: periodStartIso,
+    periodEnd: periodEndIso,
+    connectionId,
+    targetId,
+    topN: 5,
+  });
+  const managementDataPromise = Promise.all([
     listBudgets(organizationId, token),
     listAllocations(organizationId, token),
     listAnomalies(organizationId, token),
     listSavedViews(organizationId, token),
     listReports(organizationId, token),
-    // Same product API as the overview above (`cost/explorer/query`) — the
-    // trend chart never reaches into `billing`'s own Cost-Explorer-sourced
-    // surface, which belongs to `/dashboard/costs`, not this product.
-    queryCostExplorer(organizationId, token, {
-      period_start: periodStartIso,
-      period_end: periodEndIso,
-      metric: "effective_cost",
-      connection_id: connectionId,
-      target_id: targetId,
-      granularity: "daily",
-      group_by: [],
-      scope: [],
-    }).catch(() => ({ items: [] })),
-    // Headline "vs previous period" comparison — always this same FOCUS
-    // engine, never `CoreCostOverview.by_currency[].previous_total` (which
-    // can be `cost_summary`-sourced), so the delta never mixes sources with
-    // the current-period number above.
-    queryCostExplorer(organizationId, token, {
-      period_start: initialPreviousRange.start.toISOString(),
-      period_end: initialPreviousRange.end.toISOString(),
-      metric: "effective_cost",
-      connection_id: connectionId,
-      target_id: targetId,
-      granularity: null,
-      group_by: [],
-      scope: [],
-    }).catch(() => ({ items: [] })),
   ]);
+  const overview = await overviewPromise;
+
+  // Overview resolves the authoritative complete trailing FOCUS range. Query
+  // Explorer only for that disclosed range; a Cost Explorer fallback means no
+  // complete FOCUS interval is available for these FOCUS-only widgets.
+  const focusSeriesPromise =
+    overview.source === "cost_usage"
+      ? Promise.all([
+          queryCostExplorer(organizationId, token, {
+            period_start: overview.period_start,
+            period_end: overview.period_end,
+            metric: "effective_cost",
+            connection_id: connectionId,
+            target_id: targetId,
+            granularity: "daily",
+            group_by: [],
+            scope: [],
+          }).catch(() => null),
+          queryCostExplorer(organizationId, token, {
+            period_start: overview.previous_period_start,
+            period_end: overview.previous_period_end,
+            metric: "effective_cost",
+            connection_id: connectionId,
+            target_id: targetId,
+            granularity: null,
+            group_by: [],
+            scope: [],
+          }).catch(() => null),
+        ])
+      : Promise.resolve([null, null] as const);
+  const [
+    [budgets, allocations, anomalies, savedViews, reports],
+    [trendResult, previousTrendResult],
+  ] = await Promise.all([managementDataPromise, focusSeriesPromise]);
 
   const enabledBudgets = budgets.items.filter((budget) => budget.enabled);
   const budgetedByCurrency = new Map<string, number>();
@@ -159,8 +156,10 @@ export async function CostOverview({
     <div className="flex flex-col gap-8">
       <SpendOverviewClient
         initialOverview={overview}
-        initialTrendPoints={trend.items}
-        initialPreviousTrendPoints={previousTrend.items}
+        initialTrendPoints={trendResult?.items ?? []}
+        initialPreviousTrendPoints={previousTrendResult?.items ?? []}
+        initialTrendAvailable={trendResult !== null}
+        initialPreviousTrendAvailable={previousTrendResult !== null}
         initialRange={initialRange}
         connectionId={connectionId}
         targetId={targetId}

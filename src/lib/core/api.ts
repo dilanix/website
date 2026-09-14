@@ -2014,16 +2014,19 @@ export interface CoreCostOverviewCurrency {
 }
 
 export interface CoreCostOverview {
+  /** The effective range that answered the request. When `source` is
+   * `"cost_usage"`, Core may move `period_start` forward to the largest
+   * trailing calendar-month-aligned sub-range with complete FOCUS coverage.
+   * When `source` is `"cost_summary"`, the requested range is preserved. */
   period_start: string;
   period_end: string;
   previous_period_start: string;
   previous_period_end: string;
   /** Which dataset actually answered — `"cost_summary"` when this organization
    * doesn't have `billing.cost_usage`'s `aws.billing.cost_usage` grant yet, OR
-   * when FOCUS coverage is incomplete for any target/period in scope (the same
-   * coverage-aware decision `/dashboard/costs`' own `.../costs/totals` makes),
-   * in which case `by_currency[].financial_breakdown` is `null` and
-   * `by_charge_category` is empty (Cost Explorer data can't provide either).
+   * when no complete trailing FOCUS sub-range exists for the targets in scope.
+   * In that case `by_currency[].financial_breakdown` is `null` and
+   * `by_charge_category` is empty because Cost Explorer can't provide either.
    * Always disclosed, matching `CoreUnifiedCostTotals.source`'s own convention
    * on `/dashboard/costs` — `current_total`/`previous_total`/`absolute_delta`/
    * `change_percent` are guaranteed to match that page's own totals for the

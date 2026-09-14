@@ -11,7 +11,7 @@ import {
   queryCostExplorerAction,
 } from "@/app/dashboard/products/cost-actions";
 import type { CoreCostOverview } from "@/lib/core/api";
-import { presetRange } from "@/lib/billing/cost-summaries";
+import { monthToDateRange, presetRange } from "@/lib/billing/cost-summaries";
 import { SpendOverviewClient } from "./spend-overview-client";
 
 vi.mock("@/app/dashboard/products/cost-actions", () => ({
@@ -69,7 +69,9 @@ function renderClient(
       initialOverview={overview}
       initialTrendPoints={[]}
       initialPreviousTrendPoints={[]}
-      initialRange={presetRange("30d")}
+      initialTrendAvailable
+      initialPreviousTrendAvailable
+      initialRange={monthToDateRange()}
       connectionId={null}
       targetId={null}
       scopeSuffix=""
@@ -80,6 +82,90 @@ function renderClient(
 }
 
 describe("SpendOverviewClient", () => {
+  it.each([
+    ["cost_summary", "Cost Explorer"],
+    ["cost_usage", "FOCUS"],
+  ] as const)("renders the %s source as %s", (source, label) => {
+    renderClient({ initialOverview: { ...overview, source } });
+
+    expect(screen.getByText(label)).toBeTruthy();
+  });
+
+  it("defaults to month-to-date and keeps rolling 30 days available", async () => {
+    vi.mocked(getCostOverviewAction).mockResolvedValue({ data: overview });
+    renderClient();
+
+    expect(screen.getByRole("button", { name: "Month to date" })).toBeTruthy();
+    expect(queryCostExplorerAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        period_start: overview.period_start,
+        period_end: overview.period_end,
+        group_by: [{ dimension: "provider_name" }],
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "30 days" }));
+
+    const expectedRange = presetRange("30d");
+    await waitFor(() =>
+      expect(getCostOverviewAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          periodStart: expectedRange.start.toISOString(),
+          periodEnd: expectedRange.end.toISOString(),
+        }),
+      ),
+    );
+  });
+
+  it("discloses and queries the complete FOCUS sub-range resolved by Overview", () => {
+    const resolvedOverview = {
+      ...overview,
+      period_start: "2026-09-01T00:00:00Z",
+      period_end: "2026-09-15T00:00:00Z",
+      previous_period_start: "2026-08-18T00:00:00Z",
+      previous_period_end: "2026-09-01T00:00:00Z",
+    };
+    localStorage.setItem(
+      "dilanix.dashboard.filters.v1:anonymous:cost.overview.period",
+      JSON.stringify("30d"),
+    );
+    vi.mocked(getCostOverviewAction).mockResolvedValue({
+      data: resolvedOverview,
+    });
+
+    renderClient({
+      initialOverview: resolvedOverview,
+      initialRange: presetRange("30d"),
+    });
+
+    expect(
+      screen.getAllByText("FOCUS coverage: Sep 1 – Sep 14, 2026.").length,
+    ).toBe(2);
+    expect(queryCostExplorerAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        period_start: resolvedOverview.period_start,
+        period_end: resolvedOverview.period_end,
+        group_by: [{ dimension: "provider_name" }],
+      }),
+    );
+  });
+
+  it("shows FOCUS-only widgets as unavailable when Overview falls back", () => {
+    renderClient({
+      initialOverview: { ...overview, source: "cost_summary" },
+      initialTrendAvailable: false,
+      initialPreviousTrendAvailable: false,
+    });
+
+    expect(screen.getAllByText("Unavailable").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        "This FOCUS-only breakdown is unavailable until the selected period has complete coverage.",
+      ),
+    ).toBeTruthy();
+    expect(queryCostExplorerAction).not.toHaveBeenCalled();
+  });
+
   it("renders the initial overview's totals and breakdowns", () => {
     renderClient();
 
@@ -119,9 +205,15 @@ describe("SpendOverviewClient", () => {
         }),
       ),
     );
-    expect((await screen.findAllByText("5.00 USD")).length).toBeGreaterThan(
-      0,
+    expect(queryCostExplorerAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        period_start: overview.period_start,
+        period_end: overview.period_end,
+        granularity: "daily",
+        group_by: [],
+      }),
     );
+    expect((await screen.findAllByText("5.00 USD")).length).toBeGreaterThan(0);
   });
 
   it("never exposes a metric selector, and always queries the canonical effective_cost measure", async () => {

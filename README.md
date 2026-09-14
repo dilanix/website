@@ -60,12 +60,15 @@ The Cost product dashboard at `/dashboard/products/cost` uses only Core's
 own Cost module endpoints (`cost/overview`, `cost/explorer/query`, ...) —
 never `billing`'s Cost-Explorer-sourced `costs/totals`/`cost-summaries`
 surface, which is `/dashboard/costs`'s own, separate dataset/product
-boundary. Its Overview (`SpendOverviewClient`) has its own rolling period
-selector — 1 day/3 days/Week/Month presets shared with `/dashboard/costs`,
-plus a custom range — re-querying `GET .../cost/overview`
-(current-vs-equal-length-previous-period), a "Spend trend" line/area chart
-(built from `POST .../cost/explorer/query` with an empty `group_by`,
-granularity chosen by the selected period's length), per-currency top
+boundary. Its Overview (`SpendOverviewClient`) defaults to calendar
+month-to-date, with explicit rolling 1 day/3 days/Week/30 days presets plus a
+custom range. It queries `GET .../cost/overview` first to resolve the actual
+source and the largest complete trailing FOCUS range. The FOCUS-only current
+spend and dimension widgets then query `POST .../cost/explorer/query` only for
+that disclosed effective range; when Overview falls back to `cost_summary`,
+they render an explicit unavailable state instead of a misleading zero or
+partial total. The page also renders current-vs-equal-length-previous-period
+comparison, a daily "Spend trend" line/area chart, per-currency top
 services (with an explicit "Other services & credits" remainder so the
 visible breakdown always reconciles to the header total), a "By charge
 type" panel (the FOCUS `Usage`/`Credit`/`Tax`/... split, `by_charge_category`)
