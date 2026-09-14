@@ -236,7 +236,6 @@ const overviewQuerySchema = z
     connectionId: idSchema.nullable().optional(),
     targetId: idSchema.nullable().optional(),
     topN: z.number().int().min(1).max(20).optional(),
-    metric: costUsageMetricSchema.optional(),
   })
   .refine(
     (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
@@ -264,7 +263,6 @@ export async function getCostOverviewAction(
       connectionId: parsed.data.connectionId,
       targetId: parsed.data.targetId,
       topN: parsed.data.topN,
-      metric: parsed.data.metric,
     });
     return { data };
   } catch (error) {

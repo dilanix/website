@@ -15,12 +15,7 @@ import {
   getCostOverviewAction,
   queryCostExplorerAction,
 } from "@/app/dashboard/products/cost-actions";
-import type {
-  CoreCostExplorerPoint,
-  CoreCostOverview,
-  CostUsageMetric,
-  ExplorerGranularity,
-} from "@/lib/core/api";
+import type { CoreCostExplorerPoint, CoreCostOverview } from "@/lib/core/api";
 import {
   PERIOD_PRESETS,
   customRange,
@@ -37,12 +32,12 @@ import { formatAmount } from "@/components/dashboard/cost/format";
 
 type OverviewPeriodId = PeriodPresetId | "custom";
 
-const METRIC_LABELS: Record<CostUsageMetric, string> = {
-  billed_cost: "Billed cost",
-  effective_cost: "Effective cost",
-  list_cost: "List cost",
-  contracted_cost: "Contracted cost",
-};
+// Overview's headline KPIs and trend are always the canonical, non-selectable
+// `effective_cost` measure — matching Core's own fixed `_CANONICAL_COST_USAGE_METRIC`
+// (`OverviewService`) — so they can never disagree with Workspace -> Costs' own
+// totals for the same scope/period. Billed/list/contracted cost remain
+// selectable only in Cost Explorer.
+const CANONICAL_METRIC = "effective_cost" as const;
 
 function isOverviewPeriodId(value: unknown): value is OverviewPeriodId {
   return (
@@ -56,15 +51,16 @@ function isDateString(value: unknown): value is string {
   return typeof value === "string";
 }
 
-function isCostUsageMetric(value: unknown): value is CostUsageMetric {
-  return typeof value === "string" && value in METRIC_LABELS;
-}
+// Always daily, regardless of period length — the trend chart's whole purpose
+// is to show exactly how spend moves day by day; a caller wanting a coarser
+// weekly/monthly rollup has Explorer's own granularity selector for that.
+const TREND_GRANULARITY = "daily" as const;
 
-function trendGranularityFor(range: DateRange): ExplorerGranularity {
-  const days = (range.end.getTime() - range.start.getTime()) / 86_400_000;
-  if (days <= 45) return "daily";
-  if (days <= 210) return "weekly";
-  return "monthly";
+function formatDayLabel(iso: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(iso));
 }
 
 function rangeToIso(range: DateRange) {
@@ -90,22 +86,22 @@ function buildTrendPath(points: CoreCostExplorerPoint[]) {
   const max = Math.max(0, ...amounts);
   const span = max - min || 1;
   const step = points.length > 1 ? CHART_WIDTH / (points.length - 1) : 0;
-  const coordinates = points.map((point, index) => {
-    const x = points.length > 1 ? index * step : 0;
+  const markers = points.map((point, index) => {
+    const x = points.length > 1 ? index * step : CHART_WIDTH / 2;
     const y =
       CHART_HEIGHT - ((Number(point.amount) - min) / span) * CHART_HEIGHT;
-    return { x, y };
+    return { x, y, point };
   });
   const zeroY = CHART_HEIGHT - ((0 - min) / span) * CHART_HEIGHT;
   const polylinePoints =
-    coordinates.length === 1
-      ? `0,${coordinates[0]!.y} ${CHART_WIDTH},${coordinates[0]!.y}`
-      : coordinates.map(({ x, y }) => `${x},${y}`).join(" ");
+    markers.length === 1
+      ? `0,${markers[0]!.y} ${CHART_WIDTH},${markers[0]!.y}`
+      : markers.map(({ x, y }) => `${x},${y}`).join(" ");
   const areaPoints =
-    coordinates.length === 1
-      ? `0,${zeroY} 0,${coordinates[0]!.y} ${CHART_WIDTH},${coordinates[0]!.y} ${CHART_WIDTH},${zeroY}`
+    markers.length === 1
+      ? `0,${zeroY} 0,${markers[0]!.y} ${CHART_WIDTH},${markers[0]!.y} ${CHART_WIDTH},${zeroY}`
       : `0,${zeroY} ${polylinePoints} ${CHART_WIDTH},${zeroY}`;
-  return { polylinePoints, areaPoints, zeroY };
+  return { polylinePoints, areaPoints, zeroY, markers };
 }
 
 export function SpendOverviewClient({
@@ -134,12 +130,6 @@ export function SpendOverviewClient({
     useDashboardFilterState("cost.overview.custom-start", "", isDateString);
   const [customEnd, setCustomEnd, { restored: customEndRestored }] =
     useDashboardFilterState("cost.overview.custom-end", "", isDateString);
-  const [metric, setMetric, { restored: metricRestored }] =
-    useDashboardFilterState<CostUsageMetric>(
-      "cost.overview.metric",
-      "effective_cost",
-      isCostUsageMetric,
-    );
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const dataScopeKey = `${connectionId ?? "all"}:${targetId ?? "all"}`;
@@ -168,23 +158,18 @@ export function SpendOverviewClient({
     return presetRange(preset);
   }
 
-  // Accepts an explicit range/metric so a preset button's or the metric
-  // select's own change handler can query the newly chosen value
-  // immediately, rather than the stale `preset`/`metric` this render's
-  // closure still holds right after calling `setPreset`/`setMetric`.
-  function runQuery(
-    rangeOverride?: DateRange,
-    metricOverride?: CostUsageMetric,
-  ) {
+  // Accepts an explicit range so a preset button's own change handler can query
+  // the newly chosen value immediately, rather than the stale `preset` this
+  // render's closure still holds right after calling `setPreset`.
+  function runQuery(rangeOverride?: DateRange) {
     const range = rangeOverride ?? activeRange();
     if (!range) {
       setError("Choose a valid start and end date.");
       return;
     }
     setError("");
-    const activeMetric = metricOverride ?? metric;
     const { periodStart, periodEnd } = rangeToIso(range);
-    const rangeKey = `${periodStart}:${periodEnd}:${activeMetric}`;
+    const rangeKey = `${periodStart}:${periodEnd}`;
     startTransition(async () => {
       const [overviewResult, trendResult] = await Promise.all([
         getCostOverviewAction({
@@ -193,15 +178,14 @@ export function SpendOverviewClient({
           connectionId,
           targetId,
           topN: 5,
-          metric: activeMetric,
         }),
         queryCostExplorerAction({
           period_start: periodStart,
           period_end: periodEnd,
-          metric: activeMetric,
+          metric: CANONICAL_METRIC,
           connection_id: connectionId,
           target_id: targetId,
-          granularity: trendGranularityFor(range),
+          granularity: TREND_GRANULARITY,
           group_by: [],
           scope: [],
         }),
@@ -223,19 +207,13 @@ export function SpendOverviewClient({
   useEffect(() => {
     if (
       restoredQueryApplied.current ||
-      (!presetRestored &&
-        !customStartRestored &&
-        !customEndRestored &&
-        !metricRestored)
+      (!presetRestored && !customStartRestored && !customEndRestored)
     ) {
       return;
     }
     restoredQueryApplied.current = true;
     const differsFromInitial =
-      preset !== "30d" ||
-      customStart !== "" ||
-      customEnd !== "" ||
-      metric !== "effective_cost";
+      preset !== "30d" || customStart !== "" || customEnd !== "";
     if (differsFromInitial) window.setTimeout(restoreQuery, 0);
   }, [
     preset,
@@ -244,8 +222,6 @@ export function SpendOverviewClient({
     customStartRestored,
     customEnd,
     customEndRestored,
-    metric,
-    metricRestored,
   ]);
 
   const displayedRange = activeRange() ?? presetRange("30d");
@@ -321,27 +297,8 @@ export function SpendOverviewClient({
             Custom
           </button>
         </div>
-        <label className="text-muted-foreground ml-auto flex items-center gap-2 text-xs">
-          Metric
-          <select
-            value={metric}
-            disabled={pending}
-            onChange={(event) => {
-              const nextMetric = event.target.value as CostUsageMetric;
-              setMetric(nextMetric);
-              runQuery(undefined, nextMetric);
-            }}
-            className="border-foreground/15 bg-background focus:border-accent text-foreground h-9 rounded-lg border px-2.5 text-xs outline-none disabled:opacity-60"
-          >
-            {(Object.keys(METRIC_LABELS) as CostUsageMetric[]).map((value) => (
-              <option key={value} value={value}>
-                {METRIC_LABELS[value]}
-              </option>
-            ))}
-          </select>
-        </label>
         {preset === "custom" ? (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <input
               type="date"
               value={customStart}
@@ -407,110 +364,163 @@ export function SpendOverviewClient({
                     ? TrendingUp
                     : TrendingDown;
               return (
-                <div
-                  key={`${result.rangeKey}-${currency.currency}`}
-                  className="animate-[demo-panel-in_.4s_ease-out] motion-reduce:animate-none"
-                  style={{ animationDelay: `${index * 60}ms` }}
-                >
-                  <StatCard
-                    label={`${currency.currency} spend`}
-                    tone={change !== null && change < 0 ? "success" : "default"}
-                    value={
-                      <>
-                        <span className="block">
-                          {formatAmount(
-                            Number(currency.current_total),
-                            currency.currency,
-                          )}
-                        </span>
-                        <span className="mt-1 flex items-center gap-1 text-xs font-normal tracking-normal">
-                          <ChangeIcon size={12} />
-                          {change === null
-                            ? "No previous spend"
-                            : `${formatAmount(Math.abs(Number(currency.absolute_delta)), currency.currency)} (${Math.abs(change).toFixed(1)}%) vs previous period`}
-                        </span>
-                      </>
-                    }
-                  />
-                </div>
+                <Fragment key={`${result.rangeKey}-${currency.currency}`}>
+                  <div
+                    className="animate-[demo-panel-in_.4s_ease-out] motion-reduce:animate-none"
+                    style={{ animationDelay: `${index * 60}ms` }}
+                  >
+                    <StatCard
+                      label={`${currency.currency} · Current period`}
+                      tone={
+                        change !== null && change < 0 ? "success" : "default"
+                      }
+                      value={
+                        <>
+                          <span className="block">
+                            {formatAmount(
+                              Number(currency.current_total),
+                              currency.currency,
+                            )}
+                          </span>
+                          <span className="mt-1 flex items-center gap-1 text-xs font-normal tracking-normal">
+                            <ChangeIcon size={12} />
+                            {change === null
+                              ? "No previous spend"
+                              : `${formatAmount(Math.abs(Number(currency.absolute_delta)), currency.currency)} (${Math.abs(change).toFixed(1)}%) vs previous period`}
+                          </span>
+                        </>
+                      }
+                    />
+                  </div>
+                  <div
+                    className="animate-[demo-panel-in_.4s_ease-out] motion-reduce:animate-none"
+                    style={{ animationDelay: `${index * 60 + 40}ms` }}
+                  >
+                    <StatCard
+                      label={`${currency.currency} · Previous period`}
+                      value={formatAmount(
+                        Number(currency.previous_total),
+                        currency.currency,
+                      )}
+                    />
+                  </div>
+                </Fragment>
               );
             })}
           </div>
 
-          {[...trendByCurrency.entries()].map(([currency, points]) => {
-            const { polylinePoints, areaPoints, zeroY } =
+          {overview.by_currency.map((currency) => {
+            const points = trendByCurrency.get(currency.currency) ?? [];
+            const { polylinePoints, areaPoints, zeroY, markers } =
               buildTrendPath(points);
+            const firstPoint = points[0];
+            const lastPoint = points[points.length - 1];
             return (
               <div
-                key={`${result.rangeKey}-trend-${currency}`}
+                key={`${result.rangeKey}-trend-${currency.currency}`}
                 className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
               >
                 <h3 className="text-sm font-semibold">
-                  Spend trend · {currency}
+                  Spend trend · {currency.currency}
                 </h3>
-                <svg
-                  viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-                  preserveAspectRatio="none"
-                  className="mt-3 h-32 w-full overflow-visible"
-                  aria-label={`${currency} spend trend for the selected period`}
-                  role="img"
-                >
-                  <defs>
-                    <linearGradient
-                      id={`overview-chart-fill-${currency}`}
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
+                {points.length === 0 ? (
+                  <p className="text-muted-foreground mt-3 text-sm">
+                    No daily spend data for this period yet.
+                  </p>
+                ) : (
+                  <>
+                    <svg
+                      viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+                      preserveAspectRatio="none"
+                      className="mt-3 h-32 w-full overflow-visible"
+                      aria-label={`${currency.currency} spend trend for the selected period, by day`}
+                      role="img"
                     >
-                      <stop
-                        offset="0%"
-                        stopColor="var(--accent)"
-                        stopOpacity="0.24"
+                      <defs>
+                        <linearGradient
+                          id={`overview-chart-fill-${currency.currency}`}
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="0%"
+                            stopColor="var(--accent)"
+                            stopOpacity="0.24"
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor="var(--accent)"
+                            stopOpacity="0"
+                          />
+                        </linearGradient>
+                      </defs>
+                      {[0.25, 0.5, 0.75].map((fraction) => (
+                        <line
+                          key={fraction}
+                          x1="0"
+                          x2={CHART_WIDTH}
+                          y1={CHART_HEIGHT * fraction}
+                          y2={CHART_HEIGHT * fraction}
+                          stroke="var(--border-soft)"
+                          strokeWidth="1"
+                        />
+                      ))}
+                      <line
+                        x1="0"
+                        x2={CHART_WIDTH}
+                        y1={zeroY}
+                        y2={zeroY}
+                        stroke="var(--border-soft)"
+                        strokeWidth="1"
+                        strokeDasharray="4 3"
                       />
-                      <stop
-                        offset="100%"
-                        stopColor="var(--accent)"
-                        stopOpacity="0"
+                      <polygon
+                        points={areaPoints}
+                        fill={`url(#overview-chart-fill-${currency.currency})`}
+                        className="animate-demo-fade"
                       />
-                    </linearGradient>
-                  </defs>
-                  {[0.25, 0.5, 0.75].map((fraction) => (
-                    <line
-                      key={fraction}
-                      x1="0"
-                      x2={CHART_WIDTH}
-                      y1={CHART_HEIGHT * fraction}
-                      y2={CHART_HEIGHT * fraction}
-                      stroke="var(--border-soft)"
-                      strokeWidth="1"
-                    />
-                  ))}
-                  <line
-                    x1="0"
-                    x2={CHART_WIDTH}
-                    y1={zeroY}
-                    y2={zeroY}
-                    stroke="var(--border-soft)"
-                    strokeWidth="1"
-                    strokeDasharray="4 3"
-                  />
-                  <polygon
-                    points={areaPoints}
-                    fill={`url(#overview-chart-fill-${currency})`}
-                    className="animate-demo-fade"
-                  />
-                  <polyline
-                    points={polylinePoints}
-                    fill="none"
-                    stroke="var(--accent)"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    pathLength="100"
-                    className="animate-demo-draw motion-reduce:animate-none"
-                  />
-                </svg>
+                      <polyline
+                        points={polylinePoints}
+                        fill="none"
+                        stroke="var(--accent)"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        pathLength="100"
+                        className="animate-demo-draw motion-reduce:animate-none"
+                      />
+                      {markers.map(({ x, y, point }) => (
+                        <circle
+                          key={point.bucket_start}
+                          cx={x}
+                          cy={y}
+                          r={4}
+                          fill="var(--accent)"
+                          stroke="var(--dashboard-panel)"
+                          strokeWidth="1.5"
+                        >
+                          <title>
+                            {formatDayLabel(point.bucket_start)}:{" "}
+                            {formatAmount(
+                              Number(point.amount),
+                              currency.currency,
+                            )}
+                          </title>
+                        </circle>
+                      ))}
+                    </svg>
+                    {firstPoint && lastPoint ? (
+                      <div className="text-muted-foreground mt-1 flex justify-between text-[11px]">
+                        <span>{formatDayLabel(firstPoint.bucket_start)}</span>
+                        {points.length > 1 ? (
+                          <span>{formatDayLabel(lastPoint.bucket_start)}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </>
+                )}
               </div>
             );
           })}

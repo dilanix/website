@@ -2018,12 +2018,16 @@ export interface CoreCostOverview {
   period_end: string;
   previous_period_start: string;
   previous_period_end: string;
-  /** Which dataset actually answered — `"cost_summary"` only when this
-   * organization doesn't have `billing.cost_usage`'s `aws.billing.cost_usage`
-   * grant yet, in which case `by_currency[].financial_breakdown` is `null`
-   * and `by_charge_category` is empty (Cost Explorer data can't provide
-   * either). Always disclosed, matching `CoreUnifiedCostTotals.source`'s own
-   * convention on `/dashboard/costs`. */
+  /** Which dataset actually answered — `"cost_summary"` when this organization
+   * doesn't have `billing.cost_usage`'s `aws.billing.cost_usage` grant yet, OR
+   * when FOCUS coverage is incomplete for any target/period in scope (the same
+   * coverage-aware decision `/dashboard/costs`' own `.../costs/totals` makes),
+   * in which case `by_currency[].financial_breakdown` is `null` and
+   * `by_charge_category` is empty (Cost Explorer data can't provide either).
+   * Always disclosed, matching `CoreUnifiedCostTotals.source`'s own convention
+   * on `/dashboard/costs` — `current_total`/`previous_total`/`absolute_delta`/
+   * `change_percent` are guaranteed to match that page's own totals for the
+   * same connection/target/period. */
   source: BillingCostSource;
   by_currency: CoreCostOverviewCurrency[];
 }
@@ -2037,8 +2041,6 @@ export function getCostOverview(
     connectionId?: string | null;
     targetId?: string | null;
     topN?: number;
-    /** Defaults server-side to `effective_cost`. */
-    metric?: CostUsageMetric | null;
   },
 ) {
   const query = new URLSearchParams({
@@ -2048,7 +2050,6 @@ export function getCostOverview(
   if (params.connectionId) query.set("connection_id", params.connectionId);
   if (params.targetId) query.set("target_id", params.targetId);
   if (params.topN !== undefined) query.set("top_n", String(params.topN));
-  if (params.metric) query.set("metric", params.metric);
   return coreRequest<CoreCostOverview>(
     `/v1/organizations/${organizationId}/cost/overview?${query.toString()}`,
     token,

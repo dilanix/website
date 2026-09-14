@@ -105,25 +105,30 @@ describe("SpendOverviewClient", () => {
     expect(await screen.findByText("5.00 USD")).toBeTruthy();
   });
 
-  it("re-queries both overview and trend with the newly selected metric", async () => {
-    vi.mocked(getCostOverviewAction).mockResolvedValue({ data: overview });
+  it("never exposes a metric selector, and always queries the canonical effective_cost measure", async () => {
+    vi.mocked(getCostOverviewAction).mockResolvedValue({
+      data: {
+        ...overview,
+        by_currency: [{ ...overview.by_currency[0]!, current_total: "5.00" }],
+      },
+    });
     vi.mocked(queryCostExplorerAction).mockResolvedValue({
       data: { items: [] },
     });
 
     renderClient();
 
-    fireEvent.change(screen.getByLabelText("Metric"), {
-      target: { value: "list_cost" },
-    });
+    expect(screen.queryByLabelText("Metric")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "1 day" }));
 
     await waitFor(() =>
       expect(getCostOverviewAction).toHaveBeenCalledWith(
-        expect.objectContaining({ metric: "list_cost" }),
+        expect.not.objectContaining({ metric: expect.anything() }),
       ),
     );
     expect(queryCostExplorerAction).toHaveBeenCalledWith(
-      expect.objectContaining({ metric: "list_cost" }),
+      expect.objectContaining({ metric: "effective_cost" }),
     );
   });
 
@@ -162,8 +167,25 @@ describe("SpendOverviewClient", () => {
     expect(screen.getByText("Spend trend · USD")).toBeTruthy();
     expect(
       screen.getByRole("img", {
-        name: "USD spend trend for the selected period",
+        name: "USD spend trend for the selected period, by day",
       }),
+    ).toBeTruthy();
+  });
+
+  it("shows the current and previous period as two separate cards", () => {
+    renderClient();
+
+    expect(screen.getByText("USD · Current period")).toBeTruthy();
+    expect(screen.getByText("USD · Previous period")).toBeTruthy();
+    expect(screen.getByText("10.00 USD")).toBeTruthy();
+  });
+
+  it("never drops the trend section entirely when a period has no daily points", () => {
+    renderClient({ initialTrendPoints: [] });
+
+    expect(screen.getByText("Spend trend · USD")).toBeTruthy();
+    expect(
+      screen.getByText("No daily spend data for this period yet."),
     ).toBeTruthy();
   });
 });
