@@ -26,6 +26,7 @@ import {
   customRange,
   formatCostPeriod,
   presetRange,
+  previousRange,
   type DateRange,
   type PeriodPresetId,
 } from "@/lib/billing/cost-summaries";
@@ -85,6 +86,18 @@ interface OverviewResult {
   dataScopeKey: string;
   overview: CoreCostOverview | null;
   trendPoints: CoreCostExplorerPoint[];
+  previousTrendPoints: CoreCostExplorerPoint[];
+}
+
+/** Sums a set of `CoreCostExplorerPoint.amount` — always FOCUS/`cost_usage`
+ * sourced (`cost/explorer/query`'s own canonical `effective_cost` metric),
+ * unlike `CoreCostOverview.by_currency[].current_total`, which can silently
+ * come from `cost_summary` instead when Core judges FOCUS coverage
+ * incomplete for the period. The headline totals below always use this sum
+ * instead, so they read as the real FOCUS state even when it's $0 — never a
+ * `cost_summary` number quietly standing in for it. */
+function sumAmounts(points: CoreCostExplorerPoint[]) {
+  return points.reduce((sum, point) => sum + Number(point.amount), 0);
 }
 
 const CHART_WIDTH = 560;
@@ -109,9 +122,9 @@ function groupBudgetsByCurrency(budgets: CoreBudget[]) {
   return map;
 }
 
-/** Same day-count-agnostic layout as `buildTrendPath`, but x is mapped by
- * calendar position within `period` (not by index) since the forecast tail's
- * final point lands on `period.end`, not on the next daily step. */
+/** x is mapped by calendar position within `period` (not by point index),
+ * since the forecast tail's final point lands on `period.end`, not on the
+ * next daily step. */
 function buildPacingChart(
   series: ReturnType<typeof buildPacingSeries>,
   budgetAmount: number,
@@ -148,33 +161,10 @@ function buildPacingChart(
   return { actualMarkers, actualPolyline, forecastPolyline, budgetLineY: yFor(budgetAmount) };
 }
 
-function buildTrendPath(points: CoreCostExplorerPoint[]) {
-  const amounts = points.map((point) => Number(point.amount));
-  const min = Math.min(0, ...amounts);
-  const max = Math.max(0, ...amounts);
-  const span = max - min || 1;
-  const step = points.length > 1 ? CHART_WIDTH / (points.length - 1) : 0;
-  const markers = points.map((point, index) => {
-    const x = points.length > 1 ? index * step : CHART_WIDTH / 2;
-    const y =
-      CHART_HEIGHT - ((Number(point.amount) - min) / span) * CHART_HEIGHT;
-    return { x, y, point };
-  });
-  const zeroY = CHART_HEIGHT - ((0 - min) / span) * CHART_HEIGHT;
-  const polylinePoints =
-    markers.length === 1
-      ? `0,${markers[0]!.y} ${CHART_WIDTH},${markers[0]!.y}`
-      : markers.map(({ x, y }) => `${x},${y}`).join(" ");
-  const areaPoints =
-    markers.length === 1
-      ? `0,${zeroY} 0,${markers[0]!.y} ${CHART_WIDTH},${markers[0]!.y} ${CHART_WIDTH},${zeroY}`
-      : `0,${zeroY} ${polylinePoints} ${CHART_WIDTH},${zeroY}`;
-  return { polylinePoints, areaPoints, zeroY, markers };
-}
-
 export function SpendOverviewClient({
   initialOverview,
   initialTrendPoints,
+  initialPreviousTrendPoints,
   initialRange,
   connectionId,
   targetId,
@@ -183,6 +173,7 @@ export function SpendOverviewClient({
 }: {
   initialOverview: CoreCostOverview | null;
   initialTrendPoints: CoreCostExplorerPoint[];
+  initialPreviousTrendPoints: CoreCostExplorerPoint[];
   initialRange: DateRange;
   connectionId: string | null;
   targetId: string | null;
@@ -208,6 +199,7 @@ export function SpendOverviewClient({
     dataScopeKey,
     overview: initialOverview,
     trendPoints: initialTrendPoints,
+    previousTrendPoints: initialPreviousTrendPoints,
   });
   const restoredQueryApplied = useRef(false);
   // Falls back to the freshly server-fetched initial props when the connection/
@@ -219,6 +211,10 @@ export function SpendOverviewClient({
     result.dataScopeKey === dataScopeKey
       ? result.trendPoints
       : initialTrendPoints;
+  const previousTrendPoints =
+    result.dataScopeKey === dataScopeKey
+      ? result.previousTrendPoints
+      : initialPreviousTrendPoints;
 
   function activeRange(): DateRange | null {
     if (preset === "custom") {
@@ -239,33 +235,50 @@ export function SpendOverviewClient({
     }
     setError("");
     const { periodStart, periodEnd } = rangeToIso(range);
+    const previous = previousRange(range);
+    const {
+      periodStart: previousPeriodStart,
+      periodEnd: previousPeriodEnd,
+    } = rangeToIso(previous);
     const rangeKey = `${periodStart}:${periodEnd}`;
     startTransition(async () => {
-      const [overviewResult, trendResult] = await Promise.all([
-        getCostOverviewAction({
-          periodStart,
-          periodEnd,
-          connectionId,
-          targetId,
-          topN: 5,
-        }),
-        queryCostExplorerAction({
-          period_start: periodStart,
-          period_end: periodEnd,
-          metric: CANONICAL_METRIC,
-          connection_id: connectionId,
-          target_id: targetId,
-          granularity: TREND_GRANULARITY,
-          group_by: [],
-          scope: [],
-        }),
-      ]);
+      const [overviewResult, trendResult, previousTrendResult] =
+        await Promise.all([
+          getCostOverviewAction({
+            periodStart,
+            periodEnd,
+            connectionId,
+            targetId,
+            topN: 5,
+          }),
+          queryCostExplorerAction({
+            period_start: periodStart,
+            period_end: periodEnd,
+            metric: CANONICAL_METRIC,
+            connection_id: connectionId,
+            target_id: targetId,
+            granularity: TREND_GRANULARITY,
+            group_by: [],
+            scope: [],
+          }),
+          queryCostExplorerAction({
+            period_start: previousPeriodStart,
+            period_end: previousPeriodEnd,
+            metric: CANONICAL_METRIC,
+            connection_id: connectionId,
+            target_id: targetId,
+            granularity: null,
+            group_by: [],
+            scope: [],
+          }),
+        ]);
       if (overviewResult.error) return setError(overviewResult.error);
       setResult({
         rangeKey,
         dataScopeKey,
         overview: overviewResult.data ?? null,
         trendPoints: trendResult.data?.items ?? [],
+        previousTrendPoints: previousTrendResult.data?.items ?? [],
       });
     });
   }
@@ -423,6 +436,15 @@ export function SpendOverviewClient({
     list.sort((a, b) => a.bucket_start.localeCompare(b.bucket_start));
   }
 
+  const previousTotalByCurrency = new Map<string, number>();
+  for (const point of previousTrendPoints) {
+    previousTotalByCurrency.set(
+      point.currency,
+      (previousTotalByCurrency.get(point.currency) ?? 0) +
+        Number(point.amount),
+    );
+  }
+
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-2">
@@ -431,7 +453,7 @@ export function SpendOverviewClient({
             <h2 className="text-lg font-semibold tracking-tight">
               Spend overview
             </h2>
-            {overview ? <SourceBadge source={overview.source} /> : null}
+            {overview ? <SourceBadge source="cost_usage" /> : null}
           </div>
           <p className="text-muted-foreground mt-1 text-xs">
             {periodLabel} vs. the immediately preceding period of equal length.
@@ -539,7 +561,16 @@ export function SpendOverviewClient({
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {overview.by_currency.map((currency, index) => {
-              const change = currency.change_percent;
+              const currentTotal = sumAmounts(
+                trendByCurrency.get(currency.currency) ?? [],
+              );
+              const previousTotal =
+                previousTotalByCurrency.get(currency.currency) ?? 0;
+              const absoluteDelta = currentTotal - previousTotal;
+              const change =
+                previousTotal !== 0
+                  ? (absoluteDelta / Math.abs(previousTotal)) * 100
+                  : null;
               const ChangeIcon =
                 change === null || change === 0
                   ? Minus
@@ -547,166 +578,32 @@ export function SpendOverviewClient({
                     ? TrendingUp
                     : TrendingDown;
               return (
-                <Fragment key={`${result.rangeKey}-${currency.currency}`}>
-                  <div
-                    className="animate-[demo-panel-in_.4s_ease-out] motion-reduce:animate-none"
-                    style={{ animationDelay: `${index * 60}ms` }}
-                  >
-                    <StatCard
-                      label={`${currency.currency} · Current period`}
-                      tone={
-                        change !== null && change < 0 ? "success" : "default"
-                      }
-                      value={
-                        <>
-                          <span className="block">
-                            {formatAmount(
-                              Number(currency.current_total),
-                              currency.currency,
-                            )}
-                          </span>
-                          <span className="mt-1 flex items-center gap-1 text-xs font-normal tracking-normal">
-                            <ChangeIcon size={12} />
-                            {change === null
-                              ? "No previous spend"
-                              : `${formatAmount(Math.abs(Number(currency.absolute_delta)), currency.currency)} (${Math.abs(change).toFixed(1)}%) vs previous period`}
-                          </span>
-                        </>
-                      }
-                    />
-                  </div>
-                  <div
-                    className="animate-[demo-panel-in_.4s_ease-out] motion-reduce:animate-none"
-                    style={{ animationDelay: `${index * 60 + 40}ms` }}
-                  >
-                    <StatCard
-                      label={`${currency.currency} · Previous period`}
-                      value={formatAmount(
-                        Number(currency.previous_total),
-                        currency.currency,
-                      )}
-                    />
-                  </div>
-                </Fragment>
+                <div
+                  key={`${result.rangeKey}-${currency.currency}`}
+                  className="animate-[demo-panel-in_.4s_ease-out] motion-reduce:animate-none"
+                  style={{ animationDelay: `${index * 60}ms` }}
+                >
+                  <StatCard
+                    label={`${currency.currency} · Current period`}
+                    tone={change !== null && change < 0 ? "success" : "default"}
+                    value={
+                      <>
+                        <span className="block">
+                          {formatAmount(currentTotal, currency.currency)}
+                        </span>
+                        <span className="mt-1 flex items-center gap-1 text-xs font-normal tracking-normal">
+                          <ChangeIcon size={12} />
+                          {change === null
+                            ? "No previous spend"
+                            : `${formatAmount(Math.abs(absoluteDelta), currency.currency)} (${Math.abs(change).toFixed(1)}%) vs previous period`}
+                        </span>
+                      </>
+                    }
+                  />
+                </div>
               );
             })}
           </div>
-
-          {overview.by_currency.map((currency) => {
-            const points = trendByCurrency.get(currency.currency) ?? [];
-            const { polylinePoints, areaPoints, zeroY, markers } =
-              buildTrendPath(points);
-            const firstPoint = points[0];
-            const lastPoint = points[points.length - 1];
-            return (
-              <div
-                key={`${result.rangeKey}-trend-${currency.currency}`}
-                className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
-              >
-                <h3 className="text-sm font-semibold">
-                  Spend trend · {currency.currency}
-                </h3>
-                {points.length === 0 ? (
-                  <p className="text-muted-foreground mt-3 text-sm">
-                    No daily spend data for this period yet.
-                  </p>
-                ) : (
-                  <>
-                    <svg
-                      viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-                      preserveAspectRatio="none"
-                      className="mt-3 h-32 w-full overflow-visible"
-                      aria-label={`${currency.currency} spend trend for the selected period, by day`}
-                      role="img"
-                    >
-                      <defs>
-                        <linearGradient
-                          id={`overview-chart-fill-${currency.currency}`}
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop
-                            offset="0%"
-                            stopColor="var(--accent)"
-                            stopOpacity="0.24"
-                          />
-                          <stop
-                            offset="100%"
-                            stopColor="var(--accent)"
-                            stopOpacity="0"
-                          />
-                        </linearGradient>
-                      </defs>
-                      {[0.25, 0.5, 0.75].map((fraction) => (
-                        <line
-                          key={fraction}
-                          x1="0"
-                          x2={CHART_WIDTH}
-                          y1={CHART_HEIGHT * fraction}
-                          y2={CHART_HEIGHT * fraction}
-                          stroke="var(--border-soft)"
-                          strokeWidth="1"
-                        />
-                      ))}
-                      <line
-                        x1="0"
-                        x2={CHART_WIDTH}
-                        y1={zeroY}
-                        y2={zeroY}
-                        stroke="var(--border-soft)"
-                        strokeWidth="1"
-                        strokeDasharray="4 3"
-                      />
-                      <polygon
-                        points={areaPoints}
-                        fill={`url(#overview-chart-fill-${currency.currency})`}
-                        className="animate-demo-fade"
-                      />
-                      <polyline
-                        points={polylinePoints}
-                        fill="none"
-                        stroke="var(--accent)"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        pathLength="100"
-                        className="animate-demo-draw motion-reduce:animate-none"
-                      />
-                      {markers.map(({ x, y, point }) => (
-                        <circle
-                          key={point.bucket_start}
-                          cx={x}
-                          cy={y}
-                          r={4}
-                          fill="var(--accent)"
-                          stroke="var(--dashboard-panel)"
-                          strokeWidth="1.5"
-                        >
-                          <title>
-                            {formatDayLabel(point.bucket_start)}:{" "}
-                            {formatAmount(
-                              Number(point.amount),
-                              currency.currency,
-                            )}
-                          </title>
-                        </circle>
-                      ))}
-                    </svg>
-                    {firstPoint && lastPoint ? (
-                      <div className="text-muted-foreground mt-1 flex justify-between text-[11px]">
-                        <span>{formatDayLabel(firstPoint.bucket_start)}</span>
-                        {points.length > 1 ? (
-                          <span>{formatDayLabel(lastPoint.bucket_start)}</span>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </div>
-            );
-          })}
 
           {[...budgetsByCurrency.entries()].map(([currency, currencyBudgets]) => {
             const activeBudgetId =

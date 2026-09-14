@@ -18,7 +18,7 @@ import {
   listSavedViews,
   queryCostExplorer,
 } from "@/lib/core/api";
-import { presetRange } from "@/lib/billing/cost-summaries";
+import { presetRange, previousRange } from "@/lib/billing/cost-summaries";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { StatusBadge } from "@/components/dashboard/primitives";
 import { SpendOverviewClient } from "@/components/dashboard/cost/spend-overview-client";
@@ -45,6 +45,7 @@ export async function CostOverview({
   const scopeSuffix = scopeQuery.size ? `?${scopeQuery.toString()}` : "";
   const periodStartIso = initialRange.start.toISOString();
   const periodEndIso = initialRange.end.toISOString();
+  const initialPreviousRange = previousRange(initialRange);
   const [
     overview,
     budgets,
@@ -53,6 +54,7 @@ export async function CostOverview({
     savedViews,
     reports,
     trend,
+    previousTrend,
   ] = await Promise.all([
     getCostOverview(organizationId, token, {
       periodStart: periodStartIso,
@@ -76,6 +78,20 @@ export async function CostOverview({
       connection_id: connectionId,
       target_id: targetId,
       granularity: "daily",
+      group_by: [],
+      scope: [],
+    }).catch(() => ({ items: [] })),
+    // Headline "vs previous period" comparison — always this same FOCUS
+    // engine, never `CoreCostOverview.by_currency[].previous_total` (which
+    // can be `cost_summary`-sourced), so the delta never mixes sources with
+    // the current-period number above.
+    queryCostExplorer(organizationId, token, {
+      period_start: initialPreviousRange.start.toISOString(),
+      period_end: initialPreviousRange.end.toISOString(),
+      metric: "effective_cost",
+      connection_id: connectionId,
+      target_id: targetId,
+      granularity: null,
       group_by: [],
       scope: [],
     }).catch(() => ({ items: [] })),
@@ -144,6 +160,7 @@ export async function CostOverview({
       <SpendOverviewClient
         initialOverview={overview}
         initialTrendPoints={trend.items}
+        initialPreviousTrendPoints={previousTrend.items}
         initialRange={initialRange}
         connectionId={connectionId}
         targetId={targetId}

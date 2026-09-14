@@ -68,6 +68,7 @@ function renderClient(
     <SpendOverviewClient
       initialOverview={overview}
       initialTrendPoints={[]}
+      initialPreviousTrendPoints={[]}
       initialRange={presetRange("30d")}
       connectionId={null}
       targetId={null}
@@ -89,13 +90,20 @@ describe("SpendOverviewClient", () => {
 
   it("re-queries with the newly clicked preset's range, not the previous one", async () => {
     vi.mocked(getCostOverviewAction).mockResolvedValue({
-      data: {
-        ...overview,
-        by_currency: [{ ...overview.by_currency[0]!, current_total: "5.00" }],
-      },
+      data: overview,
     });
     vi.mocked(queryCostExplorerAction).mockResolvedValue({
-      data: { items: [] },
+      data: {
+        items: [
+          {
+            bucket_start: "2026-09-01T00:00:00Z",
+            bucket_end: "2026-09-02T00:00:00Z",
+            currency: "USD",
+            amount: "5.00",
+            group: {},
+          },
+        ],
+      },
     });
 
     renderClient();
@@ -111,7 +119,9 @@ describe("SpendOverviewClient", () => {
         }),
       ),
     );
-    expect(await screen.findByText("5.00 USD")).toBeTruthy();
+    expect((await screen.findAllByText("5.00 USD")).length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("never exposes a metric selector, and always queries the canonical effective_cost measure", async () => {
@@ -153,7 +163,7 @@ describe("SpendOverviewClient", () => {
     expect(getCostOverviewAction).not.toHaveBeenCalled();
   });
 
-  it("renders a spend trend chart from the product's own Explorer series, never a different dataset", () => {
+  it("sums the product's own Explorer series into the headline total, never a different dataset", () => {
     renderClient({
       initialTrendPoints: [
         {
@@ -173,28 +183,36 @@ describe("SpendOverviewClient", () => {
       ],
     });
 
-    expect(screen.getByText("Spend trend · USD")).toBeTruthy();
-    expect(
-      screen.getByRole("img", {
-        name: "USD spend trend for the selected period, by day",
-      }),
-    ).toBeTruthy();
-  });
-
-  it("shows the current and previous period as two separate cards", () => {
-    renderClient();
-
     expect(screen.getByText("USD · Current period")).toBeTruthy();
-    expect(screen.getByText("USD · Previous period")).toBeTruthy();
     expect(screen.getByText("10.00 USD")).toBeTruthy();
   });
 
-  it("never drops the trend section entirely when a period has no daily points", () => {
-    renderClient({ initialTrendPoints: [] });
+  it("shows the current period's total with the vs-previous-period delta inline", () => {
+    renderClient({
+      initialTrendPoints: [
+        {
+          bucket_start: "2026-09-01T00:00:00Z",
+          bucket_end: "2026-09-02T00:00:00Z",
+          currency: "USD",
+          amount: "20.00",
+          group: {},
+        },
+      ],
+      initialPreviousTrendPoints: [
+        {
+          bucket_start: "2026-08-01T00:00:00Z",
+          bucket_end: "2026-08-02T00:00:00Z",
+          currency: "USD",
+          amount: "10.00",
+          group: {},
+        },
+      ],
+    });
 
-    expect(screen.getByText("Spend trend · USD")).toBeTruthy();
+    expect(screen.getByText("USD · Current period")).toBeTruthy();
+    expect(screen.queryByText("USD · Previous period")).toBeNull();
     expect(
-      screen.getByText("No daily spend data for this period yet."),
+      screen.getByText("10.00 USD (100.0%) vs previous period"),
     ).toBeTruthy();
   });
 });
