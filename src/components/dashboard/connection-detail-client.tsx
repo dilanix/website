@@ -49,6 +49,8 @@ import { SyncPanel } from "./sync-panel";
 import { TargetsPanel } from "./targets-panel";
 import { cn } from "@/lib/utils";
 
+const AWS_INTEGRATION_SLUG = "aws";
+
 function statusTone(
   status: IntegrationConnectionStatus,
 ): "success" | "neutral" | "warning" {
@@ -148,6 +150,10 @@ export function ConnectionDetailClient({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [pending, startTransition] = useTransition();
+  // Bumped whenever a verify succeeds — a connection may now hold several
+  // simultaneously-verified targets, so `TargetsPanel`'s own list (which
+  // `verifyAws` never touches directly) needs to know to reload.
+  const [targetsReloadSignal, setTargetsReloadSignal] = useState(0);
 
   useEffect(() => {
     function syncTabFromHistory() {
@@ -258,6 +264,7 @@ export function ConnectionDetailClient({
       if (result.data) {
         setConnection(result.data.connection);
         setNotice("Connection verified successfully.");
+        setTargetsReloadSignal((current) => current + 1);
         if (onSuccess) onSuccess();
       }
     });
@@ -683,11 +690,25 @@ export function ConnectionDetailClient({
             <Section
               title="Provider identity"
               className="border-border-soft rounded-2xl border p-5"
+              action={
+                integrationSlug === AWS_INTEGRATION_SLUG &&
+                !connectionDisabled ? (
+                  <button
+                    type="button"
+                    onClick={() => setVerifyDialog(true)}
+                    className="border-foreground/15 hover:bg-foreground/5 inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium"
+                  >
+                    <Plus size={13} />
+                    Add target
+                  </button>
+                ) : undefined
+              }
             >
               <TargetsPanel
                 connectionId={connection.id}
                 initialTargets={initialTargets}
                 readOnly={connectionDisabled}
+                reloadSignal={targetsReloadSignal}
               />
             </Section>
           </div>
@@ -982,10 +1003,13 @@ export function ConnectionDetailClient({
             <div className="flex items-start justify-between">
               <div>
                 <h2 id="verify-dialog-title" className="text-lg font-semibold">
-                  Re-verify Connection
+                  Verify an AWS account
                 </h2>
                 <p className="text-muted-foreground mt-1 text-xs">
                   Assumes the cross-account IAM role and confirms STS access.
+                  Entering an account already verified here just re-confirms it;
+                  a new one is added as another target alongside the rest, not a
+                  replacement.
                 </p>
               </div>
               <button

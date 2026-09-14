@@ -1,6 +1,13 @@
 "use client";
-import { useState, useTransition } from "react";
-import { ChevronDown, Loader2, RefreshCw, ShieldOff, X } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import {
+  ChevronDown,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  ShieldOff,
+  X,
+} from "lucide-react";
 import type {
   CoreIntegrationTarget,
   IntegrationTargetStatus,
@@ -8,6 +15,7 @@ import type {
 import {
   disableTargetAction,
   listTargetsAction,
+  renameTargetAction,
   replaceTargetIdentityAction,
 } from "@/app/dashboard/integrations/actions";
 import { EmptyState, StatusBadge } from "./primitives";
@@ -56,6 +64,7 @@ function TargetRow({
 }) {
   const [pending, startTransition] = useTransition();
   const [replaceDialog, setReplaceDialog] = useState(false);
+  const [renameDialog, setRenameDialog] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [error, setError] = useState("");
 
@@ -84,6 +93,22 @@ function TargetRow({
     });
   }
 
+  function rename(displayName: string) {
+    setError("");
+    startTransition(async () => {
+      const result = await renameTargetAction(
+        connectionId,
+        target.id,
+        displayName,
+      );
+      if (result.error) return setError(result.error);
+      if (result.data) {
+        onChanged();
+        setRenameDialog(false);
+      }
+    });
+  }
+
   return (
     <div className="border-foreground/10 flex flex-col gap-2 rounded-lg border p-3 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -100,6 +125,15 @@ function TargetRow({
         </div>
         {!readOnly ? (
           <div className="flex shrink-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setRenameDialog(true)}
+              disabled={pending}
+              className="text-accent inline-flex items-center gap-1 text-xs hover:underline disabled:opacity-50"
+            >
+              <Pencil size={12} />
+              Rename
+            </button>
             <button
               type="button"
               onClick={() => setReplaceDialog(true)}
@@ -147,7 +181,7 @@ function TargetRow({
           ) : null}
         </div>
       ) : null}
-      {error && !replaceDialog ? (
+      {error && !replaceDialog && !renameDialog ? (
         <p role="alert" className="text-xs text-red-500">
           {error}
         </p>
@@ -229,6 +263,84 @@ function TargetRow({
           </div>
         </div>
       ) : null}
+
+      {renameDialog ? (
+        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rename-target-title"
+            className="bg-background border-foreground/15 w-full max-w-md rounded-xl border p-6 shadow-2xl"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 id="rename-target-title" className="text-lg font-semibold">
+                  Rename target
+                </h2>
+                <p className="text-muted-foreground mt-1 text-xs leading-5">
+                  A label for this {target.target_type} only — e.g.
+                  &ldquo;Prod&rdquo; or &ldquo;Dev&rdquo;. Never affects
+                  verification.
+                </p>
+              </div>
+              <button
+                onClick={() => setRenameDialog(false)}
+                aria-label="Close dialog"
+                className="text-muted-foreground p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                const data = new FormData(event.currentTarget);
+                rename(String(data.get("display_name") ?? "").trim());
+              }}
+              className="mt-5 space-y-4"
+            >
+              <label className="block text-sm">
+                <span className="mb-1.5 block font-medium">Label</span>
+                <input
+                  name="display_name"
+                  required
+                  maxLength={255}
+                  defaultValue={target.display_name ?? ""}
+                  placeholder="e.g. Prod"
+                  className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 text-sm outline-none"
+                />
+              </label>
+              {error ? (
+                <p role="alert" className="text-sm text-red-500">
+                  {error}
+                </p>
+              ) : null}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRenameDialog(false)}
+                  className="border-foreground/15 rounded-lg border px-4 py-2 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={pending}
+                  className="bg-accent text-accent-foreground rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+                >
+                  {pending ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Loader2 size={13} className="animate-spin" />
+                      Saving…
+                    </span>
+                  ) : (
+                    "Save"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -237,10 +349,17 @@ export function TargetsPanel({
   connectionId,
   initialTargets,
   readOnly = false,
+  reloadSignal,
 }: {
   connectionId: string;
   initialTargets: CoreIntegrationTarget[];
   readOnly?: boolean;
+  /** Bump this (e.g. a counter) to make the panel reload its own list from a
+   * parent-owned action it doesn't otherwise know about — e.g. the parent's
+   * own "verify an AWS account" flow, which can now add an additional target
+   * alongside existing ones rather than only ever replacing the one live
+   * target. */
+  reloadSignal?: number;
 }) {
   const [targets, setTargets] = useState(() => sortTargets(initialTargets));
   const [, startReload] = useTransition();
@@ -251,6 +370,20 @@ export function TargetsPanel({
       if (result.data) setTargets(sortTargets(result.data));
     });
   }
+
+  const skippedInitialReload = useRef(false);
+  useEffect(() => {
+    if (reloadSignal === undefined) return;
+    if (!skippedInitialReload.current) {
+      // The first render's `reloadSignal` is the parent's own initial value,
+      // not a real change — `initialTargets` already has the right data for
+      // it, so skip the redundant fetch.
+      skippedInitialReload.current = true;
+      return;
+    }
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadSignal]);
 
   if (targets.length === 0) {
     return (

@@ -595,9 +595,10 @@ export type IntegrationTargetStatus = "verified" | "invalid" | "disabled";
 /**
  * Mirrors Core's `IntegrationTargetRead` — the actual provider-side identity
  * (AWS account, Azure subscription, GCP project, ...) a connection resolves
- * to. A connection still only ever has one *live* (`verified`) target per
- * `target_type` at a time; `replaceTargetIdentity` is the supported way to
- * change which one that is.
+ * to. A connection may hold several simultaneously-`verified` targets of the
+ * same `target_type` (e.g. multiple AWS accounts); `replaceTargetIdentity` is
+ * the supported way to swap which identity one specific target holds, and
+ * `renameTarget` sets a customer-chosen label independent of verification.
  */
 export interface CoreIntegrationTarget {
   id: string;
@@ -634,6 +635,24 @@ export function disableTarget(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/targets/${targetId}/disable`,
     token,
     { method: "POST" },
+  );
+}
+
+export function renameTarget(
+  organizationId: string,
+  connectionId: string,
+  targetId: string,
+  token: string,
+  displayName: string,
+) {
+  return coreRequest<CoreIntegrationTarget>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/targets/${targetId}/rename`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ display_name: displayName }),
+    },
   );
 }
 

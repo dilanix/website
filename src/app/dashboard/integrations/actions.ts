@@ -17,6 +17,7 @@ import {
   getConnectionAwsSetup,
   listTargets,
   disableTarget,
+  renameTarget,
   replaceTargetIdentity,
   startSync,
   getSyncHealth,
@@ -276,6 +277,27 @@ export async function disableTargetAction(
       connectionId,
       targetId,
       token,
+    );
+    revalidatePath(`/dashboard/integrations/${connectionId}`);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function renameTargetAction(
+  connectionId: string,
+  targetId: string,
+  displayName: string,
+): Promise<ActionResult<CoreIntegrationTarget>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await renameTarget(
+      organizationId,
+      connectionId,
+      targetId,
+      token,
+      displayName,
     );
     revalidatePath(`/dashboard/integrations/${connectionId}`);
     return { data };
