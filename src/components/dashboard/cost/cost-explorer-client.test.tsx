@@ -148,7 +148,7 @@ describe("CostExplorerClient", () => {
 
   it("shows a By charge type panel and a Detailed table view alongside the summary", async () => {
     vi.mocked(queryCostExplorerAction).mockImplementation(async (input) => {
-      const isChargeCategoryQuery = input.group_by.some(
+      const isChargeCategoryQuery = (input.group_by ?? []).some(
         (field) => field.dimension === "charge_category",
       );
       return isChargeCategoryQuery
@@ -234,3 +234,4 @@ describe("CostExplorerClient", () => {
     expect(await screen.findByText("Service: Amazon EC2")).toBeTruthy();
   }, 20_000);
 });
+
