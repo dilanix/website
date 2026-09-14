@@ -15,7 +15,12 @@ import {
   getCostOverviewAction,
   queryCostExplorerAction,
 } from "@/app/dashboard/products/cost-actions";
-import type { CoreCostExplorerPoint, CoreCostOverview } from "@/lib/core/api";
+import type {
+  CoreBudget,
+  CoreCostExplorerPoint,
+  CoreCostOverview,
+  ScopeDimension,
+} from "@/lib/core/api";
 import {
   PERIOD_PRESETS,
   customRange,
@@ -29,6 +34,11 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { SourceBadge } from "@/components/dashboard/unified-cost-totals";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 import { formatAmount } from "@/components/dashboard/cost/format";
+import { SCOPE_DIMENSION_LABELS } from "@/components/dashboard/cost/scope-editor";
+import {
+  buildPacingSeries,
+  resolveBudgetPeriod,
+} from "@/components/dashboard/cost/budget-pacing";
 
 type OverviewPeriodId = PeriodPresetId | "custom";
 
@@ -80,6 +90,64 @@ interface OverviewResult {
 const CHART_WIDTH = 560;
 const CHART_HEIGHT = 140;
 
+/** The three `ScopeDimension`s most useful as an at-a-glance Overview
+ * breakdown — the rest (resource-level, tags, ...) stay Explorer-only, where
+ * there's room for the full scope editor. */
+const BREAKDOWN_DIMENSIONS: ScopeDimension[] = [
+  "provider_name",
+  "billing_account_id",
+  "region_id",
+];
+
+function groupBudgetsByCurrency(budgets: CoreBudget[]) {
+  const map = new Map<string, CoreBudget[]>();
+  for (const budget of budgets) {
+    const list = map.get(budget.currency) ?? [];
+    list.push(budget);
+    map.set(budget.currency, list);
+  }
+  return map;
+}
+
+/** Same day-count-agnostic layout as `buildTrendPath`, but x is mapped by
+ * calendar position within `period` (not by index) since the forecast tail's
+ * final point lands on `period.end`, not on the next daily step. */
+function buildPacingChart(
+  series: ReturnType<typeof buildPacingSeries>,
+  budgetAmount: number,
+  period: DateRange,
+) {
+  const periodStartMs = period.start.getTime();
+  const span = Math.max(1, period.end.getTime() - periodStartMs);
+  const xFor = (iso: string) =>
+    ((new Date(iso).getTime() - periodStartMs) / span) * CHART_WIDTH;
+
+  const maxValue = Math.max(
+    1,
+    budgetAmount,
+    ...series.actual.map((point) => point.cumulative),
+    ...(series.forecastTail?.map((point) => point.cumulative) ?? []),
+  );
+  const yFor = (value: number) =>
+    CHART_HEIGHT - (value / maxValue) * CHART_HEIGHT;
+
+  const actualMarkers = series.actual.map((point) => ({
+    x: xFor(point.date),
+    y: yFor(point.cumulative),
+    point,
+  }));
+  const actualPolyline = actualMarkers
+    .map(({ x, y }) => `${x},${y}`)
+    .join(" ");
+  const forecastPolyline = series.forecastTail
+    ? series.forecastTail
+        .map((point) => `${xFor(point.date)},${yFor(point.cumulative)}`)
+        .join(" ")
+    : null;
+
+  return { actualMarkers, actualPolyline, forecastPolyline, budgetLineY: yFor(budgetAmount) };
+}
+
 function buildTrendPath(points: CoreCostExplorerPoint[]) {
   const amounts = points.map((point) => Number(point.amount));
   const min = Math.min(0, ...amounts);
@@ -111,6 +179,7 @@ export function SpendOverviewClient({
   connectionId,
   targetId,
   scopeSuffix,
+  budgets,
 }: {
   initialOverview: CoreCostOverview | null;
   initialTrendPoints: CoreCostExplorerPoint[];
@@ -118,6 +187,7 @@ export function SpendOverviewClient({
   connectionId: string | null;
   targetId: string | null;
   scopeSuffix: string;
+  budgets: CoreBudget[];
 }) {
   const initialRangeKey = `${initialRange.start.toISOString()}:${initialRange.end.toISOString()}`;
   const [preset, setPreset, { restored: presetRestored }] =
@@ -229,6 +299,119 @@ export function SpendOverviewClient({
     displayedRange.start.toISOString(),
     displayedRange.end.toISOString(),
   );
+  const { periodStart: displayedPeriodStart, periodEnd: displayedPeriodEnd } =
+    rangeToIso(displayedRange);
+
+  // ---------------------------------------------------------------------
+  // Breakdown by dimension (provider / billing account / region)
+  // ---------------------------------------------------------------------
+  const [dimension, setDimension] = useState<ScopeDimension>("provider_name");
+  const [dimensionPoints, setDimensionPoints] = useState<
+    CoreCostExplorerPoint[]
+  >([]);
+  const [dimensionPending, setDimensionPending] = useState(false);
+  const dimensionCacheRef = useRef(new Map<string, CoreCostExplorerPoint[]>());
+
+  useEffect(() => {
+    const cacheKey = `${displayedPeriodStart}:${displayedPeriodEnd}:${dataScopeKey}:${dimension}`;
+    const cached = dimensionCacheRef.current.get(cacheKey);
+    if (cached) {
+      setDimensionPoints(cached);
+      return;
+    }
+    let cancelled = false;
+    setDimensionPending(true);
+    queryCostExplorerAction({
+      period_start: displayedPeriodStart,
+      period_end: displayedPeriodEnd,
+      metric: CANONICAL_METRIC,
+      connection_id: connectionId,
+      target_id: targetId,
+      granularity: null,
+      group_by: [{ dimension }],
+      scope: [],
+    }).then((response) => {
+      if (cancelled) return;
+      const items = response.data?.items ?? [];
+      dimensionCacheRef.current.set(cacheKey, items);
+      setDimensionPoints(items);
+      setDimensionPending(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    displayedPeriodStart,
+    displayedPeriodEnd,
+    dataScopeKey,
+    dimension,
+    connectionId,
+    targetId,
+  ]);
+
+  const dimensionByCurrency = new Map<string, CoreCostExplorerPoint[]>();
+  for (const point of dimensionPoints) {
+    const list = dimensionByCurrency.get(point.currency) ?? [];
+    list.push(point);
+    dimensionByCurrency.set(point.currency, list);
+  }
+
+  // ---------------------------------------------------------------------
+  // Budget pacing (plan vs. actual vs. a naive trailing-average forecast)
+  // ---------------------------------------------------------------------
+  const budgetsByCurrency = groupBudgetsByCurrency(budgets);
+  const [activeBudgetByCurrency, setActiveBudgetByCurrency] = useState<
+    Record<string, string>
+  >({});
+  const [pacingByBudgetId, setPacingByBudgetId] = useState<
+    Record<string, CoreCostExplorerPoint[]>
+  >({});
+  const [pacingPendingIds, setPacingPendingIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const pacingCacheRef = useRef(new Map<string, CoreCostExplorerPoint[]>());
+  const activeBudgetIdsKey = [...budgetsByCurrency.entries()]
+    .map(([currency, list]) => activeBudgetByCurrency[currency] ?? list[0]!.id)
+    .join(",");
+
+  useEffect(() => {
+    const ids = activeBudgetIdsKey ? activeBudgetIdsKey.split(",") : [];
+    const toFetch = ids.filter((id) => !pacingCacheRef.current.has(id));
+    if (toFetch.length === 0) return;
+    let cancelled = false;
+    setPacingPendingIds((prev) => new Set([...prev, ...toFetch]));
+    Promise.all(
+      toFetch.map(async (id) => {
+        const budget = budgets.find((candidate) => candidate.id === id);
+        if (!budget) return;
+        const period = resolveBudgetPeriod(budget);
+        const response = await queryCostExplorerAction({
+          period_start: period.start.toISOString(),
+          period_end: period.end.toISOString(),
+          metric: CANONICAL_METRIC,
+          connection_id: connectionId,
+          target_id: targetId,
+          granularity: "daily",
+          group_by: [],
+          scope: budget.scope,
+        });
+        if (cancelled) return;
+        const items = response.data?.items ?? [];
+        pacingCacheRef.current.set(id, items);
+        setPacingByBudgetId((prev) => ({ ...prev, [id]: items }));
+      }),
+    ).finally(() => {
+      if (cancelled) return;
+      setPacingPendingIds((prev) => {
+        const next = new Set(prev);
+        for (const id of toFetch) next.delete(id);
+        return next;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBudgetIdsKey, budgets, connectionId, targetId]);
 
   const trendByCurrency = new Map<string, CoreCostExplorerPoint[]>();
   for (const point of trendPoints) {
@@ -524,6 +707,253 @@ export function SpendOverviewClient({
               </div>
             );
           })}
+
+          {[...budgetsByCurrency.entries()].map(([currency, currencyBudgets]) => {
+            const activeBudgetId =
+              activeBudgetByCurrency[currency] ?? currencyBudgets[0]!.id;
+            const activeBudget =
+              currencyBudgets.find((budget) => budget.id === activeBudgetId) ??
+              currencyBudgets[0]!;
+            const budgetAmount = Number(activeBudget.amount);
+            const period = resolveBudgetPeriod(activeBudget);
+            const points = pacingByBudgetId[activeBudget.id] ?? [];
+            const pending = pacingPendingIds.has(activeBudget.id);
+            const series = buildPacingSeries(points, period);
+            const { actualMarkers, actualPolyline, forecastPolyline, budgetLineY } =
+              buildPacingChart(series, budgetAmount, period);
+            const overBudget =
+              series.projectedTotal !== null &&
+              series.projectedTotal > budgetAmount;
+            const lastActual = series.actual[series.actual.length - 1];
+            return (
+              <div
+                key={`${result.rangeKey}-pacing-${currency}`}
+                className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">
+                    Budget pacing · {currency}
+                  </h3>
+                  {currencyBudgets.length > 1 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {currencyBudgets.map((budget) => (
+                        <button
+                          key={budget.id}
+                          type="button"
+                          onClick={() =>
+                            setActiveBudgetByCurrency((prev) => ({
+                              ...prev,
+                              [currency]: budget.id,
+                            }))
+                          }
+                          className={
+                            budget.id === activeBudgetId
+                              ? "border-accent/30 bg-accent/10 text-accent rounded-full border px-3 py-1.5 text-xs font-medium"
+                              : "border-foreground/10 text-muted-foreground hover:text-foreground rounded-full border px-3 py-1.5 text-xs font-medium"
+                          }
+                        >
+                          {budget.name}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                {series.projectedTotal !== null ? (
+                  <p
+                    className={`mt-1 text-xs ${overBudget ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}
+                  >
+                    {formatAmount(series.projectedTotal, currency)} projected
+                    by {formatDayLabel(period.end.toISOString())} vs.{" "}
+                    {formatAmount(budgetAmount, currency)} budget
+                  </p>
+                ) : lastActual ? (
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {formatAmount(lastActual.cumulative, currency)} spent of{" "}
+                    {formatAmount(budgetAmount, currency)} budget for this
+                    period.
+                  </p>
+                ) : null}
+                {points.length === 0 ? (
+                  <p className="text-muted-foreground mt-3 text-sm">
+                    {pending
+                      ? "Loading…"
+                      : "No spend recorded yet for this budget's scope."}
+                  </p>
+                ) : (
+                  <>
+                    <svg
+                      viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+                      preserveAspectRatio="none"
+                      className="mt-3 h-32 w-full overflow-visible"
+                      aria-label={`${currency} budget pacing for ${activeBudget.name}`}
+                      role="img"
+                    >
+                      <line
+                        x1="0"
+                        x2={CHART_WIDTH}
+                        y1={budgetLineY}
+                        y2={budgetLineY}
+                        stroke="var(--accent-secondary)"
+                        strokeWidth="1.5"
+                        strokeDasharray="4 3"
+                      />
+                      <polyline
+                        points={actualPolyline}
+                        fill="none"
+                        stroke="var(--accent)"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      {forecastPolyline ? (
+                        <polyline
+                          points={forecastPolyline}
+                          fill="none"
+                          stroke={overBudget ? "#f59e0b" : "var(--accent)"}
+                          strokeWidth="2"
+                          strokeDasharray="5 4"
+                          strokeLinecap="round"
+                        />
+                      ) : null}
+                      {actualMarkers.map(({ x, y, point }) => (
+                        <circle
+                          key={point.date}
+                          cx={x}
+                          cy={y}
+                          r={3}
+                          fill="var(--accent)"
+                          stroke="var(--dashboard-panel)"
+                          strokeWidth="1.5"
+                        >
+                          <title>
+                            {formatDayLabel(point.date)}:{" "}
+                            {formatAmount(point.cumulative, currency)}
+                          </title>
+                        </circle>
+                      ))}
+                    </svg>
+                    <p className="text-muted-foreground mt-2 text-[11px]">
+                      {formatDayLabel(period.start.toISOString())}–
+                      {formatDayLabel(period.end.toISOString())} · dashed line
+                      is the {formatAmount(budgetAmount, currency)} budget
+                      target
+                      {forecastPolyline
+                        ? "; the lighter dashed tail is an estimate — a trailing 7-day daily average projected across the rest of the period, not a statistical forecast"
+                        : ""}
+                      .
+                    </p>
+                  </>
+                )}
+              </div>
+            );
+          })}
+
+          <div className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Breakdown by dimension</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {BREAKDOWN_DIMENSIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setDimension(option)}
+                    className={
+                      option === dimension
+                        ? "border-accent/30 bg-accent/10 text-accent rounded-full border px-3 py-1.5 text-xs font-medium"
+                        : "border-foreground/10 text-muted-foreground hover:text-foreground rounded-full border px-3 py-1.5 text-xs font-medium"
+                    }
+                  >
+                    {SCOPE_DIMENSION_LABELS[option]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {dimensionPending ? (
+              <p className="text-muted-foreground mt-3 text-sm">Loading…</p>
+            ) : (
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                {overview.by_currency.map((currency) => {
+                  const points = dimensionByCurrency.get(currency.currency) ?? [];
+                  const grouped = new Map<string, number>();
+                  for (const point of points) {
+                    const label = point.group[dimension] ?? "Unassigned";
+                    grouped.set(
+                      label,
+                      (grouped.get(label) ?? 0) + Number(point.amount),
+                    );
+                  }
+                  const sorted = [...grouped.entries()].sort(
+                    (a, b) => Math.abs(b[1]) - Math.abs(a[1]),
+                  );
+                  const top = sorted.slice(0, 6);
+                  const otherAmount = sorted
+                    .slice(6)
+                    .reduce((sum, [, amount]) => sum + amount, 0);
+                  const maxAmount = Math.max(
+                    ...top.map(([, amount]) => Math.abs(amount)),
+                    Math.abs(otherAmount),
+                    1,
+                  );
+                  return (
+                    <div key={currency.currency}>
+                      <h4 className="text-muted-foreground text-xs font-semibold">
+                        {currency.currency}
+                      </h4>
+                      {top.length === 0 ? (
+                        <p className="text-muted-foreground mt-2 text-sm">
+                          No breakdown is available.
+                        </p>
+                      ) : (
+                        <div className="mt-2 space-y-3">
+                          {top.map(([label, amount], index) => (
+                            <div
+                              key={label}
+                              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
+                            >
+                              <span className="truncate text-xs font-medium">
+                                {label}
+                              </span>
+                              <span className="font-mono text-xs">
+                                {formatAmount(amount, currency.currency)}
+                              </span>
+                              <span className="bg-foreground/5 col-span-2 h-1.5 overflow-hidden rounded-full">
+                                <span
+                                  className="bg-accent block h-full origin-left animate-[demo-bar_.5s_ease-out_both] rounded-full motion-reduce:animate-none"
+                                  style={{
+                                    width: `${(Math.abs(amount) / maxAmount) * 100}%`,
+                                    opacity: 1 - index * 0.12,
+                                    animationDelay: `${index * 60}ms`,
+                                  }}
+                                />
+                              </span>
+                            </div>
+                          ))}
+                          {otherAmount !== 0 ? (
+                            <div className="border-foreground/10 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t pt-3">
+                              <span className="text-muted-foreground truncate text-xs font-medium">
+                                Other
+                              </span>
+                              <span className="text-muted-foreground font-mono text-xs">
+                                {formatAmount(otherAmount, currency.currency)}
+                              </span>
+                              <span className="bg-foreground/5 col-span-2 h-1.5 overflow-hidden rounded-full">
+                                <span
+                                  className="bg-foreground/30 block h-full origin-left animate-[demo-bar_.5s_ease-out_both] rounded-full motion-reduce:animate-none"
+                                  style={{
+                                    width: `${(Math.abs(otherAmount) / maxAmount) * 100}%`,
+                                  }}
+                                />
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             {overview.by_currency.map((currency) => {

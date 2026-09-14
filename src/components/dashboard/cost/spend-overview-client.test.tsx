@@ -5,7 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getCostOverviewAction,
   queryCostExplorerAction,
@@ -18,6 +18,14 @@ vi.mock("@/app/dashboard/products/cost-actions", () => ({
   getCostOverviewAction: vi.fn(),
   queryCostExplorerAction: vi.fn(),
 }));
+
+beforeEach(() => {
+  // The "Breakdown by dimension" panel queries Cost Explorer on mount,
+  // independent of the preset/custom-range interactions each test exercises
+  // — give it a harmless default so tests that don't care about it don't
+  // have to stub it themselves.
+  vi.mocked(queryCostExplorerAction).mockResolvedValue({ data: { items: [] } });
+});
 
 afterEach(() => {
   cleanup();
@@ -64,6 +72,7 @@ function renderClient(
       connectionId={null}
       targetId={null}
       scopeSuffix=""
+      budgets={[]}
       {...overrides}
     />,
   );

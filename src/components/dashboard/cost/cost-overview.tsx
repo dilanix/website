@@ -148,6 +148,7 @@ export async function CostOverview({
         connectionId={connectionId}
         targetId={targetId}
         scopeSuffix={scopeSuffix}
+        budgets={enabledBudgets}
       />
 
       <div>
