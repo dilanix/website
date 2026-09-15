@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CoreCostUsage } from "@/lib/core/api";
+import type { CoreCostUsage, CoreIntegrationTarget } from "@/lib/core/api";
 import { CostUsagePanel } from "./cost-usage-panel";
 
 vi.mock("@/app/dashboard/integrations/actions", () => ({
@@ -113,6 +113,51 @@ describe("CostUsagePanel", () => {
     expect(screen.getByText("Environment")).toBeTruthy();
     expect(screen.getByText("FargateTask")).toBeTruthy();
     expect(screen.getByText("manifest-1")).toBeTruthy();
+  });
+
+  it("shows the target account label once the connection has more than one target", () => {
+    const targets: CoreIntegrationTarget[] = [
+      {
+        id: "target-1",
+        organization_id: "org-1",
+        connection_id: "conn-1",
+        target_type: "account",
+        external_id: "111111111111",
+        display_name: "Production account label",
+        parent_target_id: null,
+        status: "verified",
+        provider_metadata: {},
+        created_at: "2026-09-01T00:00:00Z",
+        updated_at: "2026-09-01T00:00:00Z",
+      },
+      {
+        id: "target-2",
+        organization_id: "org-1",
+        connection_id: "conn-1",
+        target_type: "account",
+        external_id: "222222222222",
+        display_name: null,
+        parent_target_id: null,
+        status: "verified",
+        provider_metadata: {},
+        created_at: "2026-09-01T00:00:00Z",
+        updated_at: "2026-09-01T00:00:00Z",
+      },
+    ];
+
+    render(
+      <CostUsagePanel
+        connectionId="conn-1"
+        targets={targets}
+        costReadEnabled
+        focusExportEnabled
+        connectionSettingsHref="/dashboard/integrations/conn-1"
+        initialCostUsage={[row]}
+        initialTotal={1}
+      />,
+    );
+
+    expect(screen.getByText("Production account label")).toBeTruthy();
   });
 
   it("shows a not-enabled empty state instead of FOCUS data when the organization lacks the capability grant", () => {

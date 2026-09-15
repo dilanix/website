@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CoreResource } from "@/lib/core/api";
+import type { CoreIntegrationTarget, CoreResource } from "@/lib/core/api";
 import { ResourcePanel } from "./resource-panel";
 
 vi.mock("@/app/dashboard/integrations/actions", () => ({
@@ -69,5 +69,54 @@ describe("ResourcePanel", () => {
       "/dashboard/resources/resource-1?connection=conn-1&category=compute&type=compute.instance&region=us-east-1&lifecycle=active&sort=lastSeen&direction=desc",
     );
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("shows the target account label once the connection has more than one target", () => {
+    const targets: CoreIntegrationTarget[] = [
+      {
+        id: "target-1",
+        organization_id: "org-1",
+        connection_id: "conn-1",
+        target_type: "account",
+        external_id: "111111111111",
+        display_name: "Production",
+        parent_target_id: null,
+        status: "verified",
+        provider_metadata: {},
+        created_at: "2026-09-01T00:00:00Z",
+        updated_at: "2026-09-01T00:00:00Z",
+      },
+      {
+        id: "target-2",
+        organization_id: "org-1",
+        connection_id: "conn-1",
+        target_type: "account",
+        external_id: "222222222222",
+        display_name: null,
+        parent_target_id: null,
+        status: "verified",
+        provider_metadata: {},
+        created_at: "2026-09-01T00:00:00Z",
+        updated_at: "2026-09-01T00:00:00Z",
+      },
+    ];
+
+    render(
+      <ResourcePanel
+        connectionId="conn-1"
+        targets={targets}
+        initialResources={[resource]}
+        initialTotal={1}
+        initialFilterOptions={{
+          category_types: [
+            { category: "compute", resource_type: "compute.instance" },
+          ],
+          regions: ["us-east-1"],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Production")).toBeTruthy();
+    expect(screen.getByText("Target account")).toBeTruthy();
   });
 });

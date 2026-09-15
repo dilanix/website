@@ -7,6 +7,7 @@ import {
   listCostUsage,
   listIntegrations,
   listOrganizationCapabilities,
+  listTargets,
   integrationCapabilityCode,
 } from "@/lib/core/api";
 import type { CostBasis } from "@/lib/core/api";
@@ -34,7 +35,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-function requestedConnectionId(value: string | string[] | undefined) {
+function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
@@ -47,6 +48,7 @@ export default async function CostsPage({
 }: {
   searchParams: Promise<{
     connection?: string | string[];
+    target?: string | string[];
     basis?: string | string[];
     service?: string | string[];
     period?: string | string[];
@@ -87,7 +89,7 @@ export default async function CostsPage({
     query.start,
     query.end,
   ].some((value) => value !== undefined);
-  const requestedId = requestedConnectionId(query.connection);
+  const requestedId = firstParam(query.connection);
   const selectedConnection =
     costConnections.find((connection) => connection.id === requestedId) ??
     costConnections.find((connection) => connection.status === "connected") ??
@@ -124,12 +126,19 @@ export default async function CostsPage({
     );
   }
 
-  const connectionCapabilities = await listConnectionCapabilities(
-    organization.organization_id,
-    selectedConnection.id,
-    token,
-    false,
-  );
+  const [connectionCapabilities, connectionTargets] = await Promise.all([
+    listConnectionCapabilities(
+      organization.organization_id,
+      selectedConnection.id,
+      token,
+      false,
+    ),
+    listTargets(organization.organization_id, selectedConnection.id, token),
+  ]);
+  const requestedTargetId = firstParam(query.target);
+  const targetId =
+    connectionTargets.find((target) => target.id === requestedTargetId)
+      ?.id ?? null;
   const selectedIntegration = integrationsById.get(
     selectedConnection.integration_id,
   );
@@ -176,6 +185,7 @@ export default async function CostsPage({
           {
             limit: COST_SUMMARIES_PAGE_SIZE,
             offset: 0,
+            targetId,
             costBasis: initialCostBasis,
             serviceName: initialServiceName || null,
           },
@@ -189,6 +199,7 @@ export default async function CostsPage({
           {
             limit: COST_USAGE_PAGE_SIZE,
             offset: 0,
+            targetId,
           },
         )
       : Promise.resolve({ items: [], total: 0 }),
@@ -204,7 +215,9 @@ export default async function CostsPage({
         basePath="/dashboard/costs"
         integrations={integrations}
         connections={costConnections}
+        targets={connectionTargets}
         selectedConnectionId={selectedConnection.id}
+        selectedTargetId={targetId}
         showResources={Boolean(
           providerSlug &&
           activeOrganizationCapabilities.has(
@@ -241,8 +254,9 @@ export default async function CostsPage({
           <Section title="Cost overview">
             {costReadEnabled ? (
               <UnifiedCostTotals
-                key={selectedConnection.id}
+                key={`${selectedConnection.id}:${targetId ?? "all"}`}
                 connectionId={selectedConnection.id}
+                targetId={targetId}
                 range={presetRange("30d")}
               />
             ) : (
@@ -262,8 +276,10 @@ export default async function CostsPage({
           </Section>
           <Section title="Cost Explorer breakdown">
             <CostSummaryPanel
-              key={selectedConnection.id}
+              key={`${selectedConnection.id}:${targetId ?? "all"}`}
               connectionId={selectedConnection.id}
+              targetId={targetId}
+              targets={connectionTargets}
               costReadEnabled={costReadEnabled}
               connectionSettingsHref={connectionSettingsHref}
               initialCostSummaries={costSummaries.items}
@@ -279,8 +295,10 @@ export default async function CostsPage({
           {focusCostUsageEnabled ? (
             <Section title="FOCUS cost usage">
               <CostUsagePanel
-                key={selectedConnection.id}
+                key={`${selectedConnection.id}:${targetId ?? "all"}`}
                 connectionId={selectedConnection.id}
+                targetId={targetId}
+                targets={connectionTargets}
                 costReadEnabled={costReadEnabled}
                 focusExportEnabled
                 connectionSettingsHref={connectionSettingsHref}

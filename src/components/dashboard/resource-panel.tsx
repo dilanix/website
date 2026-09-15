@@ -11,7 +11,11 @@ import {
   useTransition,
 } from "react";
 import { ArrowUpDown, ChevronDown, RefreshCw, Search } from "lucide-react";
-import type { CoreResource, CoreResourceFilterOptions } from "@/lib/core/api";
+import type {
+  CoreResource,
+  CoreResourceFilterOptions,
+  CoreIntegrationTarget,
+} from "@/lib/core/api";
 import {
   listResourcesAction,
   listResourceFiltersAction,
@@ -121,14 +125,25 @@ function FilterSelect({
 function ResourceRow({
   resource,
   href,
+  targetLabel,
 }: {
   resource: CoreResource;
   href: Route;
+  /** `display_name ?? external_id` of the `IntegrationTarget` this resource
+   * belongs to (the provider account/subscription/project) — `null` when the
+   * connection only ever resolved to a single target, where a per-row label
+   * would be redundant with the connection scope already shown above. */
+  targetLabel: string | null;
 }) {
   return (
     <Link
       href={href}
-      className="hover:bg-foreground/[0.025] grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)]"
+      className={cn(
+        "hover:bg-foreground/[0.025] grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors",
+        targetLabel !== null
+          ? "md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(8rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)]"
+          : "md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)]",
+      )}
     >
       <span className="flex min-w-0 items-center gap-3">
         <span className="bg-foreground/5 text-muted-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
@@ -154,6 +169,11 @@ function ResourceRow({
       <span className="text-muted-foreground hidden truncate font-mono text-xs md:block">
         {resource.region}
       </span>
+      {targetLabel !== null ? (
+        <span className="text-muted-foreground hidden truncate text-xs md:block">
+          {targetLabel}
+        </span>
+      ) : null}
       <span className="justify-self-end md:justify-self-start">
         <StatusBadge status={resourceStatusTone(resource.status)}>
           {resource.status}
@@ -246,6 +266,8 @@ const ALL_VALUE = "all";
 
 export function ResourcePanel({
   connectionId,
+  targetId = null,
+  targets = [],
   initialResources,
   initialTotal,
   initialFilterOptions,
@@ -256,6 +278,14 @@ export function ResourcePanel({
   preferInitialFilters = false,
 }: {
   connectionId: string;
+  /** Narrows every fetch to one `IntegrationTarget` (provider account) within
+   * this connection — `null` reads every target the connection currently
+   * holds. Set from the `target` URL param via `CloudConnectionSelector`. */
+  targetId?: string | null;
+  /** This connection's own targets, for resolving each row's `target_id` to a
+   * human label (`display_name ?? external_id`) — never fetched here, since
+   * the page already loads them for `CloudConnectionSelector`. */
+  targets?: CoreIntegrationTarget[];
   initialResources: CoreResource[];
   initialTotal: number;
   /** What category/type/region options this connection's resources actually
@@ -273,6 +303,17 @@ export function ResourcePanel({
   initialSortDirection?: "asc" | "desc";
   preferInitialFilters?: boolean;
 }) {
+  const targetLabelById = useMemo(() => {
+    const result = new Map<string, string>();
+    for (const target of targets) {
+      result.set(target.id, target.display_name ?? target.external_id);
+    }
+    return result;
+  }, [targets]);
+  // Only worth a dedicated column once this connection actually has more
+  // than one target — with zero or one, every row shares the same target as
+  // the connection scope already shown above, so a per-row label is inert.
+  const showTargetColumn = targets.length > 1;
   const [resources, setResources] = useState(initialResources);
   const [total, setTotal] = useState(initialTotal);
   const [filterOptions, setFilterOptions] = useState(initialFilterOptions);
@@ -326,12 +367,13 @@ export function ResourcePanel({
         listResourcesAction(connectionId, {
           limit: RESOURCES_PAGE_SIZE,
           offset: 0,
+          targetId,
           category: next.category,
           resourceType: next.resourceType,
           region: next.region,
           lifecycleStatus: next.lifecycleStatus,
         }),
-        listResourceFiltersAction(connectionId),
+        listResourceFiltersAction(connectionId, targetId),
       ]);
       setRefreshing(false);
       if (resourcesResult.error || filtersResult.error) {
@@ -427,6 +469,7 @@ export function ResourcePanel({
       const result = await listResourcesAction(connectionId, {
         limit: RESOURCES_PAGE_SIZE,
         offset: resources.length,
+        targetId,
         category: filters.category,
         resourceType: filters.resourceType,
         region: filters.region,
@@ -674,7 +717,14 @@ export function ResourcePanel({
         />
       ) : (
         <div className="border-border-soft overflow-hidden rounded-2xl border">
-          <div className="border-border-soft bg-foreground/[0.025] hidden grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)] items-center gap-3 border-b px-4 py-3 md:grid">
+          <div
+            className={cn(
+              "border-border-soft bg-foreground/[0.025] hidden items-center gap-3 border-b px-4 py-3 md:grid",
+              showTargetColumn
+                ? "grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(8rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)]"
+                : "grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)]",
+            )}
+          >
             <SortHeader
               label="Resource"
               active={sortKey === "name"}
@@ -690,6 +740,11 @@ export function ResourcePanel({
               active={sortKey === "region"}
               onClick={() => selectSort("region")}
             />
+            {showTargetColumn ? (
+              <span className="text-muted-foreground text-left text-[11px] font-semibold tracking-wide uppercase">
+                Target account
+              </span>
+            ) : null}
             <SortHeader
               label="Status"
               active={sortKey === "status"}
@@ -706,6 +761,11 @@ export function ResourcePanel({
               <ResourceRow
                 key={resource.id}
                 resource={resource}
+                targetLabel={
+                  showTargetColumn
+                    ? (targetLabelById.get(resource.target_id) ?? null)
+                    : null
+                }
                 href={
                   `/dashboard/resources/${resource.id}?${new URLSearchParams({
                     connection: connectionId,

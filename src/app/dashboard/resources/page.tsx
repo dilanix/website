@@ -7,6 +7,7 @@ import {
   listOrganizationCapabilities,
   listResourceFilters,
   listResources,
+  listTargets,
   integrationCapabilityCode,
 } from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
@@ -27,7 +28,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-function requestedConnectionId(value: string | string[] | undefined) {
+function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
@@ -40,6 +41,7 @@ export default async function ResourcesPage({
 }: {
   searchParams: Promise<{
     connection?: string | string[];
+    target?: string | string[];
     category?: string | string[];
     type?: string | string[];
     region?: string | string[];
@@ -84,7 +86,7 @@ export default async function ResourcesPage({
     query.sort,
     query.direction,
   ].some((value) => value !== undefined);
-  const requestedId = requestedConnectionId(query.connection);
+  const requestedId = firstParam(query.connection);
   const selectedConnection =
     resourceConnections.find((connection) => connection.id === requestedId) ??
     resourceConnections.find(
@@ -149,18 +151,25 @@ export default async function ResourcesPage({
       ? requestedDirection
       : undefined;
 
-  const connectionCapabilities = await listConnectionCapabilities(
-    organization.organization_id,
-    selectedConnection.id,
-    token,
-    false,
-  );
+  const [connectionCapabilities, connectionTargets] = await Promise.all([
+    listConnectionCapabilities(
+      organization.organization_id,
+      selectedConnection.id,
+      token,
+      false,
+    ),
+    listTargets(organization.organization_id, selectedConnection.id, token),
+  ]);
   const inventoryEnabled = connectionCapabilities.some(
     (row) => row.enabled && row.capability.slug === "inventory.read",
   );
   const selectedProviderSlug = integrationsById.get(
     selectedConnection.integration_id,
   )?.slug;
+  const requestedTargetId = firstParam(query.target);
+  const targetId =
+    connectionTargets.find((target) => target.id === requestedTargetId)
+      ?.id ?? null;
 
   if (!inventoryEnabled) {
     return (
@@ -173,7 +182,9 @@ export default async function ResourcesPage({
           basePath="/dashboard/resources"
           integrations={integrations}
           connections={resourceConnections}
+          targets={connectionTargets}
           selectedConnectionId={selectedConnection.id}
+          selectedTargetId={targetId}
           showResources
           showCosts={Boolean(
             selectedProviderSlug &&
@@ -204,6 +215,7 @@ export default async function ResourcesPage({
     listResources(organization.organization_id, selectedConnection.id, token, {
       limit: RESOURCES_PAGE_SIZE,
       offset: 0,
+      targetId,
       category,
       resourceType,
       region,
@@ -213,6 +225,7 @@ export default async function ResourcesPage({
       organization.organization_id,
       selectedConnection.id,
       token,
+      targetId,
     ),
   ]);
 
@@ -226,7 +239,9 @@ export default async function ResourcesPage({
         basePath="/dashboard/resources"
         integrations={integrations}
         connections={resourceConnections}
+        targets={connectionTargets}
         selectedConnectionId={selectedConnection.id}
+        selectedTargetId={targetId}
         showResources
         showCosts={Boolean(
           selectedProviderSlug &&
@@ -251,8 +266,10 @@ export default async function ResourcesPage({
       ) : null}
       <Section title="Cloud inventory">
         <ResourcePanel
-          key={selectedConnection.id}
+          key={`${selectedConnection.id}:${targetId ?? "all"}`}
           connectionId={selectedConnection.id}
+          targetId={targetId}
+          targets={connectionTargets}
           initialResources={resources.items}
           initialTotal={resources.total}
           initialFilterOptions={filterOptions}

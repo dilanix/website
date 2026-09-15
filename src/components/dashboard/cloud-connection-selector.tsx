@@ -8,6 +8,7 @@ import { ChevronDown, Cloud, LoaderCircle } from "lucide-react";
 import type {
   CoreIntegration,
   CoreIntegrationConnection,
+  CoreIntegrationTarget,
 } from "@/lib/core/api";
 import { StatusBadge } from "./primitives";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
@@ -16,24 +17,37 @@ function isString(value: unknown): value is string {
   return typeof value === "string";
 }
 
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
 function statusTone(status: CoreIntegrationConnection["status"]) {
   if (status === "connected") return "success" as const;
   if (status === "error") return "warning" as const;
   return "neutral" as const;
 }
 
+const ALL_TARGETS_VALUE = "all";
+
 export function CloudConnectionSelector({
   basePath,
   integrations,
   connections,
+  targets = [],
   selectedConnectionId,
+  selectedTargetId = null,
   showResources,
   showCosts,
 }: {
   basePath: "/dashboard/resources" | "/dashboard/costs";
   integrations: CoreIntegration[];
   connections: CoreIntegrationConnection[];
+  /** Every target across `connections` — filtered per-connection below. A
+   * connection's target dropdown only renders once it holds more than one
+   * target; with zero or one, the connection filter alone is unambiguous. */
+  targets?: CoreIntegrationTarget[];
   selectedConnectionId: string;
+  selectedTargetId?: string | null;
   showResources: boolean;
   showCosts: boolean;
 }) {
@@ -43,6 +57,13 @@ export function CloudConnectionSelector({
   const storageKey = `cloud-connection:${basePath}`;
   const [storedConnectionId, setStoredConnectionId, { restored }] =
     useDashboardFilterState(storageKey, selectedConnectionId, isString);
+  const targetStorageKey = `cloud-connection-target:${basePath}:${selectedConnectionId}`;
+  const [storedTargetId, setStoredTargetId, { restored: targetRestored }] =
+    useDashboardFilterState<string | null>(
+      targetStorageKey,
+      selectedTargetId,
+      isNullableString,
+    );
   const integrationsById = useMemo(
     () =>
       new Map(integrations.map((integration) => [integration.id, integration])),
@@ -64,6 +85,14 @@ export function CloudConnectionSelector({
     .filter((group) => group.connections.length > 0);
   const unmatchedConnections = connections.filter(
     (connection) => !integrationsById.has(connection.integration_id),
+  );
+  const connectionTargets = useMemo(
+    () =>
+      targets.filter((target) => target.connection_id === selectedConnectionId),
+    [targets, selectedConnectionId],
+  );
+  const selectedTarget = connectionTargets.find(
+    (target) => target.id === selectedTargetId,
   );
 
   useEffect(() => {
@@ -99,6 +128,61 @@ export function CloudConnectionSelector({
     setStoredConnectionId,
   ]);
 
+  useEffect(() => {
+    const requestedTargetId = searchParams.get("target");
+    if (requestedTargetId) {
+      if (
+        storedTargetId !== requestedTargetId &&
+        connectionTargets.some((item) => item.id === requestedTargetId)
+      ) {
+        setStoredTargetId(requestedTargetId);
+      }
+      return;
+    }
+    if (
+      !targetRestored ||
+      !storedTargetId ||
+      storedTargetId === selectedTargetId ||
+      !connectionTargets.some((item) => item.id === storedTargetId)
+    ) {
+      return;
+    }
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("target", storedTargetId);
+    router.replace(`${basePath}?${next}` as Route);
+  }, [
+    basePath,
+    connectionTargets,
+    router,
+    searchParams,
+    selectedTargetId,
+    storedTargetId,
+    setStoredTargetId,
+    targetRestored,
+  ]);
+
+  function selectConnection(connectionId: string) {
+    setStoredConnectionId(connectionId);
+    const nextSearchParams = new URLSearchParams(searchParams.toString());
+    nextSearchParams.set("connection", connectionId);
+    // A target belongs to exactly one connection — never carry it across.
+    nextSearchParams.delete("target");
+    startTransition(() => {
+      router.push(`${basePath}?${nextSearchParams}` as Route);
+    });
+  }
+
+  function selectTarget(value: string) {
+    const targetId = value === ALL_TARGETS_VALUE ? null : value;
+    setStoredTargetId(targetId);
+    const nextSearchParams = new URLSearchParams(searchParams.toString());
+    if (targetId) nextSearchParams.set("target", targetId);
+    else nextSearchParams.delete("target");
+    startTransition(() => {
+      router.push(`${basePath}?${nextSearchParams}` as Route);
+    });
+  }
+
   return (
     <section className="border-border-soft bg-card-strong/60 flex flex-col justify-between gap-4 rounded-2xl border p-4 shadow-[0_16px_40px_var(--shadow-card)] sm:flex-row sm:items-center">
       <div className="flex min-w-0 items-center gap-3">
@@ -112,6 +196,9 @@ export function CloudConnectionSelector({
           <p className="mt-0.5 truncate text-sm font-medium">
             {selectedIntegration?.name ?? "Cloud provider"}
             {selectedConnection ? ` · ${selectedConnection.name}` : ""}
+            {selectedTarget
+              ? ` · ${selectedTarget.display_name ?? selectedTarget.external_id}`
+              : ""}
           </p>
         </div>
         {selectedConnection ? (
@@ -136,7 +223,10 @@ export function CloudConnectionSelector({
               <Link
                 key={item.path}
                 href={
-                  `${item.path}?connection=${encodeURIComponent(selectedConnectionId)}` as Route
+                  `${item.path}?${new URLSearchParams({
+                    connection: selectedConnectionId,
+                    ...(selectedTargetId ? { target: selectedTargetId } : {}),
+                  }).toString()}` as Route
                 }
                 aria-current={basePath === item.path ? "page" : undefined}
                 className={`rounded-md px-2.5 py-1.5 transition-colors ${
@@ -154,17 +244,7 @@ export function CloudConnectionSelector({
           <select
             value={selectedConnectionId}
             disabled={pending}
-            onChange={(event) => {
-              const connectionId = event.target.value;
-              setStoredConnectionId(connectionId);
-              const nextSearchParams = new URLSearchParams(
-                searchParams.toString(),
-              );
-              nextSearchParams.set("connection", connectionId);
-              startTransition(() => {
-                router.push(`${basePath}?${nextSearchParams}` as Route);
-              });
-            }}
+            onChange={(event) => selectConnection(event.target.value)}
             className="border-foreground/15 bg-background focus:border-accent h-10 w-full appearance-none rounded-xl border py-2 pr-10 pl-3 text-sm outline-none disabled:opacity-60"
           >
             {groupedConnections.map(({ integration, connections: items }) => (
@@ -198,6 +278,29 @@ export function CloudConnectionSelector({
             />
           )}
         </label>
+        {connectionTargets.length > 1 ? (
+          <label className="relative block w-full sm:w-72">
+            <span className="sr-only">Select target account</span>
+            <select
+              value={selectedTarget ? selectedTarget.id : ALL_TARGETS_VALUE}
+              disabled={pending}
+              onChange={(event) => selectTarget(event.target.value)}
+              className="border-foreground/15 bg-background focus:border-accent h-9 w-full appearance-none rounded-lg border py-1.5 pr-9 pl-3 text-xs outline-none disabled:opacity-60"
+            >
+              <option value={ALL_TARGETS_VALUE}>All targets</option>
+              {connectionTargets.map((target) => (
+                <option key={target.id} value={target.id}>
+                  {target.display_name ?? target.external_id}
+                  {target.status === "disabled" ? " (historical)" : ""}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={13}
+              className="text-muted-foreground pointer-events-none absolute top-2.5 right-2.5"
+            />
+          </label>
+        ) : null}
       </div>
     </section>
   );

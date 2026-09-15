@@ -70,11 +70,15 @@ function DiffLine({
 
 export function CostSummaryTotals({
   connectionId,
+  targetId = null,
   range,
   costBasis,
   refreshKey = 0,
 }: {
   connectionId: string;
+  /** Narrows the total to one `IntegrationTarget` within this connection —
+   * `null` sums every target the connection currently holds. */
+  targetId?: string | null;
   range: DateRange | null;
   costBasis: CostBasis;
   refreshKey?: number;
@@ -94,11 +98,13 @@ export function CostSummaryTotals({
           periodStart: range.start.toISOString(),
           periodEnd: range.end.toISOString(),
           costBasis,
+          targetId,
         }),
         getCostSummaryTotalsAction(connectionId, {
           periodStart: previousPeriod.start.toISOString(),
           periodEnd: previousPeriod.end.toISOString(),
           costBasis,
+          targetId,
         }),
       ]);
       if (currentResult.error) return setError(currentResult.error);
@@ -106,7 +112,7 @@ export function CostSummaryTotals({
       setCurrent(currentResult.data ?? null);
       setPrevious(previousResult.data ?? null);
     });
-  }, [connectionId, range, costBasis, refreshKey]);
+  }, [connectionId, targetId, range, costBasis, refreshKey]);
 
   return (
     <div

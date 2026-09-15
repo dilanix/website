@@ -525,10 +525,16 @@ export async function listResourcesAction(
 
 export async function listResourceFiltersAction(
   connectionId: string,
+  targetId?: string | null,
 ): Promise<ActionResult<CoreResourceFilterOptions>> {
   try {
     const { token, organizationId } = await context();
-    const data = await listResourceFilters(organizationId, connectionId, token);
+    const data = await listResourceFilters(
+      organizationId,
+      connectionId,
+      token,
+      targetId,
+    );
     return { data };
   } catch (error) {
     return { error: message(error) };

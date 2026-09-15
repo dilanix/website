@@ -12,7 +12,11 @@ import {
 import type { Route } from "next";
 import Link from "next/link";
 import { RefreshCw, Search } from "lucide-react";
-import type { CoreCostSummary, CostBasis } from "@/lib/core/api";
+import type {
+  CoreCostSummary,
+  CoreIntegrationTarget,
+  CostBasis,
+} from "@/lib/core/api";
 import { listCostSummariesAction } from "@/app/dashboard/integrations/actions";
 import {
   COST_BASIS_FILTER_ORDER,
@@ -69,9 +73,25 @@ function updateCostsUrl(values: Record<string, string | null>) {
   window.history.replaceState(null, "", url);
 }
 
-function CostSummaryRow({ costSummary }: { costSummary: CoreCostSummary }) {
+function CostSummaryRow({
+  costSummary,
+  targetLabel,
+}: {
+  costSummary: CoreCostSummary;
+  /** `display_name ?? external_id` of the `IntegrationTarget` this row's
+   * charges belong to — `null` when the connection only ever resolved to a
+   * single target, where a per-row label would be redundant. */
+  targetLabel: string | null;
+}) {
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-4 text-sm md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(7rem,0.7fr)]">
+    <div
+      className={cn(
+        "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-4 text-sm",
+        targetLabel !== null
+          ? "md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(7rem,0.7fr)]"
+          : "md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(7rem,0.7fr)]",
+      )}
+    >
       <div className="min-w-0">
         <p className="truncate font-medium">{costSummary.service_name}</p>
         <p className="text-muted-foreground mt-0.5 font-mono text-xs">
@@ -86,6 +106,11 @@ function CostSummaryRow({ costSummary }: { costSummary: CoreCostSummary }) {
           {costSummary.billing_authority}
         </span>
       </div>
+      {targetLabel !== null ? (
+        <div className="text-muted-foreground hidden truncate text-xs md:block">
+          {targetLabel}
+        </div>
+      ) : null}
       <div className="hidden items-center gap-2 md:flex">
         <StatusBadge status="neutral">
           {costBasisLabel(costSummary.cost_basis)}
@@ -128,6 +153,8 @@ function isPeriod(value: unknown): value is PeriodPresetId | "custom" {
 
 export function CostSummaryPanel({
   connectionId,
+  targetId = null,
+  targets = [],
   costReadEnabled,
   connectionSettingsHref,
   initialCostSummaries,
@@ -140,6 +167,14 @@ export function CostSummaryPanel({
   preferInitialFilters = false,
 }: {
   connectionId: string;
+  /** Narrows every fetch to one `IntegrationTarget` (provider account) within
+   * this connection — `null` reads every target the connection currently
+   * holds. Set from the `target` URL param via `CloudConnectionSelector`. */
+  targetId?: string | null;
+  /** This connection's own targets, for resolving each row's `target_id` to a
+   * human label — never fetched here, since the page already loads them for
+   * `CloudConnectionSelector`. */
+  targets?: CoreIntegrationTarget[];
   /** Whether `billing.read` is enabled on this connection — Core's read API
    * 403s rather than returning an empty page when it isn't
    * (`CostSummaryService.list_cost_summaries`), so this panel never even
@@ -155,6 +190,14 @@ export function CostSummaryPanel({
   initialCustomEnd?: string;
   preferInitialFilters?: boolean;
 }) {
+  const targetLabelById = useMemo(() => {
+    const result = new Map<string, string>();
+    for (const target of targets) {
+      result.set(target.id, target.display_name ?? target.external_id);
+    }
+    return result;
+  }, [targets]);
+  const showTargetColumn = targets.length > 1;
   const [costSummaries, setCostSummaries] = useState(initialCostSummaries);
   const [total, setTotal] = useState(initialTotal);
   const initialResolvedFilters: CostSummaryFilters = {
@@ -220,6 +263,7 @@ export function CostSummaryPanel({
       const result = await listCostSummariesAction(connectionId, {
         limit: COST_SUMMARIES_PAGE_SIZE,
         offset: 0,
+        targetId,
         costBasis: next.costBasis,
         serviceName: next.serviceName || null,
       });
@@ -282,6 +326,7 @@ export function CostSummaryPanel({
       const result = await listCostSummariesAction(connectionId, {
         limit: COST_SUMMARIES_PAGE_SIZE,
         offset: costSummaries.length,
+        targetId,
         costBasis: filters.costBasis,
         serviceName: filters.serviceName || null,
       });
@@ -451,6 +496,7 @@ export function CostSummaryPanel({
 
       <CostSummaryTotals
         connectionId={connectionId}
+        targetId={targetId}
         range={range}
         costBasis={filters.costBasis}
         refreshKey={refreshVersion}
@@ -497,15 +543,31 @@ export function CostSummaryPanel({
         />
       ) : (
         <div className="border-border-soft overflow-hidden rounded-2xl border">
-          <div className="border-border-soft bg-foreground/[0.025] text-muted-foreground hidden grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(7rem,0.7fr)] gap-3 border-b px-4 py-3 text-[11px] font-semibold tracking-wide uppercase md:grid">
+          <div
+            className={cn(
+              "border-border-soft bg-foreground/[0.025] text-muted-foreground hidden gap-3 border-b px-4 py-3 text-[11px] font-semibold tracking-wide uppercase md:grid",
+              showTargetColumn
+                ? "grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(7rem,0.7fr)]"
+                : "grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(7rem,0.7fr)]",
+            )}
+          >
             <span>Service / period</span>
             <span>Provider / authority</span>
+            {showTargetColumn ? <span>Target account</span> : null}
             <span>Basis</span>
             <span className="text-right">Amount</span>
           </div>
           <div className="divide-border-soft divide-y">
             {visibleCostSummaries.map((costSummary) => (
-              <CostSummaryRow key={costSummary.id} costSummary={costSummary} />
+              <CostSummaryRow
+                key={costSummary.id}
+                costSummary={costSummary}
+                targetLabel={
+                  showTargetColumn
+                    ? (targetLabelById.get(costSummary.target_id) ?? null)
+                    : null
+                }
+              />
             ))}
           </div>
         </div>

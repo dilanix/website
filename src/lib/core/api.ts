@@ -1048,6 +1048,7 @@ export interface CoreResourceListResponse {
 export interface ListResourcesParams {
   limit: number;
   offset: number;
+  targetId?: string | null;
   category?: string | null;
   resourceType?: string | null;
   region?: string | null;
@@ -1066,6 +1067,7 @@ export function listResources(
     limit: String(params.limit),
     offset: String(params.offset),
   });
+  if (params.targetId) query.set("target_id", params.targetId);
   if (params.category) query.set("category", params.category);
   if (params.resourceType) query.set("resource_type", params.resourceType);
   if (params.region) query.set("region", params.region);
@@ -1177,9 +1179,13 @@ export function listResourceFilters(
   organizationId: string,
   connectionId: string,
   token: string,
+  targetId?: string | null,
 ) {
+  const query = new URLSearchParams();
+  if (targetId) query.set("target_id", targetId);
+  const queryString = query.toString();
   return coreRequest<CoreResourceFilterOptions>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/resources/filters`,
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/resources/filters${queryString ? `?${queryString}` : ""}`,
     token,
   );
 }

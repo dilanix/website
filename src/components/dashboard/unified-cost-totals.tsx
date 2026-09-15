@@ -69,10 +69,14 @@ function DiffLine({
  */
 export function UnifiedCostTotals({
   connectionId,
+  targetId = null,
   range,
   refreshKey = 0,
 }: {
   connectionId: string;
+  /** Narrows the total to one `IntegrationTarget` within this connection —
+   * `null` sums every target the connection currently holds. */
+  targetId?: string | null;
   range: DateRange | null;
   refreshKey?: number;
 }) {
@@ -90,10 +94,12 @@ export function UnifiedCostTotals({
         getUnifiedCostTotalsAction(connectionId, {
           periodStart: range.start.toISOString(),
           periodEnd: range.end.toISOString(),
+          targetId,
         }),
         getUnifiedCostTotalsAction(connectionId, {
           periodStart: previousPeriod.start.toISOString(),
           periodEnd: previousPeriod.end.toISOString(),
+          targetId,
         }),
       ]);
       if (currentResult.error) return setError(currentResult.error);
@@ -101,7 +107,7 @@ export function UnifiedCostTotals({
       setCurrent(currentResult.data ?? null);
       setPrevious(previousResult.data ?? null);
     });
-  }, [connectionId, range, refreshKey]);
+  }, [connectionId, targetId, range, refreshKey]);
 
   return (
     <div

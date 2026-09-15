@@ -713,6 +713,25 @@ describe("resources", () => {
     expect(calledUrl).not.toContain("category=");
   });
 
+  it("sends targetId as a target_id query param", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResources } = await import("./api");
+    await listResources("org-123", "conn-1", "test-token", {
+      limit: 20,
+      offset: 0,
+      targetId: "target-1",
+    });
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).toContain("target_id=target-1");
+  });
+
   it("sends lifecycleStatus as a lifecycle_status query param", async () => {
     const mockResponse = { items: [], total: 0 };
     const response = new Response(JSON.stringify(mockResponse), {
@@ -801,6 +820,26 @@ describe("resources", () => {
       }),
     );
     expect(result).toEqual(mockResponse);
+  });
+
+  it("scopes the filter options to a target when one is given", async () => {
+    const mockResponse = { category_types: [], regions: [] };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResourceFilters } = await import("./api");
+    await listResourceFilters(
+      "org-123",
+      "conn-1",
+      "test-token",
+      "target-1",
+    );
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).toContain("resources/filters?target_id=target-1");
   });
 });
 

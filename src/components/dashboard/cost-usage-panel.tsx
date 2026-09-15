@@ -3,6 +3,7 @@ import {
   type FormEvent,
   useEffect,
   useEffectEvent,
+  useMemo,
   useRef,
   useState,
   useTransition,
@@ -10,7 +11,11 @@ import {
 import type { Route } from "next";
 import Link from "next/link";
 import { ChevronDown, RefreshCw, Search } from "lucide-react";
-import type { CoreCostUsage, CostUsageMetric } from "@/lib/core/api";
+import type {
+  CoreCostUsage,
+  CoreIntegrationTarget,
+  CostUsageMetric,
+} from "@/lib/core/api";
 import { listCostUsageAction } from "@/app/dashboard/integrations/actions";
 import {
   COST_USAGE_METRIC_FILTER_ORDER,
@@ -155,11 +160,17 @@ function costUsageDetails(costUsage: CoreCostUsage): Record<string, unknown> {
 function CostUsageRow({
   costUsage,
   metric,
+  targetLabel,
   expanded,
   onToggle,
 }: {
   costUsage: CoreCostUsage;
   metric: CostUsageMetric;
+  /** `display_name ?? external_id` of the `IntegrationTarget` this charge row
+   * belongs to — distinct from `billing_account_id` (the FOCUS export's own
+   * provider account field, shown regardless): `null` when the connection
+   * only ever resolved to a single target. */
+  targetLabel: string | null;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -189,6 +200,9 @@ function CostUsageRow({
           <span className="mt-0.5 block truncate">
             {costUsage.billing_account_id}
           </span>
+          {targetLabel !== null ? (
+            <span className="mt-0.5 block truncate">{targetLabel}</span>
+          ) : null}
         </div>
         <div className="text-muted-foreground hidden truncate text-xs md:block">
           {costUsage.sku_id ?? costUsage.sku_meter ?? "—"}
@@ -248,6 +262,8 @@ function isCostUsageMetric(value: unknown): value is CostUsageMetric {
  */
 export function CostUsagePanel({
   connectionId,
+  targetId = null,
+  targets = [],
   costReadEnabled,
   focusExportEnabled,
   connectionSettingsHref,
@@ -255,6 +271,14 @@ export function CostUsagePanel({
   initialTotal,
 }: {
   connectionId: string;
+  /** Narrows every fetch to one `IntegrationTarget` (provider account) within
+   * this connection — `null` reads every target the connection currently
+   * holds. Set from the `target` URL param via `CloudConnectionSelector`. */
+  targetId?: string | null;
+  /** This connection's own targets, for resolving each row's `target_id` to a
+   * human label — never fetched here, since the page already loads them for
+   * `CloudConnectionSelector`. */
+  targets?: CoreIntegrationTarget[];
   /** Whether `billing.read` is enabled on this connection — Core's read API
    * 403s rather than returning an empty page when it isn't
    * (`CostUsageService.list_cost_usages`), so this panel never even attempts
@@ -270,6 +294,14 @@ export function CostUsagePanel({
   initialCostUsage: CoreCostUsage[];
   initialTotal: number;
 }) {
+  const targetLabelById = useMemo(() => {
+    const result = new Map<string, string>();
+    for (const target of targets) {
+      result.set(target.id, target.display_name ?? target.external_id);
+    }
+    return result;
+  }, [targets]);
+  const showTargetLabel = targets.length > 1;
   const [costUsage, setCostUsage] = useState(initialCostUsage);
   const [total, setTotal] = useState(initialTotal);
   const [metric, setMetric] = useDashboardFilterState<CostUsageMetric>(
@@ -307,6 +339,7 @@ export function CostUsagePanel({
       const result = await listCostUsageAction(connectionId, {
         limit: COST_USAGE_PAGE_SIZE,
         offset: 0,
+        targetId,
         serviceName: next.serviceName || null,
         billingAccountId: next.billingAccountId || null,
       });
@@ -346,6 +379,7 @@ export function CostUsagePanel({
       const result = await listCostUsageAction(connectionId, {
         limit: COST_USAGE_PAGE_SIZE,
         offset: costUsage.length,
+        targetId,
         serviceName: filters.serviceName || null,
         billingAccountId: filters.billingAccountId || null,
       });
@@ -499,6 +533,11 @@ export function CostUsagePanel({
                 key={row.id}
                 costUsage={row}
                 metric={metric}
+                targetLabel={
+                  showTargetLabel
+                    ? (targetLabelById.get(row.target_id) ?? null)
+                    : null
+                }
                 expanded={expandedId === row.id}
                 onToggle={() =>
                   setExpandedId((current) =>
