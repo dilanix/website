@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  getCostDriversAction,
   getCostOverviewAction,
   queryCostExplorerAction,
 } from "@/app/dashboard/products/cost-actions";
@@ -17,6 +18,7 @@ import { SpendOverviewClient } from "./spend-overview-client";
 vi.mock("@/app/dashboard/products/cost-actions", () => ({
   getCostOverviewAction: vi.fn(),
   queryCostExplorerAction: vi.fn(),
+  getCostDriversAction: vi.fn(),
 }));
 
 beforeEach(() => {
@@ -25,6 +27,20 @@ beforeEach(() => {
   // — give it a harmless default so tests that don't care about it don't
   // have to stub it themselves.
   vi.mocked(queryCostExplorerAction).mockResolvedValue({ data: { items: [] } });
+  // The "Cost Drivers" panel queries on mount too, same as the dimension
+  // breakdown above — same harmless default.
+  vi.mocked(getCostDriversAction).mockResolvedValue({
+    data: {
+      period_start: "",
+      period_end: "",
+      previous_period_start: "",
+      previous_period_end: "",
+      metric: "effective_cost",
+      dimension: "service_name",
+      increases: [],
+      decreases: [],
+    },
+  });
 });
 
 afterEach(() => {

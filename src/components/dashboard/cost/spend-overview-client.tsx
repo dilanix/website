@@ -12,11 +12,14 @@ import type { Route } from "next";
 import Link from "next/link";
 import { ArrowRight, Minus, TrendingDown, TrendingUp } from "lucide-react";
 import {
+  getCostDriversAction,
   getCostOverviewAction,
   queryCostExplorerAction,
 } from "@/app/dashboard/products/cost-actions";
 import type {
   CoreBudget,
+  CoreCostDriver,
+  CoreCostDrivers,
   CoreCostExplorerPoint,
   CoreCostOverview,
   ScopeDimension,
@@ -135,6 +138,16 @@ const BREAKDOWN_DIMENSIONS: ScopeDimension[] = [
   "billing_account_id",
   "region_id",
 ];
+
+function groupDriversByCurrency(drivers: CoreCostDriver[]) {
+  const map = new Map<string, CoreCostDriver[]>();
+  for (const driver of drivers) {
+    const list = map.get(driver.currency) ?? [];
+    list.push(driver);
+    map.set(driver.currency, list);
+  }
+  return map;
+}
 
 function groupBudgetsByCurrency(budgets: CoreBudget[]) {
   const map = new Map<string, CoreBudget[]>();
@@ -441,6 +454,53 @@ export function SpendOverviewClient({
     list.push(point);
     dimensionByCurrency.set(point.currency, list);
   }
+
+  // ---------------------------------------------------------------------
+  // Cost Drivers — why did spend change? (service-level current-vs-previous
+  // deltas, ranked). Queried over the same disclosed complete-FOCUS range as
+  // the dimension breakdown above, mirroring that effect's caching/guard.
+  // ---------------------------------------------------------------------
+  const [drivers, setDrivers] = useState<CoreCostDrivers | null>(null);
+  const [driversPending, setDriversPending] = useState(false);
+  const [driversError, setDriversError] = useState(false);
+  const driversCacheRef = useRef(new Map<string, CoreCostDrivers>());
+
+  useEffect(() => {
+    if (!focusPeriodStart || !focusPeriodEnd) return;
+    const cacheKey = `${focusPeriodStart}:${focusPeriodEnd}:${dataScopeKey}`;
+    const cached = driversCacheRef.current.get(cacheKey);
+    if (cached) {
+      setDrivers(cached);
+      setDriversPending(false);
+      setDriversError(false);
+      return;
+    }
+    let cancelled = false;
+    setDriversPending(true);
+    setDriversError(false);
+    getCostDriversAction({
+      periodStart: focusPeriodStart,
+      periodEnd: focusPeriodEnd,
+      connectionId,
+      targetId,
+      topN: 5,
+    }).then((response) => {
+      if (cancelled) return;
+      if (response.data) driversCacheRef.current.set(cacheKey, response.data);
+      setDrivers(response.data ?? null);
+      setDriversError(Boolean(response.error) || !response.data);
+      setDriversPending(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [focusPeriodStart, focusPeriodEnd, dataScopeKey, connectionId, targetId]);
+
+  const increasesByCurrency = groupDriversByCurrency(drivers?.increases ?? []);
+  const decreasesByCurrency = groupDriversByCurrency(drivers?.decreases ?? []);
+  const driverCurrencies = [
+    ...new Set([...increasesByCurrency.keys(), ...decreasesByCurrency.keys()]),
+  ].sort();
 
   // ---------------------------------------------------------------------
   // Budget pacing (plan vs. actual vs. a naive trailing-average forecast)
@@ -998,6 +1058,144 @@ export function SpendOverviewClient({
                         </div>
                       )}
                     </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
+            <div>
+              <h3 className="text-sm font-semibold">
+                Cost Drivers — why did spend change?
+              </h3>
+              <p className="text-muted-foreground mt-1 text-xs">
+                Service-level totals for{" "}
+                {focusCoverageLabel
+                  ? "this FOCUS range"
+                  : "the selected period"}{" "}
+                vs. the immediately preceding period of equal length,
+                full-outer-aligned so a service present in only one period still
+                appears.
+              </p>
+            </div>
+            {!resultMatchesDisplayedRange ? (
+              <p className="text-muted-foreground mt-3 text-sm">Loading…</p>
+            ) : !hasCompleteFocusCoverage ? (
+              <p className="text-muted-foreground mt-3 text-sm">
+                Cost Drivers are unavailable until the selected period has
+                complete FOCUS coverage.
+              </p>
+            ) : driversPending ? (
+              <p className="text-muted-foreground mt-3 text-sm">Loading…</p>
+            ) : driversError ? (
+              <p className="text-muted-foreground mt-3 text-sm">
+                Cost Drivers could not be loaded. Try again.
+              </p>
+            ) : driverCurrencies.length === 0 ? (
+              <p className="text-muted-foreground mt-3 text-sm">
+                No service moved enough to rank for this period.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-6 lg:grid-cols-2">
+                {driverCurrencies.map((currency) => {
+                  const increases = increasesByCurrency.get(currency) ?? [];
+                  const decreases = decreasesByCurrency.get(currency) ?? [];
+                  return (
+                    <Fragment key={currency}>
+                      <div>
+                        <h4 className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold">
+                          <TrendingUp size={13} className="text-red-500" />
+                          Top increases · {currency}
+                        </h4>
+                        {increases.length === 0 ? (
+                          <p className="text-muted-foreground mt-2 text-sm">
+                            Nothing grew this period.
+                          </p>
+                        ) : (
+                          <div className="mt-2 space-y-2.5">
+                            {increases.map((driver, index) => (
+                              <div
+                                key={`${driver.value ?? "unassigned"}-${index}`}
+                                className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-0.5"
+                              >
+                                <span className="truncate text-xs font-medium">
+                                  {driver.value ?? "Unassigned service"}
+                                </span>
+                                <span className="font-mono text-xs text-red-500">
+                                  +
+                                  {formatAmount(
+                                    Number(driver.absolute_delta),
+                                    currency,
+                                  )}
+                                </span>
+                                <span className="text-muted-foreground col-span-2 text-[11px]">
+                                  {formatAmount(
+                                    Number(driver.previous_amount),
+                                    currency,
+                                  )}{" "}
+                                  →{" "}
+                                  {formatAmount(
+                                    Number(driver.current_amount),
+                                    currency,
+                                  )}
+                                  {driver.percentage_change !== null
+                                    ? ` (+${driver.percentage_change.toFixed(1)}%)`
+                                    : " (new)"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold">
+                          <TrendingDown
+                            size={13}
+                            className="text-emerald-500"
+                          />
+                          Top decreases · {currency}
+                        </h4>
+                        {decreases.length === 0 ? (
+                          <p className="text-muted-foreground mt-2 text-sm">
+                            Nothing shrank this period.
+                          </p>
+                        ) : (
+                          <div className="mt-2 space-y-2.5">
+                            {decreases.map((driver, index) => (
+                              <div
+                                key={`${driver.value ?? "unassigned"}-${index}`}
+                                className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-0.5"
+                              >
+                                <span className="truncate text-xs font-medium">
+                                  {driver.value ?? "Unassigned service"}
+                                </span>
+                                <span className="font-mono text-xs text-emerald-600 dark:text-emerald-400">
+                                  {formatAmount(
+                                    Number(driver.absolute_delta),
+                                    currency,
+                                  )}
+                                </span>
+                                <span className="text-muted-foreground col-span-2 text-[11px]">
+                                  {formatAmount(
+                                    Number(driver.previous_amount),
+                                    currency,
+                                  )}{" "}
+                                  →{" "}
+                                  {formatAmount(
+                                    Number(driver.current_amount),
+                                    currency,
+                                  )}
+                                  {driver.percentage_change !== null
+                                    ? ` (${driver.percentage_change.toFixed(1)}%)`
+                                    : " (dropped)"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </Fragment>
                   );
                 })}
               </div>

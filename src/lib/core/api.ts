@@ -2084,6 +2084,57 @@ export function getCostOverview(
   );
 }
 
+export interface CoreCostDriver {
+  dimension: string;
+  value: string | null;
+  currency: string;
+  current_amount: string;
+  previous_amount: string;
+  absolute_delta: string;
+  /** `null` when `previous_amount` is zero — never an invented percentage. */
+  percentage_change: number | null;
+}
+
+export interface CoreCostDrivers {
+  period_start: string;
+  period_end: string;
+  previous_period_start: string;
+  previous_period_end: string;
+  metric: string;
+  /** Fixed to `"service_name"` for now — see `DriversService`'s own docstring
+   * in Core for why this isn't yet caller-selectable. */
+  dimension: string;
+  /** Ranked by `absolute_delta` descending, capped at the caller's `top_n`. */
+  increases: CoreCostDriver[];
+  /** Ranked by `absolute_delta` ascending (most negative first), capped at
+   * the caller's `top_n`. */
+  decreases: CoreCostDriver[];
+}
+
+export function getCostDrivers(
+  organizationId: string,
+  token: string,
+  params: {
+    periodStart: string;
+    periodEnd: string;
+    connectionId?: string | null;
+    targetId?: string | null;
+    topN?: number;
+  },
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  if (params.connectionId) query.set("connection_id", params.connectionId);
+  if (params.targetId) query.set("target_id", params.targetId);
+  if (params.topN !== undefined) query.set("top_n", String(params.topN));
+  return coreRequest<CoreCostDrivers>(
+    `/v1/organizations/${organizationId}/cost/drivers?${query.toString()}`,
+    token,
+  );
+}
+
 export type SavedViewVisibility = "private" | "organization";
 
 export interface CoreSavedView {

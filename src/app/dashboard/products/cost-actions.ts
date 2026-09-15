@@ -15,6 +15,7 @@ import {
   deleteReport,
   deleteSavedView,
   getAllocationBreakdown,
+  getCostDrivers,
   getCostOverview,
   queryCostExplorer,
   runCostExplorerSavedView,
@@ -27,6 +28,7 @@ import {
   type CoreAllocationBreakdown,
   type CoreAnomaly,
   type CoreBudget,
+  type CoreCostDrivers,
   type CoreCostExplorerResponse,
   type CoreCostOverview,
   type CoreReport,
@@ -258,6 +260,27 @@ export async function getCostOverviewAction(
   try {
     const { token, organizationId } = await context();
     const data = await getCostOverview(organizationId, token, {
+      periodStart: parsed.data.periodStart,
+      periodEnd: parsed.data.periodEnd,
+      connectionId: parsed.data.connectionId,
+      targetId: parsed.data.targetId,
+      topN: parsed.data.topN,
+    });
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getCostDriversAction(
+  input: z.infer<typeof overviewQuerySchema>,
+): Promise<CostActionResult<CoreCostDrivers>> {
+  const parsed = overviewQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getCostDrivers(organizationId, token, {
       periodStart: parsed.data.periodStart,
       periodEnd: parsed.data.periodEnd,
       connectionId: parsed.data.connectionId,
