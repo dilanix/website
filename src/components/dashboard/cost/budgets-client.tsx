@@ -7,7 +7,11 @@ import {
   deleteBudgetAction,
   updateBudgetAction,
 } from "@/app/dashboard/products/cost-actions";
-import type { BudgetPeriod, CoreBudget, CoreScopeCondition } from "@/lib/core/api";
+import type {
+  BudgetPeriod,
+  CoreBudget,
+  CoreScopeCondition,
+} from "@/lib/core/api";
 import { DestructiveActionDialog } from "@/components/dashboard/destructive-action-dialog";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { ScopeEditor, summarizeScope } from "./scope-editor";
@@ -101,7 +105,8 @@ function BudgetDialog({
       amount: form.amount,
       currency: form.currency,
       period: form.period,
-      periodStart: form.period === "custom" ? toIsoDate(form.periodStart) : null,
+      periodStart:
+        form.period === "custom" ? toIsoDate(form.periodStart) : null,
       periodEnd: form.period === "custom" ? toIsoDate(form.periodEnd) : null,
       alertThresholds: parseThresholds(form.alertThresholds),
       recipients: parseRecipients(form.recipients),
@@ -117,12 +122,12 @@ function BudgetDialog({
   }
 
   return (
-    <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 backdrop-blur-sm">
+    <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="budget-dialog-title"
-        className="bg-background border-foreground/15 my-8 w-full max-w-xl rounded-xl border p-6 shadow-2xl"
+        className="bg-background border-foreground/15 max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-xl border p-6 shadow-2xl"
       >
         <div className="flex items-start justify-between gap-4">
           <h2 id="budget-dialog-title" className="text-lg font-semibold">
@@ -419,15 +424,14 @@ export function BudgetsClient({
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {budget.alert_thresholds.map((threshold) => {
-                    const crossed = budget.notified_thresholds.includes(
-                      threshold,
-                    );
+                    const crossed =
+                      budget.notified_thresholds.includes(threshold);
                     return (
                       <span
                         key={threshold}
                         className={
                           crossed
-                            ? "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-300 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
+                            ? "inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-300"
                             : "border-border-soft bg-card-strong/75 text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
                         }
                       >
