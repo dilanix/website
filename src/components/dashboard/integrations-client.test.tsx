@@ -39,6 +39,20 @@ const integrations: CoreIntegration[] = [
   },
 ];
 
+const mixedCategoryIntegrations: CoreIntegration[] = [
+  ...integrations,
+  {
+    id: "slack-id",
+    slug: "slack",
+    name: "Slack",
+    description: "Team messaging.",
+    category: "platform",
+    status: "active",
+    icon_key: "slack",
+    connection_supported: false,
+  },
+];
+
 const awsGranted: CoreOrganizationCapability[] = [
   {
     id: "cap-provider-aws",
@@ -97,5 +111,25 @@ describe("IntegrationsClient", () => {
 
     fireEvent.click(notEnabled);
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("groups providers into category sections, cloud before platform", () => {
+    render(
+      <IntegrationsClient
+        integrations={mixedCategoryIntegrations}
+        initialConnections={[]}
+        organizationCapabilities={awsGranted}
+      />,
+    );
+
+    const headings = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((heading) => heading.textContent);
+
+    expect(headings.indexOf("Cloud")).toBeGreaterThanOrEqual(0);
+    expect(headings.indexOf("Platform")).toBeGreaterThan(
+      headings.indexOf("Cloud"),
+    );
+    expect(headings).toContain("Slack");
   });
 });

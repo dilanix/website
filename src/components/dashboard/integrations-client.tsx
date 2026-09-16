@@ -18,8 +18,49 @@ import type {
 } from "@/lib/core/api";
 import { providerCapabilityCode } from "@/lib/core/api";
 import { createConnectionAction } from "@/app/dashboard/integrations/actions";
-import { EmptyState, StatusBadge } from "./primitives";
+import { EmptyState, Section, StatusBadge } from "./primitives";
 import { AwsOnboardingWizard } from "./integrations/aws-onboarding-wizard";
+
+// Display-only ordering/labels for the catalog's `category` metadata — never
+// a business-logic branch, mirrors the `groupByDomain`/`domainLabel` pattern
+// in `settings-client.tsx`. An unrecognized category still renders (sorted
+// after the known ones), so a new backend category never disappears here.
+const CATEGORY_ORDER = ["cloud", "platform", "ai", "devtools"];
+const CATEGORY_LABELS: Record<string, string> = {
+  cloud: "Cloud",
+  platform: "Platform",
+  ai: "AI",
+  devtools: "Developer Tools",
+};
+
+function categoryLabel(category: string | null) {
+  if (!category) return "Other";
+  return (
+    CATEGORY_LABELS[category] ??
+    category.charAt(0).toUpperCase() + category.slice(1)
+  );
+}
+
+function groupByCategory(integrations: CoreIntegration[]) {
+  const groups = new Map<string, CoreIntegration[]>();
+  for (const integration of integrations) {
+    const key = integration.category ?? "";
+    const existing = groups.get(key);
+    if (existing) {
+      existing.push(integration);
+    } else {
+      groups.set(key, [integration]);
+    }
+  }
+  return Array.from(groups.entries()).sort(([a], [b]) => {
+    const indexA = CATEGORY_ORDER.indexOf(a);
+    const indexB = CATEGORY_ORDER.indexOf(b);
+    if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  });
+}
 
 // The one integration with a dedicated onboarding wizard today — see
 // `integrations/aws-onboarding-wizard.tsx`. A future provider (GCP, Azure,
@@ -151,119 +192,123 @@ export function IntegrationsClient({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {integrations.map((integration) => {
-          const integrationConnections = connections.filter(
-            (connection) => connection.integration_id === integration.id,
-          );
-          const connectedCount = integrationConnections.filter(
-            (connection) => connection.status === "connected",
-          ).length;
-          const errorCount = integrationConnections.filter(
-            (connection) => connection.status === "error",
-          ).length;
-          const providerGranted = hasProviderAccess(integration.slug);
-          const canConnect =
-            integration.connection_supported && providerGranted;
-          return (
-            <article
-              key={integration.id}
-              className="border-border-soft bg-card-strong/45 flex min-h-72 flex-col rounded-2xl border p-5 shadow-[0_16px_40px_var(--shadow-card)]"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`flex h-11 w-11 items-center justify-center rounded-xl font-mono text-xs font-bold ${providerTone(integration.slug)}`}
-                    aria-hidden="true"
-                  >
-                    {providerCode(integration)}
-                  </span>
-                  <div>
-                    <h2 className="text-sm font-semibold">
-                      {integration.name}
-                    </h2>
-                    {integration.category ? (
-                      <p className="text-muted-foreground text-xs capitalize">
-                        {integration.category}
-                      </p>
+      {groupByCategory(integrations).map(([category, categoryIntegrations]) => (
+        <Section
+          key={category || "other"}
+          title={categoryLabel(category || null)}
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {categoryIntegrations.map((integration) => {
+              const integrationConnections = connections.filter(
+                (connection) => connection.integration_id === integration.id,
+              );
+              const connectedCount = integrationConnections.filter(
+                (connection) => connection.status === "connected",
+              ).length;
+              const errorCount = integrationConnections.filter(
+                (connection) => connection.status === "error",
+              ).length;
+              const providerGranted = hasProviderAccess(integration.slug);
+              const canConnect =
+                integration.connection_supported && providerGranted;
+              return (
+                <article
+                  key={integration.id}
+                  className="border-border-soft bg-card-strong/45 flex min-h-72 flex-col rounded-2xl border p-5 shadow-[0_16px_40px_var(--shadow-card)]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`flex h-11 w-11 items-center justify-center rounded-xl font-mono text-xs font-bold ${providerTone(integration.slug)}`}
+                        aria-hidden="true"
+                      >
+                        {providerCode(integration)}
+                      </span>
+                      <div>
+                        <h2 className="text-sm font-semibold">
+                          {integration.name}
+                        </h2>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setConnectTo(integration)}
+                      disabled={!canConnect}
+                      title={
+                        !integration.connection_supported
+                          ? `${integration.name} connection support is coming soon`
+                          : !providerGranted
+                            ? `${integration.name} isn't enabled for your organization. Contact Dilanix.`
+                            : `Connect ${integration.name}`
+                      }
+                      className="border-foreground/15 hover:bg-foreground/5 inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                    >
+                      {canConnect ? <Plus size={13} /> : null}
+                      {!integration.connection_supported
+                        ? "Coming soon"
+                        : !providerGranted
+                          ? "Not enabled"
+                          : "Add connection"}
+                    </button>
+                  </div>
+                  {integration.description ? (
+                    <p className="text-muted-foreground mt-3 text-xs leading-5">
+                      {integration.description}
+                    </p>
+                  ) : null}
+                  <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 size={13} className="text-success" />
+                      {connectedCount} connected
+                    </span>
+                    {errorCount ? (
+                      <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-300">
+                        <AlertTriangle size={13} /> {errorCount} needs attention
+                      </span>
                     ) : null}
                   </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setConnectTo(integration)}
-                  disabled={!canConnect}
-                  title={
-                    !integration.connection_supported
-                      ? `${integration.name} connection support is coming soon`
-                      : !providerGranted
-                        ? `${integration.name} isn't enabled for your organization. Contact Dilanix.`
-                        : `Connect ${integration.name}`
-                  }
-                  className="border-foreground/15 hover:bg-foreground/5 inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
-                >
-                  {canConnect ? <Plus size={13} /> : null}
-                  {!integration.connection_supported
-                    ? "Coming soon"
-                    : !providerGranted
-                      ? "Not enabled"
-                      : "Add connection"}
-                </button>
-              </div>
-              {integration.description ? (
-                <p className="text-muted-foreground mt-3 text-xs leading-5">
-                  {integration.description}
-                </p>
-              ) : null}
-              <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs">
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 size={13} className="text-success" />
-                  {connectedCount} connected
-                </span>
-                {errorCount ? (
-                  <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-300">
-                    <AlertTriangle size={13} /> {errorCount} needs attention
-                  </span>
-                ) : null}
-              </div>
-              {integrationConnections.length ? (
-                <ul className="border-foreground/10 mt-4 divide-y border-t">
-                  {integrationConnections.map((connection) => (
-                    <li key={connection.id} className="py-3">
-                      <Link
-                        href={`/dashboard/integrations/${connection.id}`}
-                        className="group flex items-center justify-between gap-3"
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="group-hover:text-foreground block truncate text-sm font-medium">
-                            {connection.name}
-                          </span>
-                          <span className="text-muted-foreground mt-0.5 flex items-center gap-1 text-[11px]">
-                            <Clock3 size={11} />
-                            {formatLastSync(connection.last_synced_at)}
-                          </span>
-                        </span>
-                        <span className="flex shrink-0 items-center gap-2">
-                          <StatusBadge status={statusTone(connection.status)}>
-                            {connection.status}
-                          </StatusBadge>
-                          <span className="text-muted-foreground group-hover:text-accent text-xs font-medium">
-                            Manage
-                          </span>
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-muted-foreground mt-4 text-xs">
-                  No connections yet.
-                </p>
-              )}
-            </article>
-          );
-        })}
-      </div>
+                  {integrationConnections.length ? (
+                    <ul className="border-foreground/10 mt-4 divide-y border-t">
+                      {integrationConnections.map((connection) => (
+                        <li key={connection.id} className="py-3">
+                          <Link
+                            href={`/dashboard/integrations/${connection.id}`}
+                            className="group flex items-center justify-between gap-3"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="group-hover:text-foreground block truncate text-sm font-medium">
+                                {connection.name}
+                              </span>
+                              <span className="text-muted-foreground mt-0.5 flex items-center gap-1 text-[11px]">
+                                <Clock3 size={11} />
+                                {formatLastSync(connection.last_synced_at)}
+                              </span>
+                            </span>
+                            <span className="flex shrink-0 items-center gap-2">
+                              <StatusBadge
+                                status={statusTone(connection.status)}
+                              >
+                                {connection.status}
+                              </StatusBadge>
+                              <span className="text-muted-foreground group-hover:text-accent text-xs font-medium">
+                                Manage
+                              </span>
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-muted-foreground mt-4 text-xs">
+                      No connections yet.
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </Section>
+      ))}
 
       {connectTo ? (
         <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
