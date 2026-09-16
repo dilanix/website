@@ -16,6 +16,7 @@ import {
   deleteSavedView,
   getAllocationBreakdown,
   getCostDrivers,
+  getCostForecast,
   getCostOverview,
   queryCostExplorer,
   runCostExplorerSavedView,
@@ -30,6 +31,7 @@ import {
   type CoreBudget,
   type CoreCostDrivers,
   type CoreCostExplorerResponse,
+  type CoreCostForecast,
   type CoreCostOverview,
   type CoreReport,
   type CoreSavedView,
@@ -289,6 +291,37 @@ export async function getCostDriversAction(
     });
     return { data };
   } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getCostForecastAction(
+  input: z.infer<typeof overviewQuerySchema>,
+): Promise<
+  CostActionResult<CoreCostForecast> & {
+    /** `true` when Core rejected the period with its own 400
+     * `InvalidForecastPeriodError` (not currently in progress) — lets the
+     * client show "pick a range that includes today" instead of a generic
+     * failure, without ever duplicating Core's own `now` check client-side. */
+    periodNotInProgress?: boolean;
+  }
+> {
+  const parsed = overviewQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getCostForecast(organizationId, token, {
+      periodStart: parsed.data.periodStart,
+      periodEnd: parsed.data.periodEnd,
+      connectionId: parsed.data.connectionId,
+      targetId: parsed.data.targetId,
+    });
+    return { data };
+  } catch (error) {
+    if (error instanceof CoreApiError && error.status === 400) {
+      return { error: message(error), periodNotInProgress: true };
+    }
     return { error: message(error) };
   }
 }

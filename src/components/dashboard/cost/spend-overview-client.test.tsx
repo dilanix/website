@@ -8,6 +8,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getCostDriversAction,
+  getCostForecastAction,
   getCostOverviewAction,
   queryCostExplorerAction,
 } from "@/app/dashboard/products/cost-actions";
@@ -19,6 +20,7 @@ vi.mock("@/app/dashboard/products/cost-actions", () => ({
   getCostOverviewAction: vi.fn(),
   queryCostExplorerAction: vi.fn(),
   getCostDriversAction: vi.fn(),
+  getCostForecastAction: vi.fn(),
 }));
 
 beforeEach(() => {
@@ -39,6 +41,21 @@ beforeEach(() => {
       dimension: "service_name",
       increases: [],
       decreases: [],
+    },
+  });
+  // The "Forecast" panel queries on mount too — same harmless default.
+  vi.mocked(getCostForecastAction).mockResolvedValue({
+    data: {
+      period_start: "",
+      period_end: "",
+      source: "cost_usage",
+      data_through: "",
+      complete_days: 0,
+      remaining_days: 0,
+      method: "period_to_date_daily_rate",
+      method_version: "1",
+      insufficient_data: true,
+      by_currency: [],
     },
   });
 });
@@ -321,6 +338,85 @@ describe("SpendOverviewClient", () => {
     expect(screen.queryByText("USD · Previous period")).toBeNull();
     expect(
       screen.getByText("10.00 USD (100.0%) vs previous period"),
+    ).toBeTruthy();
+  });
+
+  it("queries Forecast for the currently displayed range and renders the projection", async () => {
+    const displayed = monthToDateRange();
+    vi.mocked(getCostForecastAction).mockResolvedValue({
+      data: {
+        period_start: displayed.start.toISOString(),
+        period_end: displayed.end.toISOString(),
+        source: "cost_usage",
+        data_through: "2026-09-10T00:00:00Z",
+        complete_days: 10,
+        remaining_days: 21,
+        method: "period_to_date_daily_rate",
+        method_version: "1",
+        insufficient_data: false,
+        by_currency: [
+          {
+            currency: "USD",
+            observed_amount: "100.00",
+            daily_rate: "10.00",
+            forecast_amount: "310.00",
+          },
+        ],
+      },
+    });
+
+    renderClient();
+
+    await waitFor(() =>
+      expect(getCostForecastAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          periodStart: displayed.start.toISOString(),
+          periodEnd: displayed.end.toISOString(),
+        }),
+      ),
+    );
+    expect(await screen.findByText("310.00 USD")).toBeTruthy();
+    expect(screen.getByText(/100\.00 USD so far/)).toBeTruthy();
+  });
+
+  it("shows an insufficient-data message instead of a fabricated projection", async () => {
+    const displayed = monthToDateRange();
+    vi.mocked(getCostForecastAction).mockResolvedValue({
+      data: {
+        period_start: displayed.start.toISOString(),
+        period_end: displayed.end.toISOString(),
+        source: "cost_usage",
+        data_through: displayed.start.toISOString(),
+        complete_days: 0,
+        remaining_days: 30,
+        method: "period_to_date_daily_rate",
+        method_version: "1",
+        insufficient_data: true,
+        by_currency: [],
+      },
+    });
+
+    renderClient();
+
+    expect(
+      await screen.findByText(
+        "Not enough complete days yet in this period to project a forecast.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("shows a not-in-progress message for a historical period instead of a raw error", async () => {
+    vi.mocked(getCostForecastAction).mockResolvedValue({
+      error: "forecast period must be currently in progress: ...",
+      periodNotInProgress: true,
+    });
+
+    renderClient();
+
+    expect(
+      await screen.findByText(
+        "Forecast only applies to a period that is still in progress — pick a range that includes today.",
+      ),
     ).toBeTruthy();
   });
 });

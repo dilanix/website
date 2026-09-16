@@ -13,6 +13,7 @@ import Link from "next/link";
 import { ArrowRight, Minus, TrendingDown, TrendingUp } from "lucide-react";
 import {
   getCostDriversAction,
+  getCostForecastAction,
   getCostOverviewAction,
   queryCostExplorerAction,
 } from "@/app/dashboard/products/cost-actions";
@@ -21,6 +22,7 @@ import type {
   CoreCostDriver,
   CoreCostDrivers,
   CoreCostExplorerPoint,
+  CoreCostForecast,
   CoreCostOverview,
   ScopeDimension,
 } from "@/lib/core/api";
@@ -501,6 +503,65 @@ export function SpendOverviewClient({
   const driverCurrencies = [
     ...new Set([...increasesByCurrency.keys(), ...decreasesByCurrency.keys()]),
   ].sort();
+
+  // ---------------------------------------------------------------------
+  // Forecast — where is spend headed? Deterministic period-to-date daily-rate
+  // projection to the end of the *selected* period. Unlike Cost Drivers above,
+  // this has a `cost_summary` fallback in Core, so it is not gated behind
+  // `hasCompleteFocusCoverage` — only behind the period actually being
+  // currently in progress, which `ForecastService` itself requires
+  // (`period_start <= now < period_end`). That check is Core's alone — the
+  // client never re-derives "now" itself; a past custom range simply comes
+  // back with `periodNotInProgress` set on the action's response.
+  // ---------------------------------------------------------------------
+  const [forecast, setForecast] = useState<CoreCostForecast | null>(null);
+  const [forecastNotInProgress, setForecastNotInProgress] = useState(false);
+  const [forecastPending, setForecastPending] = useState(false);
+  const [forecastError, setForecastError] = useState(false);
+  const forecastCacheRef = useRef(new Map<string, CoreCostForecast>());
+
+  useEffect(() => {
+    if (!resultMatchesDisplayedRange) return;
+    const cacheKey = `${displayedPeriodStart}:${displayedPeriodEnd}:${dataScopeKey}`;
+    const cached = forecastCacheRef.current.get(cacheKey);
+    if (cached) {
+      setForecast(cached);
+      setForecastNotInProgress(false);
+      setForecastPending(false);
+      setForecastError(false);
+      return;
+    }
+    let cancelled = false;
+    setForecastPending(true);
+    setForecastError(false);
+    getCostForecastAction({
+      periodStart: displayedPeriodStart,
+      periodEnd: displayedPeriodEnd,
+      connectionId,
+      targetId,
+    }).then((response) => {
+      if (cancelled) return;
+      if (response.data) forecastCacheRef.current.set(cacheKey, response.data);
+      setForecast(response.data ?? null);
+      setForecastNotInProgress(Boolean(response.periodNotInProgress));
+      setForecastError(
+        Boolean(response.error) &&
+          !response.periodNotInProgress &&
+          !response.data,
+      );
+      setForecastPending(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    resultMatchesDisplayedRange,
+    displayedPeriodStart,
+    displayedPeriodEnd,
+    dataScopeKey,
+    connectionId,
+    targetId,
+  ]);
 
   // ---------------------------------------------------------------------
   // Budget pacing (plan vs. actual vs. a naive trailing-average forecast)
@@ -1199,6 +1260,76 @@ export function SpendOverviewClient({
                   );
                 })}
               </div>
+            )}
+          </div>
+
+          <div className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold">
+                Forecast — where is spend headed?
+              </h3>
+              {forecast ? <SourceBadge source={forecast.source} /> : null}
+            </div>
+            <p className="text-muted-foreground mt-1 text-xs">
+              A deterministic period-to-date daily-rate projection to the end of
+              the selected period — not a statistical or ML forecast.
+            </p>
+            {!resultMatchesDisplayedRange || forecastPending ? (
+              <p className="text-muted-foreground mt-3 text-sm">Loading…</p>
+            ) : forecastNotInProgress ? (
+              <p className="text-muted-foreground mt-3 text-sm">
+                Forecast only applies to a period that is still in progress —
+                pick a range that includes today.
+              </p>
+            ) : forecastError ? (
+              <p className="text-muted-foreground mt-3 text-sm">
+                Forecast could not be loaded. Try again.
+              </p>
+            ) : !forecast ||
+              forecast.insufficient_data ||
+              forecast.by_currency.length === 0 ? (
+              <p className="text-muted-foreground mt-3 text-sm">
+                Not enough complete days yet in this period to project a
+                forecast.
+              </p>
+            ) : (
+              <>
+                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {forecast.by_currency.map((currency) => (
+                    <StatCard
+                      key={currency.currency}
+                      label={`${currency.currency} · Projected total`}
+                      value={
+                        <>
+                          <span className="block">
+                            {formatAmount(
+                              Number(currency.forecast_amount),
+                              currency.currency,
+                            )}
+                          </span>
+                          <span className="text-muted-foreground mt-1 block text-xs font-normal tracking-normal">
+                            {formatAmount(
+                              Number(currency.observed_amount),
+                              currency.currency,
+                            )}{" "}
+                            so far
+                            {currency.daily_rate !== null
+                              ? ` · ${formatAmount(Number(currency.daily_rate), currency.currency)}/day`
+                              : ""}
+                          </span>
+                        </>
+                      }
+                    />
+                  ))}
+                </div>
+                <p className="text-muted-foreground mt-3 text-[11px]">
+                  Based on {forecast.complete_days} complete day
+                  {forecast.complete_days === 1 ? "" : "s"} (through{" "}
+                  {formatDayLabel(forecast.data_through)}), extrapolated across
+                  the remaining {forecast.remaining_days} day
+                  {forecast.remaining_days === 1 ? "" : "s"} of the period.
+                </p>
+              </>
             )}
           </div>
 

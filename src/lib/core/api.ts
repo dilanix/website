@@ -2135,6 +2135,64 @@ export function getCostDrivers(
   );
 }
 
+export interface CoreCostForecastCurrency {
+  currency: string;
+  /** Sum of every *complete* day in the period so far — today itself is
+   * never "complete" (Core's totals query only returns a whole day once
+   * queried through that day's own end boundary), so this excludes today
+   * even though it may already have some spend recorded. */
+  observed_amount: string;
+  /** `observed_amount` divided by `complete_days` — `null` exactly when
+   * `CoreCostForecast.insufficient_data` is `true`. */
+  daily_rate: string | null;
+  /** `observed_amount` plus `daily_rate` times the period's remaining
+   * days — `null` alongside `daily_rate`. */
+  forecast_amount: string | null;
+}
+
+export interface CoreCostForecast {
+  period_start: string;
+  period_end: string;
+  /** Which dataset actually answered — same disclosed, never-inferred
+   * convention as `CoreCostOverview.source`. */
+  source: BillingCostSource;
+  /** Start of the current UTC day — the boundary between complete history
+   * and today's own not-yet-queryable charges. */
+  data_through: string;
+  complete_days: number;
+  /** Calendar days, today included, still ahead of `data_through`. */
+  remaining_days: number;
+  method: string;
+  method_version: string;
+  /** `true` when `complete_days` is zero (too early in the period to
+   * compute any daily rate) — `by_currency` is empty in that case rather
+   * than a fabricated zero for an unknown currency set. */
+  insufficient_data: boolean;
+  by_currency: CoreCostForecastCurrency[];
+}
+
+export function getCostForecast(
+  organizationId: string,
+  token: string,
+  params: {
+    periodStart: string;
+    periodEnd: string;
+    connectionId?: string | null;
+    targetId?: string | null;
+  },
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  if (params.connectionId) query.set("connection_id", params.connectionId);
+  if (params.targetId) query.set("target_id", params.targetId);
+  return coreRequest<CoreCostForecast>(
+    `/v1/organizations/${organizationId}/cost/forecast?${query.toString()}`,
+    token,
+  );
+}
+
 export type SavedViewVisibility = "private" | "organization";
 
 export interface CoreSavedView {
