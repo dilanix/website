@@ -165,6 +165,7 @@ export async function CostOverview({
         targetId={targetId}
         scopeSuffix={scopeSuffix}
         budgets={enabledBudgets}
+        anomalies={anomalies.items}
       />
 
       <div>

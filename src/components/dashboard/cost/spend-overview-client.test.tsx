@@ -109,6 +109,7 @@ function renderClient(
       targetId={null}
       scopeSuffix=""
       budgets={[]}
+      anomalies={[]}
       {...overrides}
     />,
   );
@@ -377,6 +378,83 @@ describe("SpendOverviewClient", () => {
     );
     expect(await screen.findByText("310.00 USD")).toBeTruthy();
     expect(screen.getByText(/100\.00 USD so far/)).toBeTruthy();
+  });
+
+  it("renders the spend trajectory chart once a daily FOCUS series is available", async () => {
+    const displayed = monthToDateRange();
+    const day1 = displayed.start.toISOString();
+    const day2 = new Date(
+      displayed.start.getTime() + 24 * 60 * 60 * 1000,
+    ).toISOString();
+    vi.mocked(getCostForecastAction).mockResolvedValue({
+      data: {
+        period_start: displayed.start.toISOString(),
+        period_end: displayed.end.toISOString(),
+        source: "cost_usage",
+        data_through: day2,
+        complete_days: 2,
+        remaining_days: 10,
+        method: "period_to_date_daily_rate",
+        method_version: "1",
+        insufficient_data: false,
+        by_currency: [
+          {
+            currency: "USD",
+            observed_amount: "30.00",
+            daily_rate: "15.00",
+            forecast_amount: "180.00",
+          },
+        ],
+      },
+    });
+
+    renderClient({
+      initialOverview: {
+        ...overview,
+        period_start: displayed.start.toISOString(),
+        period_end: displayed.end.toISOString(),
+      },
+      initialTrendPoints: [
+        {
+          bucket_start: day1,
+          bucket_end: day2,
+          currency: "USD",
+          amount: "10.00",
+          group: {},
+        },
+        {
+          bucket_start: day2,
+          bucket_end: day2,
+          currency: "USD",
+          amount: "20.00",
+          group: {},
+        },
+      ],
+      anomalies: [
+        {
+          id: "an-1",
+          organization_id: "org-1",
+          detected_at: day2,
+          period_start: day1,
+          period_end: day2,
+          expected_amount: "5.00",
+          actual_amount: "10.00",
+          currency: "USD",
+          deviation_percent: "100",
+          severity: "high",
+          status: "open",
+          acknowledged_at: null,
+          resolved_at: null,
+          scope: [],
+          created_at: day1,
+          updated_at: day1,
+        },
+      ],
+    });
+
+    expect(
+      await screen.findByRole("img", { name: /Cumulative USD spend/ }),
+    ).toBeTruthy();
   });
 
   it("shows an insufficient-data message instead of a fabricated projection", async () => {

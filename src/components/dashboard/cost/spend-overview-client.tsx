@@ -18,6 +18,7 @@ import {
   queryCostExplorerAction,
 } from "@/app/dashboard/products/cost-actions";
 import type {
+  CoreAnomaly,
   CoreBudget,
   CoreCostDriver,
   CoreCostDrivers,
@@ -45,6 +46,11 @@ import {
   buildPacingSeries,
   resolveBudgetPeriod,
 } from "@/components/dashboard/cost/budget-pacing";
+import {
+  SpendTrajectoryChart,
+  type SpendTrajectoryAnomaly,
+  type SpendTrajectoryPoint,
+} from "@/components/dashboard/cost/spend-trajectory-chart";
 
 type OverviewPresetId = PeriodPresetId | "mtd";
 type OverviewPeriodId = OverviewPresetId | "custom";
@@ -129,8 +135,19 @@ function sumAmounts(points: CoreCostExplorerPoint[]) {
   return points.reduce((sum, point) => sum + Number(point.amount), 0);
 }
 
-const CHART_WIDTH = 560;
-const CHART_HEIGHT = 140;
+/** Per-day amounts into a running cumulative series — the shape
+ * `SpendTrajectoryChart` plots, matching `budget-pacing.ts`'s own inline
+ * cumulative reduction for the per-budget pacing chart below. */
+function toCumulative(points: CoreCostExplorerPoint[]): SpendTrajectoryPoint[] {
+  const sorted = [...points].sort((a, b) =>
+    a.bucket_start.localeCompare(b.bucket_start),
+  );
+  let cumulative = 0;
+  return sorted.map((point) => {
+    cumulative += Number(point.amount);
+    return { date: point.bucket_start, cumulative };
+  });
+}
 
 /** The three `ScopeDimension`s most useful as an at-a-glance Overview
  * breakdown — the rest (resource-level, tags, ...) stay Explorer-only, where
@@ -161,48 +178,6 @@ function groupBudgetsByCurrency(budgets: CoreBudget[]) {
   return map;
 }
 
-/** x is mapped by calendar position within `period` (not by point index),
- * since the forecast tail's final point lands on `period.end`, not on the
- * next daily step. */
-function buildPacingChart(
-  series: ReturnType<typeof buildPacingSeries>,
-  budgetAmount: number,
-  period: DateRange,
-) {
-  const periodStartMs = period.start.getTime();
-  const span = Math.max(1, period.end.getTime() - periodStartMs);
-  const xFor = (iso: string) =>
-    ((new Date(iso).getTime() - periodStartMs) / span) * CHART_WIDTH;
-
-  const maxValue = Math.max(
-    1,
-    budgetAmount,
-    ...series.actual.map((point) => point.cumulative),
-    ...(series.forecastTail?.map((point) => point.cumulative) ?? []),
-  );
-  const yFor = (value: number) =>
-    CHART_HEIGHT - (value / maxValue) * CHART_HEIGHT;
-
-  const actualMarkers = series.actual.map((point) => ({
-    x: xFor(point.date),
-    y: yFor(point.cumulative),
-    point,
-  }));
-  const actualPolyline = actualMarkers.map(({ x, y }) => `${x},${y}`).join(" ");
-  const forecastPolyline = series.forecastTail
-    ? series.forecastTail
-        .map((point) => `${xFor(point.date)},${yFor(point.cumulative)}`)
-        .join(" ")
-    : null;
-
-  return {
-    actualMarkers,
-    actualPolyline,
-    forecastPolyline,
-    budgetLineY: yFor(budgetAmount),
-  };
-}
-
 export function SpendOverviewClient({
   initialOverview,
   initialTrendPoints,
@@ -214,6 +189,7 @@ export function SpendOverviewClient({
   targetId,
   scopeSuffix,
   budgets,
+  anomalies,
 }: {
   initialOverview: CoreCostOverview | null;
   initialTrendPoints: CoreCostExplorerPoint[];
@@ -225,6 +201,7 @@ export function SpendOverviewClient({
   targetId: string | null;
   scopeSuffix: string;
   budgets: CoreBudget[];
+  anomalies: CoreAnomaly[];
 }) {
   const initialRangeKey = `${initialRange.start.toISOString()}:${initialRange.end.toISOString()}`;
   const [preset, setPreset, { restored: presetRestored }] =
@@ -638,6 +615,16 @@ export function SpendOverviewClient({
     );
   }
 
+  // Anomalies within the displayed period, for the trend chart's markers —
+  // detection is always whole-organization today (`CoreAnomaly.scope` is
+  // always `[]`), so these apply to the org-wide trend regardless of the
+  // connection/target narrowing above.
+  const anomaliesInRange = anomalies.filter(
+    (anomaly) =>
+      anomaly.period_start >= displayedPeriodStart &&
+      anomaly.period_start < displayedPeriodEnd,
+  );
+
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-2">
@@ -860,12 +847,6 @@ export function SpendOverviewClient({
               const points = pacingByBudgetId[activeBudget.id] ?? [];
               const pending = pacingPendingIds.has(activeBudget.id);
               const series = buildPacingSeries(points, period);
-              const {
-                actualMarkers,
-                actualPolyline,
-                forecastPolyline,
-                budgetLineY,
-              } = buildPacingChart(series, budgetAmount, period);
               const overBudget =
                 series.projectedTotal !== null &&
                 series.projectedTotal > budgetAmount;
@@ -926,67 +907,24 @@ export function SpendOverviewClient({
                     </p>
                   ) : (
                     <>
-                      <svg
-                        viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-                        preserveAspectRatio="none"
-                        className="mt-3 h-32 w-full overflow-visible"
-                        aria-label={`${currency} budget pacing for ${activeBudget.name}`}
-                        role="img"
-                      >
-                        <line
-                          x1="0"
-                          x2={CHART_WIDTH}
-                          y1={budgetLineY}
-                          y2={budgetLineY}
-                          stroke="var(--accent-secondary)"
-                          strokeWidth="1.5"
-                          strokeDasharray="4 3"
+                      <div className="mt-3">
+                        <SpendTrajectoryChart
+                          currency={currency}
+                          periodStart={period.start.toISOString()}
+                          periodEnd={period.end.toISOString()}
+                          actual={series.actual}
+                          forecastTail={series.forecastTail}
+                          budgetAmount={budgetAmount}
+                          height={180}
                         />
-                        <polyline
-                          points={actualPolyline}
-                          fill="none"
-                          stroke="var(--accent)"
-                          strokeWidth="3"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        {forecastPolyline ? (
-                          <polyline
-                            points={forecastPolyline}
-                            fill="none"
-                            stroke={overBudget ? "#f59e0b" : "var(--accent)"}
-                            strokeWidth="2"
-                            strokeDasharray="5 4"
-                            strokeLinecap="round"
-                          />
-                        ) : null}
-                        {actualMarkers.map(({ x, y, point }) => (
-                          <circle
-                            key={point.date}
-                            cx={x}
-                            cy={y}
-                            r={3}
-                            fill="var(--accent)"
-                            stroke="var(--dashboard-panel)"
-                            strokeWidth="1.5"
-                          >
-                            <title>
-                              {formatDayLabel(point.date)}:{" "}
-                              {formatAmount(point.cumulative, currency)}
-                            </title>
-                          </circle>
-                        ))}
-                      </svg>
-                      <p className="text-muted-foreground mt-2 text-[11px]">
-                        {formatDayLabel(period.start.toISOString())}–
-                        {formatDayLabel(period.end.toISOString())} · dashed line
-                        is the {formatAmount(budgetAmount, currency)} budget
-                        target
-                        {forecastPolyline
-                          ? "; the lighter dashed tail is an estimate — a trailing 7-day daily average projected across the rest of the period, not a statistical forecast"
-                          : ""}
-                        .
-                      </p>
+                      </div>
+                      {series.forecastTail ? (
+                        <p className="text-muted-foreground mt-2 text-[11px]">
+                          The lighter dashed tail is an estimate — a trailing
+                          7-day daily average projected across the rest of the
+                          period, not a statistical forecast.
+                        </p>
+                      ) : null}
                     </>
                   )}
                 </div>
@@ -1263,16 +1201,17 @@ export function SpendOverviewClient({
             )}
           </div>
 
-          <div className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
+          <div className="border-border-soft bg-dashboard-panel dashboard-panel-highlight mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-semibold">
-                Forecast — where is spend headed?
+                Spend trajectory — trend, forecast &amp; anomalies
               </h3>
               {forecast ? <SourceBadge source={forecast.source} /> : null}
             </div>
             <p className="text-muted-foreground mt-1 text-xs">
-              A deterministic period-to-date daily-rate projection to the end of
-              the selected period — not a statistical or ML forecast.
+              Cumulative spend for the selected period, projected to its end by
+              Core&apos;s deterministic daily-rate forecast — not a statistical
+              or ML model.
             </p>
             {!resultMatchesDisplayedRange || forecastPending ? (
               <p className="text-muted-foreground mt-3 text-sm">Loading…</p>
@@ -1294,35 +1233,92 @@ export function SpendOverviewClient({
               </p>
             ) : (
               <>
-                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {forecast.by_currency.map((currency) => (
-                    <StatCard
-                      key={currency.currency}
-                      label={`${currency.currency} · Projected total`}
-                      value={
-                        <>
-                          <span className="block">
-                            {formatAmount(
-                              Number(currency.forecast_amount),
-                              currency.currency,
-                            )}
-                          </span>
-                          <span className="text-muted-foreground mt-1 block text-xs font-normal tracking-normal">
-                            {formatAmount(
-                              Number(currency.observed_amount),
-                              currency.currency,
-                            )}{" "}
-                            so far
-                            {currency.daily_rate !== null
-                              ? ` · ${formatAmount(Number(currency.daily_rate), currency.currency)}/day`
-                              : ""}
-                          </span>
-                        </>
-                      }
-                    />
-                  ))}
+                <div className="mt-5 space-y-6">
+                  {forecast.by_currency.map((entry) => {
+                    // Only chartable when FOCUS coverage resolved a daily
+                    // series for this currency — Forecast itself may still
+                    // have answered (possibly from `cost_summary`, which has
+                    // no daily granularity), or the Explorer trend fetch
+                    // simply hasn't resolved yet. Falls back to a plain
+                    // summary rather than a chart with no line to draw.
+                    const cumulativeActual =
+                      hasCompleteFocusCoverage && focusPeriodStart
+                        ? toCumulative(
+                            trendByCurrency.get(entry.currency) ?? [],
+                          )
+                        : [];
+                    if (cumulativeActual.length === 0 || !focusPeriodStart) {
+                      return (
+                        <StatCard
+                          key={entry.currency}
+                          label={`${entry.currency} · Projected total`}
+                          value={
+                            <>
+                              <span className="block">
+                                {formatAmount(
+                                  Number(entry.forecast_amount),
+                                  entry.currency,
+                                )}
+                              </span>
+                              <span className="text-muted-foreground mt-1 block text-xs font-normal tracking-normal">
+                                {formatAmount(
+                                  Number(entry.observed_amount),
+                                  entry.currency,
+                                )}{" "}
+                                so far
+                                {entry.daily_rate !== null
+                                  ? ` · ${formatAmount(Number(entry.daily_rate), entry.currency)}/day`
+                                  : ""}
+                              </span>
+                            </>
+                          }
+                        />
+                      );
+                    }
+                    const lastActual =
+                      cumulativeActual[cumulativeActual.length - 1]!;
+                    const forecastTail: SpendTrajectoryPoint[] | null =
+                      entry.forecast_amount !== null
+                        ? [
+                            lastActual,
+                            {
+                              date: displayedPeriodEnd,
+                              cumulative: Number(entry.forecast_amount),
+                            },
+                          ]
+                        : null;
+                    const currencyAnomalies: SpendTrajectoryAnomaly[] =
+                      anomaliesInRange
+                        .filter(
+                          (anomaly) => anomaly.currency === entry.currency,
+                        )
+                        .map((anomaly) => ({
+                          id: anomaly.id,
+                          date: anomaly.period_start,
+                          severity: anomaly.severity,
+                          actualAmount: Number(anomaly.actual_amount),
+                          expectedAmount: Number(anomaly.expected_amount),
+                        }));
+                    return (
+                      <div key={entry.currency}>
+                        {forecast.by_currency.length > 1 ? (
+                          <p className="text-muted-foreground mb-2 text-xs font-semibold">
+                            {entry.currency}
+                          </p>
+                        ) : null}
+                        <SpendTrajectoryChart
+                          currency={entry.currency}
+                          periodStart={focusPeriodStart}
+                          periodEnd={displayedPeriodEnd}
+                          actual={cumulativeActual}
+                          forecastTail={forecastTail}
+                          anomalies={currencyAnomalies}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
-                <p className="text-muted-foreground mt-3 text-[11px]">
+                <p className="text-muted-foreground mt-4 text-[11px]">
                   Based on {forecast.complete_days} complete day
                   {forecast.complete_days === 1 ? "" : "s"} (through{" "}
                   {formatDayLabel(forecast.data_through)}), extrapolated across
