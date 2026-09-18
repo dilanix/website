@@ -12,6 +12,7 @@ import {
   createSavedView,
   deleteAllocation,
   deleteBudget,
+  deleteNotification,
   deleteReport,
   deleteSavedView,
   generateReport,
@@ -19,6 +20,8 @@ import {
   getCostDrivers,
   getCostForecast,
   getCostOverview,
+  getNotificationAttachmentDownloadUrl,
+  listNotifications,
   queryCostExplorer,
   runCostExplorerSavedView,
   updateAllocation,
@@ -34,11 +37,13 @@ import {
   type CoreCostExplorerResponse,
   type CoreCostForecast,
   type CoreCostOverview,
+  type CoreNotification,
   type CoreReport,
   type CoreSavedView,
   type CoreScopeCondition,
   type CostExplorerQueryInput,
   type GenerateReportResult,
+  type NotificationAttachmentDownloadResult,
 } from "@/lib/core/api";
 
 export type CostActionResult<T = undefined> = {
@@ -686,12 +691,22 @@ export async function deleteSavedViewAction(
 // Reports
 // ---------------------------------------------------------------------------
 
+const reportPeriodPresetSchema = z.enum([
+  "last_7_days",
+  "last_30_days",
+  "last_month",
+  "month_to_date",
+  "last_quarter",
+  "last_year",
+]);
+
 const reportInputSchema = z.object({
   name: nameSchema,
   description: descriptionSchema,
   format: z.enum(["csv", "pdf"]),
   recipients: recipientsSchema,
   destinationIds: z.array(idSchema).max(50),
+  periodPreset: reportPeriodPresetSchema,
   scheduleCron: z.string().trim().min(1).max(120).nullable(),
   scope: scopeSchema,
 });
@@ -710,6 +725,7 @@ export async function createReportAction(
       format: parsed.data.format,
       recipients: parsed.data.recipients,
       destination_ids: parsed.data.destinationIds,
+      period_preset: parsed.data.periodPreset,
       schedule_cron: parsed.data.scheduleCron,
       scope: toScopeInput(parsed.data.scope),
     });
@@ -737,6 +753,7 @@ export async function updateReportAction(
       format: parsed.data.format,
       recipients: parsed.data.recipients,
       destination_ids: parsed.data.destinationIds,
+      period_preset: parsed.data.periodPreset,
       schedule_cron: parsed.data.scheduleCron,
       enabled: input.enabled,
       scope: parsed.data.scope ? toScopeInput(parsed.data.scope) : undefined,
@@ -773,6 +790,72 @@ export async function generateReportAction(
   try {
     const { token, organizationId } = await context();
     const data = await generateReport(organizationId, parsed.data, token);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const REPORT_GENERATED_EVENT_TYPE = "cost.report.generated";
+
+/** Every past generation of one report definition — read back off the
+ * shared Notification history (`cost.report.generated`) rather than a
+ * second, Cost-owned table, filtered here to this specific report's id
+ * since Core's `event_type` filter alone spans every report in the
+ * organization. */
+export async function listGeneratedReportsAction(
+  reportId: string,
+): Promise<CostActionResult<CoreNotification[]>> {
+  const parsed = idSchema.safeParse(reportId);
+  if (!parsed.success) return { error: "Invalid report." };
+
+  try {
+    const { token, organizationId } = await context();
+    const { items } = await listNotifications(organizationId, token, {
+      limit: 100,
+      offset: 0,
+      eventType: REPORT_GENERATED_EVENT_TYPE,
+    });
+    return {
+      data: items.filter((item) => item.data.report_id === parsed.data),
+    };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function deleteGeneratedReportAction(
+  notificationId: string,
+): Promise<CostActionResult<{ deletedId: string }>> {
+  const parsed = idSchema.safeParse(notificationId);
+  if (!parsed.success) return { error: "Invalid generated report." };
+
+  try {
+    const { token, organizationId } = await context();
+    await deleteNotification(organizationId, parsed.data, token);
+    return { data: { deletedId: parsed.data } };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getGeneratedReportDownloadUrlAction(
+  notificationId: string,
+  attachmentId: string,
+): Promise<CostActionResult<NotificationAttachmentDownloadResult>> {
+  const parsed = z
+    .object({ notificationId: idSchema, attachmentId: idSchema })
+    .safeParse({ notificationId, attachmentId });
+  if (!parsed.success) return { error: "Invalid attachment." };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getNotificationAttachmentDownloadUrl(
+      organizationId,
+      parsed.data.notificationId,
+      parsed.data.attachmentId,
+      token,
+    );
     return { data };
   } catch (error) {
     return { error: message(error) };

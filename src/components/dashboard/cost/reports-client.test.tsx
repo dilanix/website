@@ -66,6 +66,7 @@ const report: CoreReport = {
   format: "csv",
   recipients: [],
   destination_ids: [destination.id],
+  period_preset: "last_month",
   schedule_cron: null,
   next_run_at: null,
   enabled: true,

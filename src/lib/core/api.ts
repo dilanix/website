@@ -2297,6 +2297,18 @@ export function deleteSavedView(
 
 export type ReportFormat = "csv" | "pdf";
 
+/** The relative cost window a report's generation (scheduled, or on-demand
+ * with no explicit override) reads — recomputed from "now" on every run, so a
+ * recurring report never drifts toward a fixed range. Mirrors Core's
+ * `ReportPeriodPreset`. */
+export type ReportPeriodPreset =
+  | "last_7_days"
+  | "last_30_days"
+  | "last_month"
+  | "month_to_date"
+  | "last_quarter"
+  | "last_year";
+
 export interface CoreReport {
   id: string;
   organization_id: string;
@@ -2307,9 +2319,11 @@ export interface CoreReport {
   recipients: string[];
   /** Shared Notification destinations explicitly selected for this report. */
   destination_ids: string[];
+  period_preset: ReportPeriodPreset;
   schedule_cron: string | null;
-  /** Always `null` today — on-demand generation exists, but Core does not yet
-   * compute or execute `schedule_cron`. */
+  /** Set by Core (`ReportService`, via `croniter`) whenever `schedule_cron` is
+   * non-null and `enabled` — the next occurrence `cost.dispatch_due_reports`
+   * will claim and generate. `null` when on-demand-only or disabled. */
   next_run_at: string | null;
   enabled: boolean;
   scope: CoreScopeCondition[];
@@ -2327,6 +2341,7 @@ export interface CreateReportInput {
   format?: ReportFormat;
   recipients?: string[];
   destination_ids?: string[];
+  period_preset?: ReportPeriodPreset;
   schedule_cron?: string | null;
   scope?: CoreScopeCondition[];
 }
@@ -2337,6 +2352,7 @@ export interface UpdateReportInput {
   format?: ReportFormat;
   recipients?: string[];
   destination_ids?: string[];
+  period_preset?: ReportPeriodPreset;
   schedule_cron?: string | null;
   enabled?: boolean;
   scope?: CoreScopeCondition[];
@@ -2406,7 +2422,8 @@ export function deleteReport(
 }
 
 export interface GenerateReportInput {
-  /** Both omitted defaults to the last fully-elapsed calendar month. */
+  /** Both omitted defaults to the report's own `period_preset` — a one-off
+   * override for this call only, never persisted onto the report. */
   period_start?: string | null;
   period_end?: string | null;
 }
@@ -2419,7 +2436,7 @@ export interface GenerateReportResult {
 }
 
 /**
- * Builds the report's CSV now and delivers it through the shared
+ * Builds the report's CSV or PDF now and delivers it through the shared
  * Notification platform (`cost.report.generated`) rather than emailing
  * `Report.recipients` directly. Only the report's explicitly selected
  * Slack/Telegram/Email/Webhook destinations receive it
@@ -3218,6 +3235,90 @@ export function listNotificationDeliveries(
 ) {
   return coreRequest<CoreNotificationDeliveryListResponse>(
     `/v1/organizations/${organizationId}/notifications/deliveries?limit=${params.limit}&offset=${params.offset}`,
+    token,
+  );
+}
+
+export interface CoreNotificationAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+  expires_at: string | null;
+}
+
+export type NotificationStatus =
+  "pending" | "processing" | "completed" | "failed";
+
+export interface CoreNotification {
+  id: string;
+  organization_id: string;
+  event_type: string;
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+  status: NotificationStatus;
+  idempotency_key: string;
+  created_at: string;
+  processed_at: string | null;
+  attachments: CoreNotificationAttachment[];
+}
+
+export interface CoreNotificationListResponse {
+  items: CoreNotification[];
+  total: number;
+}
+
+/** Every generated artifact a product publishes (e.g. a Cost report via
+ * `cost.report.generated`) is just a `Notification` with attachments —
+ * filtering by `event_type` here is how a product reads its own generation
+ * history back without a second, duplicate history table. */
+export function listNotifications(
+  organizationId: string,
+  token: string,
+  params: { limit: number; offset: number; eventType?: string },
+) {
+  const query = new URLSearchParams({
+    limit: String(params.limit),
+    offset: String(params.offset),
+  });
+  if (params.eventType) query.set("event_type", params.eventType);
+  return coreRequest<CoreNotificationListResponse>(
+    `/v1/organizations/${organizationId}/notifications?${query.toString()}`,
+    token,
+  );
+}
+
+/** Permanently removes a notification and its delivery/attachment metadata.
+ * The underlying S3 attachment object is left in place. */
+export function deleteNotification(
+  organizationId: string,
+  notificationId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/notifications/${notificationId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export interface NotificationAttachmentDownloadResult {
+  url: string;
+  expires_in_seconds: number;
+}
+
+/** Resolves a fresh, short-lived presigned URL for one attachment — never
+ * cached, since it expires (`expires_in_seconds`). */
+export function getNotificationAttachmentDownloadUrl(
+  organizationId: string,
+  notificationId: string,
+  attachmentId: string,
+  token: string,
+) {
+  return coreRequest<NotificationAttachmentDownloadResult>(
+    `/v1/organizations/${organizationId}/notifications/${notificationId}/attachments/${attachmentId}/download`,
     token,
   );
 }

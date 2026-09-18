@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { FileText, Info, Pencil, Plus, Send, Trash2, X } from "lucide-react";
+import { Clock, FileText, Pencil, Plus, Send, Trash2, X } from "lucide-react";
 import {
   createReportAction,
   deleteReportAction,
@@ -15,10 +15,22 @@ import type {
   CoreReport,
   CoreScopeCondition,
   ReportFormat,
+  ReportPeriodPreset,
 } from "@/lib/core/api";
 import { DestructiveActionDialog } from "@/components/dashboard/destructive-action-dialog";
 import { ModalOverlay } from "@/components/dashboard/modal-overlay";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
+import { GeneratedReportsDialog } from "./generated-reports-dialog";
+import {
+  cronToSchedule,
+  DEFAULT_SCHEDULE,
+  describeSchedule,
+  PERIOD_PRESET_LABELS,
+  scheduleToCron,
+  WEEKDAY_LABELS,
+  type FriendlySchedule,
+  type ScheduleMode,
+} from "./report-schedule";
 import { ScopeEditor, summarizeScope } from "./scope-editor";
 
 function sortReports(reports: CoreReport[]) {
@@ -31,7 +43,8 @@ interface ReportFormState {
   name: string;
   description: string;
   format: ReportFormat;
-  scheduleCron: string;
+  periodPreset: ReportPeriodPreset;
+  schedule: FriendlySchedule;
   destinationIds: string[];
 }
 
@@ -40,9 +53,31 @@ function toFormState(report?: CoreReport): ReportFormState {
     name: report?.name ?? "",
     description: report?.description ?? "",
     format: report?.format ?? "csv",
-    scheduleCron: report?.schedule_cron ?? "",
+    periodPreset: report?.period_preset ?? "last_month",
+    schedule: cronToSchedule(report?.schedule_cron ?? null),
     destinationIds: report?.destination_ids ?? [],
   };
+}
+
+const SCHEDULE_MODE_OPTIONS: { value: ScheduleMode; label: string }[] = [
+  { value: "none", label: "On-demand only" },
+  { value: "daily", label: "Every day" },
+  { value: "weekly", label: "Every week" },
+  { value: "monthly", label: "Every month" },
+  { value: "custom", label: "Custom (cron)" },
+];
+
+function timeToMinutes(value: string): { hour: number; minute: number } | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+}
+
+function timeInputValue(schedule: FriendlySchedule): string {
+  return `${String(schedule.hour).padStart(2, "0")}:${String(schedule.minute).padStart(2, "0")}`;
 }
 
 function providerLabel(channel: CoreNotificationChannel | undefined) {
@@ -88,7 +123,8 @@ function ReportDialog({
       // the shared Notification module destinations below.
       recipients: report?.recipients ?? [],
       destinationIds: form.destinationIds,
-      scheduleCron: form.scheduleCron.trim() || null,
+      periodPreset: form.periodPreset,
+      scheduleCron: scheduleToCron(form.schedule),
       scope,
     };
     startTransition(async () => {
@@ -120,12 +156,6 @@ function ReportDialog({
           >
             <X size={18} />
           </button>
-        </div>
-
-        <div className="border-accent/20 bg-accent/5 text-accent mt-4 flex items-start gap-2 rounded-lg border p-3 text-xs leading-5">
-          <Info size={14} className="mt-0.5 shrink-0" />
-          Automatic scheduling is coming soon. You can generate and send this
-          report on demand from the reports list.
         </div>
 
         <form
@@ -177,19 +207,151 @@ function ReportDialog({
               </select>
             </label>
             <label className="block text-sm">
-              <span className="mb-1.5 block font-medium">
-                Schedule (cron, optional)
-              </span>
-              <input
-                value={form.scheduleCron}
+              <span className="mb-1.5 block font-medium">Cost period</span>
+              <select
+                value={form.periodPreset}
                 onChange={(event) =>
-                  setForm((f) => ({ ...f, scheduleCron: event.target.value }))
+                  setForm((f) => ({
+                    ...f,
+                    periodPreset: event.target.value as ReportPeriodPreset,
+                  }))
                 }
-                placeholder="0 8 1 * *"
-                className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 font-mono text-xs outline-none"
-              />
+                className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 outline-none"
+              >
+                {Object.entries(PERIOD_PRESET_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
+
+          <fieldset className="border-foreground/15 rounded-lg border p-3 text-sm">
+            <legend className="px-1 font-medium">Schedule</legend>
+            <select
+              value={form.schedule.mode}
+              onChange={(event) =>
+                setForm((f) => ({
+                  ...f,
+                  schedule: {
+                    ...(f.schedule.mode === "none"
+                      ? DEFAULT_SCHEDULE
+                      : f.schedule),
+                    mode: event.target.value as ScheduleMode,
+                  },
+                }))
+              }
+              className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 outline-none"
+            >
+              {SCHEDULE_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            {form.schedule.mode !== "none" &&
+            form.schedule.mode !== "custom" ? (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-muted-foreground mb-1.5 block text-xs">
+                    Time (UTC)
+                  </span>
+                  <input
+                    type="time"
+                    value={timeInputValue(form.schedule)}
+                    onChange={(event) => {
+                      const parsed = timeToMinutes(event.target.value);
+                      if (!parsed) return;
+                      setForm((f) => ({
+                        ...f,
+                        schedule: { ...f.schedule, ...parsed },
+                      }));
+                    }}
+                    className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 outline-none"
+                  />
+                </label>
+                {form.schedule.mode === "weekly" ? (
+                  <label className="block">
+                    <span className="text-muted-foreground mb-1.5 block text-xs">
+                      Day of week
+                    </span>
+                    <select
+                      value={form.schedule.dayOfWeek}
+                      onChange={(event) =>
+                        setForm((f) => ({
+                          ...f,
+                          schedule: {
+                            ...f.schedule,
+                            dayOfWeek: Number(event.target.value),
+                          },
+                        }))
+                      }
+                      className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 outline-none"
+                    >
+                      {WEEKDAY_LABELS.map((label, index) => (
+                        <option key={label} value={index}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {form.schedule.mode === "monthly" ? (
+                  <label className="block">
+                    <span className="text-muted-foreground mb-1.5 block text-xs">
+                      Day of month
+                    </span>
+                    <select
+                      value={form.schedule.dayOfMonth}
+                      onChange={(event) =>
+                        setForm((f) => ({
+                          ...f,
+                          schedule: {
+                            ...f.schedule,
+                            dayOfMonth: Number(event.target.value),
+                          },
+                        }))
+                      }
+                      className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 outline-none"
+                    >
+                      {Array.from({ length: 28 }, (_, index) => index + 1).map(
+                        (day) => (
+                          <option key={day} value={day}>
+                            {day}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
+
+            {form.schedule.mode === "custom" ? (
+              <label className="mt-3 block">
+                <span className="text-muted-foreground mb-1.5 block text-xs">
+                  Cron expression (UTC)
+                </span>
+                <input
+                  value={form.schedule.cron}
+                  onChange={(event) =>
+                    setForm((f) => ({
+                      ...f,
+                      schedule: { ...f.schedule, cron: event.target.value },
+                    }))
+                  }
+                  placeholder="0 8 1 * *"
+                  className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 font-mono text-xs outline-none"
+                />
+              </label>
+            ) : null}
+
+            <p className="text-muted-foreground mt-2 text-xs">
+              {describeSchedule(scheduleToCron(form.schedule))}
+            </p>
+          </fieldset>
 
           <fieldset className="text-sm">
             <legend className="mb-1.5 font-medium">
@@ -291,6 +453,7 @@ export function ReportsClient({
     "closed" | "create" | CoreReport
   >("closed");
   const [deleteTarget, setDeleteTarget] = useState<CoreReport | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<CoreReport | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [generatingReportId, setGeneratingReportId] = useState<string | null>(
@@ -345,16 +508,10 @@ export function ReportsClient({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="border-accent/20 bg-accent/5 text-accent flex items-start gap-2 rounded-lg border p-3 text-xs leading-5">
-        <Info size={14} className="mt-0.5 shrink-0" />
-        Automatic scheduling is coming soon. On-demand generation and delivery
-        through Notifications are available now.
-      </div>
-
       <div className="flex items-center justify-between gap-4">
         <p className="text-muted-foreground max-w-2xl text-sm leading-6">
           Define cost reports, choose their notification destinations, and send
-          them on demand.
+          them on demand or on a schedule.
         </p>
         <button
           type="button"
@@ -423,10 +580,12 @@ export function ReportsClient({
                       </p>
                     ) : null}
                     <p className="text-muted-foreground mt-1 text-xs">
-                      {report.schedule_cron
-                        ? `Schedule: ${report.schedule_cron} (not active yet)`
-                        : "On-demand only"}{" "}
-                      · {report.destination_ids.length} destination
+                      {describeSchedule(report.schedule_cron)}
+                      {report.next_run_at
+                        ? ` · Next run ${new Date(report.next_run_at).toLocaleString()}`
+                        : ""}{" "}
+                      · {PERIOD_PRESET_LABELS[report.period_preset]} ·{" "}
+                      {report.destination_ids.length} destination
                       {report.destination_ids.length === 1 ? "" : "s"}
                     </p>
                     <p className="text-muted-foreground mt-1 text-xs">
@@ -437,18 +596,12 @@ export function ReportsClient({
                 <div className="flex shrink-0 items-center gap-3">
                   <button
                     type="button"
-                    disabled={
-                      pending ||
-                      report.destination_ids.length === 0 ||
-                      report.format !== "csv"
-                    }
+                    disabled={pending || report.destination_ids.length === 0}
                     onClick={() => generate(report)}
                     title={
                       report.destination_ids.length === 0
                         ? "Edit the report and select a notification destination first"
-                        : report.format !== "csv"
-                          ? "On-demand generation currently supports CSV reports only"
-                          : undefined
+                        : undefined
                     }
                     className="text-accent inline-flex items-center gap-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40"
                   >
@@ -456,6 +609,13 @@ export function ReportsClient({
                     {generatingReportId === report.id
                       ? "Sending…"
                       : "Generate & send"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTarget(report)}
+                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
+                  >
+                    <Clock size={13} /> History
                   </button>
                   <button
                     type="button"
@@ -525,6 +685,14 @@ export function ReportsClient({
             setError("");
           }}
           onConfirm={() => remove()}
+        />
+      ) : null}
+
+      {historyTarget ? (
+        <GeneratedReportsDialog
+          key={historyTarget.id}
+          report={historyTarget}
+          onClose={() => setHistoryTarget(null)}
         />
       ) : null}
     </div>
