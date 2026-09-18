@@ -42,13 +42,13 @@ const integrations: CoreIntegration[] = [
 const mixedCategoryIntegrations: CoreIntegration[] = [
   ...integrations,
   {
-    id: "slack-id",
-    slug: "slack",
-    name: "Slack",
-    description: "Team messaging.",
+    id: "calendly-id",
+    slug: "calendly",
+    name: "Calendly",
+    description: "Scheduling automation.",
     category: "platform",
     status: "active",
-    icon_key: "slack",
+    icon_key: "calendly",
     connection_supported: false,
   },
 ];
@@ -130,6 +130,6 @@ describe("IntegrationsClient", () => {
     expect(headings.indexOf("Platform")).toBeGreaterThan(
       headings.indexOf("Cloud"),
     );
-    expect(headings).toContain("Slack");
+    expect(headings).toContain("Calendly");
   });
 });

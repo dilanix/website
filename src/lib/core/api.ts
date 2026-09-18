@@ -2908,3 +2908,274 @@ export function deleteTelemetryIngestionToken(
     { method: "DELETE" },
   );
 }
+
+/**
+ * Notification platform module (`src/modules/notifications` in Core) —
+ * independent of `modules.integrations` on the backend: a `NotificationChannel`
+ * is a provider connection (Slack/Telegram/Email/Webhook) in its own right,
+ * never tied to an Integration connection. Gated by RBAC permissions
+ * (`notifications.read` / `notifications.manage` / `notifications.send_test`)
+ * rather than a product entitlement, so the backend 403s rather than this
+ * client pre-filtering — same pattern `CoreApiError` already handles.
+ */
+export type NotificationProvider = "email" | "slack" | "telegram" | "webhook";
+export type NotificationChannelStatus = "active" | "disabled";
+
+export interface CoreNotificationChannel {
+  id: string;
+  organization_id: string;
+  provider: NotificationProvider;
+  name: string;
+  status: NotificationChannelStatus;
+  is_enabled: boolean;
+  configuration: Record<string, unknown>;
+  /** Whether a credential (bot token, ...) is stored — the ciphertext itself
+   * is never returned by Core. */
+  has_credential: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreNotificationChannelListResponse {
+  items: CoreNotificationChannel[];
+  total: number;
+}
+
+export interface CreateNotificationChannelInput {
+  provider: NotificationProvider;
+  name: string;
+  configuration?: Record<string, unknown>;
+  /** Plaintext credential (bot token, ...); encrypted server-side, never
+   * echoed back. */
+  credential?: string | null;
+}
+
+export interface UpdateNotificationChannelInput {
+  name?: string;
+  configuration?: Record<string, unknown> | null;
+  is_enabled?: boolean;
+  /** Set to rotate the stored credential; omitted leaves it unchanged. */
+  credential?: string | null;
+}
+
+export function listNotificationChannels(
+  organizationId: string,
+  token: string,
+) {
+  return coreRequest<CoreNotificationChannelListResponse>(
+    `/v1/organizations/${organizationId}/notifications/channels`,
+    token,
+  );
+}
+
+export function createNotificationChannel(
+  organizationId: string,
+  token: string,
+  input: CreateNotificationChannelInput,
+) {
+  return coreRequest<CoreNotificationChannel>(
+    `/v1/organizations/${organizationId}/notifications/channels`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateNotificationChannel(
+  organizationId: string,
+  channelId: string,
+  token: string,
+  input: UpdateNotificationChannelInput,
+) {
+  return coreRequest<CoreNotificationChannel>(
+    `/v1/organizations/${organizationId}/notifications/channels/${channelId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+/** Disables the channel — Core never hard-deletes a channel with delivery
+ * history; this is the one lifecycle action exposed for removal. */
+export function disableNotificationChannel(
+  organizationId: string,
+  channelId: string,
+  token: string,
+) {
+  return coreRequest<CoreNotificationChannel>(
+    `/v1/organizations/${organizationId}/notifications/channels/${channelId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+/**
+ * Sends one real test notification through `channelId` to `destinationId` and
+ * waits for the result — Core dispatches synchronously through the same path
+ * a background worker uses, so this resolves to a real `delivered`/`failed`
+ * `CoreNotificationDelivery`, not a queued placeholder.
+ */
+export function sendTestNotification(
+  organizationId: string,
+  channelId: string,
+  token: string,
+  destinationId: string,
+) {
+  return coreRequest<CoreNotificationDelivery>(
+    `/v1/organizations/${organizationId}/notifications/channels/${channelId}/test`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ destination_id: destinationId }),
+    },
+  );
+}
+
+export interface CoreNotificationDestination {
+  id: string;
+  organization_id: string;
+  channel_id: string;
+  /** The provider-specific address: a Slack channel id/name, a Telegram chat
+   * id, an email address, or a webhook URL. */
+  external_identifier: string;
+  name: string;
+  /** Which `Notification.event_type`s this destination receives — empty
+   * subscribes to every event type (a catch-all). */
+  event_types: string[];
+  configuration: Record<string, unknown>;
+  /** Whether a per-destination secret (e.g. webhook signing secret) is
+   * stored — the ciphertext itself is never returned. */
+  has_secret: boolean;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreNotificationDestinationListResponse {
+  items: CoreNotificationDestination[];
+  total: number;
+}
+
+export interface CreateNotificationDestinationInput {
+  channel_id: string;
+  name: string;
+  external_identifier: string;
+  event_types?: string[];
+  configuration?: Record<string, unknown>;
+  /** Plaintext per-destination secret (e.g. webhook signing secret);
+   * encrypted server-side. */
+  secret?: string | null;
+}
+
+export interface UpdateNotificationDestinationInput {
+  name?: string;
+  external_identifier?: string;
+  event_types?: string[];
+  configuration?: Record<string, unknown> | null;
+  is_enabled?: boolean;
+  /** Set to rotate the stored secret; omitted leaves it unchanged. */
+  secret?: string | null;
+}
+
+export function listNotificationDestinations(
+  organizationId: string,
+  token: string,
+) {
+  return coreRequest<CoreNotificationDestinationListResponse>(
+    `/v1/organizations/${organizationId}/notifications/destinations`,
+    token,
+  );
+}
+
+export function createNotificationDestination(
+  organizationId: string,
+  token: string,
+  input: CreateNotificationDestinationInput,
+) {
+  return coreRequest<CoreNotificationDestination>(
+    `/v1/organizations/${organizationId}/notifications/destinations`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateNotificationDestination(
+  organizationId: string,
+  destinationId: string,
+  token: string,
+  input: UpdateNotificationDestinationInput,
+) {
+  return coreRequest<CoreNotificationDestination>(
+    `/v1/organizations/${organizationId}/notifications/destinations/${destinationId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+/** Disables the destination — `NotificationDelivery.destination_id` is
+ * RESTRICT on the backend, so a destination with delivery history could
+ * never be hard-deleted anyway; disabling is the one lifecycle action
+ * exposed. */
+export function disableNotificationDestination(
+  organizationId: string,
+  destinationId: string,
+  token: string,
+) {
+  return coreRequest<CoreNotificationDestination>(
+    `/v1/organizations/${organizationId}/notifications/destinations/${destinationId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export type NotificationDeliveryStatus =
+  "pending" | "processing" | "retrying" | "delivered" | "failed";
+
+export interface CoreNotificationDelivery {
+  id: string;
+  organization_id: string;
+  notification_id: string;
+  destination_id: string;
+  status: NotificationDeliveryStatus;
+  attempt_count: number;
+  scheduled_at: string;
+  delivered_at: string | null;
+  provider_message_id: string | null;
+  last_error_code: string | null;
+  last_error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreNotificationDeliveryListResponse {
+  items: CoreNotificationDelivery[];
+  total: number;
+}
+
+/** Recent delivery history across every channel — mirrors Core's own
+ * newest-first ordering. */
+export function listNotificationDeliveries(
+  organizationId: string,
+  token: string,
+  params: { limit: number; offset: number },
+) {
+  return coreRequest<CoreNotificationDeliveryListResponse>(
+    `/v1/organizations/${organizationId}/notifications/deliveries?limit=${params.limit}&offset=${params.offset}`,
+    token,
+  );
+}
