@@ -22,8 +22,8 @@ import type {
 import {
   createNotificationChannelAction,
   createNotificationDestinationAction,
-  disableNotificationChannelAction,
-  disableNotificationDestinationAction,
+  deleteNotificationChannelAction,
+  deleteNotificationDestinationAction,
   sendTestNotificationAction,
   updateNotificationChannelAction,
   updateNotificationDestinationAction,
@@ -293,21 +293,27 @@ export function NotificationsClient({
   function deleteChannel(channel: CoreNotificationChannel) {
     setDeleteError("");
     startTransition(async () => {
-      const result = await disableNotificationChannelAction(channel.id);
+      const result = await deleteNotificationChannelAction(channel.id);
       if (result.error) return setDeleteError(result.error);
-      if (result.data) {
-        // Real deletion is blocked server-side once delivery history exists
-        // (`RESTRICT` foreign key, by design) — this disables the channel
-        // instead and the list below only ever renders enabled channels, so
-        // it disappears from view the same as a real delete would. It stays
-        // in state (not filtered out here) so "Recent activity" can still
-        // resolve its name for past deliveries.
-        setChannels((current) =>
-          current.map((item) =>
-            item.id === result.data!.id ? result.data! : item,
-          ),
-        );
-      }
+      // Core cascades the delete through every one of this channel's
+      // destinations and their delivery history — mirror that here so
+      // "Recent activity" doesn't keep showing rows that no longer exist.
+      const deletedDestinationIds = new Set(
+        destinations
+          .filter((item) => item.channel_id === channel.id)
+          .map((item) => item.id),
+      );
+      setChannels((current) =>
+        current.filter((item) => item.id !== channel.id),
+      );
+      setDestinations((current) =>
+        current.filter((item) => item.channel_id !== channel.id),
+      );
+      setDeliveries((current) =>
+        current.filter(
+          (delivery) => !deletedDestinationIds.has(delivery.destination_id),
+        ),
+      );
       setDeleteChannelTarget(null);
     });
   }
@@ -376,15 +382,16 @@ export function NotificationsClient({
   function deleteDestination(destination: CoreNotificationDestination) {
     setDeleteError("");
     startTransition(async () => {
-      const result = await disableNotificationDestinationAction(destination.id);
+      const result = await deleteNotificationDestinationAction(destination.id);
       if (result.error) return setDeleteError(result.error);
-      if (result.data) {
-        setDestinations((current) =>
-          current.map((item) =>
-            item.id === result.data!.id ? result.data! : item,
-          ),
-        );
-      }
+      setDestinations((current) =>
+        current.filter((item) => item.id !== destination.id),
+      );
+      setDeliveries((current) =>
+        current.filter(
+          (delivery) => delivery.destination_id !== destination.id,
+        ),
+      );
       setDeleteDestinationTarget(null);
     });
   }
@@ -416,13 +423,6 @@ export function NotificationsClient({
     destinations.map((destination) => [destination.id, destination]),
   );
   const channelById = new Map(channels.map((channel) => [channel.id, channel]));
-  // Real deletion is blocked server-side once delivery history exists
-  // (`RESTRICT` foreign key, by design — see `deleteChannel`/
-  // `deleteDestination`), so "Delete" disables instead; this list only ever
-  // shows enabled channels/destinations, which is what makes disabling read
-  // as deletion from here. `destinations`/`channels` themselves stay
-  // unfiltered so "Recent activity" can still resolve a deleted item's name.
-  const visibleChannels = channels.filter((channel) => channel.is_enabled);
 
   return (
     <>
@@ -464,15 +464,13 @@ export function NotificationsClient({
           </button>
         }
       >
-        {visibleChannels.length ? (
+        {channels.length ? (
           <div className="flex flex-col gap-4">
-            {visibleChannels.map((channel) => {
+            {channels.map((channel) => {
               const meta = PROVIDER_META[channel.provider];
               const Icon = meta.icon;
               const channelDestinations = destinations.filter(
-                (destination) =>
-                  destination.channel_id === channel.id &&
-                  destination.is_enabled,
+                (destination) => destination.channel_id === channel.id,
               );
               return (
                 <article
@@ -600,6 +598,15 @@ export function NotificationsClient({
                               ) : null}
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
+                              <StatusBadge
+                                status={
+                                  destination.is_enabled ? "success" : "neutral"
+                                }
+                              >
+                                {destination.is_enabled
+                                  ? "enabled"
+                                  : "disabled"}
+                              </StatusBadge>
                               <button
                                 type="button"
                                 disabled={
@@ -815,7 +822,7 @@ export function NotificationsClient({
       {deleteChannelTarget ? (
         <DestructiveActionDialog
           title={`Delete ${deleteChannelTarget.name}?`}
-          description="Real deletion is blocked once a channel has sent notifications, so this disables it instead — it stops receiving notifications and disappears from this list immediately. Past delivery history is kept for audit purposes."
+          description="This permanently deletes the channel, every one of its destinations, and their entire delivery history. This cannot be undone. To pause it instead without losing anything, use Edit and turn off Enabled."
           confirmationName={deleteChannelTarget.name}
           pending={pending}
           error={deleteError}
@@ -830,7 +837,7 @@ export function NotificationsClient({
       {deleteDestinationTarget ? (
         <DestructiveActionDialog
           title={`Delete ${deleteDestinationTarget.name}?`}
-          description="Real deletion is blocked once a destination has received notifications, so this disables it instead — it stops receiving notifications and disappears from this list immediately. Past delivery history is kept for audit purposes."
+          description="This permanently deletes the destination and its entire delivery history. This cannot be undone. To pause it instead without losing anything, use Edit and turn off Enabled."
           confirmationName={deleteDestinationTarget.name}
           pending={pending}
           error={deleteError}

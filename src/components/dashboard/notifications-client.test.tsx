@@ -15,16 +15,16 @@ import type {
 import { NotificationsClient } from "./notifications-client";
 import {
   createNotificationChannelAction,
-  disableNotificationChannelAction,
-  disableNotificationDestinationAction,
+  deleteNotificationChannelAction,
+  deleteNotificationDestinationAction,
   sendTestNotificationAction,
 } from "@/app/dashboard/notifications/actions";
 
 vi.mock("@/app/dashboard/notifications/actions", () => ({
   createNotificationChannelAction: vi.fn(),
   createNotificationDestinationAction: vi.fn(),
-  disableNotificationChannelAction: vi.fn(),
-  disableNotificationDestinationAction: vi.fn(),
+  deleteNotificationChannelAction: vi.fn(),
+  deleteNotificationDestinationAction: vi.fn(),
   sendTestNotificationAction: vi.fn(),
   updateNotificationChannelAction: vi.fn(),
   updateNotificationDestinationAction: vi.fn(),
@@ -212,9 +212,7 @@ describe("NotificationsClient", () => {
   });
 
   it("deletes a channel only after typing its name to confirm", async () => {
-    vi.mocked(disableNotificationChannelAction).mockResolvedValue({
-      data: { ...slackChannel, is_enabled: false, status: "disabled" },
-    });
+    vi.mocked(deleteNotificationChannelAction).mockResolvedValue({});
 
     render(
       <NotificationsClient
@@ -235,7 +233,7 @@ describe("NotificationsClient", () => {
       target: { value: "wrong name" },
     });
     expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
-    expect(disableNotificationChannelAction).not.toHaveBeenCalled();
+    expect(deleteNotificationChannelAction).not.toHaveBeenCalled();
 
     fireEvent.change(within(dialog).getByRole("textbox"), {
       target: { value: slackChannel.name },
@@ -244,17 +242,43 @@ describe("NotificationsClient", () => {
     fireEvent.click(confirmButton);
 
     await waitFor(() =>
-      expect(disableNotificationChannelAction).toHaveBeenCalledWith(
-        "channel-1",
-      ),
+      expect(deleteNotificationChannelAction).toHaveBeenCalledWith("channel-1"),
     );
     await waitFor(() => expect(screen.queryByText("Ops Slack")).toBeNull());
   });
 
-  it("deletes a destination only after typing its name to confirm", async () => {
-    vi.mocked(disableNotificationDestinationAction).mockResolvedValue({
-      data: { ...slackDestination, is_enabled: false },
+  it("cascades a channel deletion to its own destinations in the UI", async () => {
+    vi.mocked(deleteNotificationChannelAction).mockResolvedValue({});
+
+    render(
+      <NotificationsClient
+        initialChannels={[slackChannel]}
+        initialDestinations={[slackDestination]}
+        initialDeliveries={[]}
+      />,
+    );
+
+    expect(screen.getAllByText("#alerts").length).toBeGreaterThan(0);
+
+    const [channelDeleteButton] = screen.getAllByRole("button", {
+      name: "Delete",
     });
+    fireEvent.click(channelDeleteButton);
+    const dialog = screen.getByRole("alertdialog");
+    fireEvent.change(within(dialog).getByRole("textbox"), {
+      target: { value: slackChannel.name },
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /delete permanently/i }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryAllByText("#alerts").length).toBe(0),
+    );
+  });
+
+  it("deletes a destination only after typing its name to confirm", async () => {
+    vi.mocked(deleteNotificationDestinationAction).mockResolvedValue({});
 
     render(
       <NotificationsClient
@@ -275,7 +299,7 @@ describe("NotificationsClient", () => {
     );
 
     await waitFor(() =>
-      expect(disableNotificationDestinationAction).toHaveBeenCalledWith(
+      expect(deleteNotificationDestinationAction).toHaveBeenCalledWith(
         "destination-1",
       ),
     );

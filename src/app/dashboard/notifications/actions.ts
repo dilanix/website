@@ -5,11 +5,11 @@ import { getMe } from "@/lib/auth/api";
 import {
   createNotificationChannel,
   updateNotificationChannel,
-  disableNotificationChannel,
+  deleteNotificationChannel,
   sendTestNotification,
   createNotificationDestination,
   updateNotificationDestination,
-  disableNotificationDestination,
+  deleteNotificationDestination,
   CoreApiError,
   type CoreNotificationChannel,
   type CreateNotificationChannelInput,
@@ -70,18 +70,14 @@ export async function updateNotificationChannelAction(
   }
 }
 
-export async function disableNotificationChannelAction(
+export async function deleteNotificationChannelAction(
   channelId: string,
-): Promise<ActionResult<CoreNotificationChannel>> {
+): Promise<ActionResult> {
   try {
     const { token, organizationId } = await context();
-    const data = await disableNotificationChannel(
-      organizationId,
-      channelId,
-      token,
-    );
+    await deleteNotificationChannel(organizationId, channelId, token);
     revalidatePath("/dashboard/notifications");
-    return { data };
+    return {};
   } catch (error) {
     return { error: message(error) };
   }
@@ -142,18 +138,14 @@ export async function updateNotificationDestinationAction(
   }
 }
 
-export async function disableNotificationDestinationAction(
+export async function deleteNotificationDestinationAction(
   destinationId: string,
-): Promise<ActionResult<CoreNotificationDestination>> {
+): Promise<ActionResult> {
   try {
     const { token, organizationId } = await context();
-    const data = await disableNotificationDestination(
-      organizationId,
-      destinationId,
-      token,
-    );
+    await deleteNotificationDestination(organizationId, destinationId, token);
     revalidatePath("/dashboard/notifications");
-    return { data };
+    return {};
   } catch (error) {
     return { error: message(error) };
   }

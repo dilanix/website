@@ -3001,14 +3001,16 @@ export function updateNotificationChannel(
   );
 }
 
-/** Disables the channel — Core never hard-deletes a channel with delivery
- * history; this is the one lifecycle action exposed for removal. */
-export function disableNotificationChannel(
+/** Permanently deletes the channel and cascades through every one of its
+ * destinations and their delivery history. Use
+ * `updateNotificationChannel(..., { is_enabled: false })` instead to pause a
+ * channel reversibly without losing it or its history. */
+export function deleteNotificationChannel(
   organizationId: string,
   channelId: string,
   token: string,
 ) {
-  return coreRequest<CoreNotificationChannel>(
+  return coreRequest<void>(
     `/v1/organizations/${organizationId}/notifications/channels/${channelId}`,
     token,
     { method: "DELETE" },
@@ -3127,16 +3129,16 @@ export function updateNotificationDestination(
   );
 }
 
-/** Disables the destination — `NotificationDelivery.destination_id` is
- * RESTRICT on the backend, so a destination with delivery history could
- * never be hard-deleted anyway; disabling is the one lifecycle action
- * exposed. */
-export function disableNotificationDestination(
+/** Permanently deletes the destination and cascades through its delivery
+ * history. Use `updateNotificationDestination(..., { is_enabled: false })`
+ * instead to pause a destination reversibly without losing it or its
+ * history. */
+export function deleteNotificationDestination(
   organizationId: string,
   destinationId: string,
   token: string,
 ) {
-  return coreRequest<CoreNotificationDestination>(
+  return coreRequest<void>(
     `/v1/organizations/${organizationId}/notifications/destinations/${destinationId}`,
     token,
     { method: "DELETE" },
