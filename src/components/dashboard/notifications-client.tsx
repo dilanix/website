@@ -30,7 +30,7 @@ import {
 } from "@/app/dashboard/notifications/actions";
 import { EmptyState, Section, StatusBadge } from "./primitives";
 import { DestructiveActionDialog } from "./destructive-action-dialog";
-import { Portal } from "./portal";
+import { ModalOverlay } from "./modal-overlay";
 
 type ConfigFieldType = "text" | "number" | "checkbox";
 
@@ -725,103 +725,99 @@ export function NotificationsClient({
       </Section>
 
       {channelDialog ? (
-        <Portal>
-          <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="channel-dialog-title"
-              className="bg-background border-foreground/15 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border p-6 shadow-2xl"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <span className="bg-accent/10 text-accent flex h-9 w-9 items-center justify-center rounded-lg">
-                    <Bell size={17} />
-                  </span>
-                  <h2
-                    id="channel-dialog-title"
-                    className="mt-4 text-lg font-semibold"
-                  >
-                    {channelDialog.mode === "create"
-                      ? "Add notification channel"
-                      : `Edit ${channelDialog.channel.name}`}
-                  </h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeDialogs}
-                  aria-label="Close dialog"
-                  className="text-muted-foreground p-1"
+        <ModalOverlay onClose={closeDialogs}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="channel-dialog-title"
+            className="bg-background border-foreground/15 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border p-6 shadow-2xl"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="bg-accent/10 text-accent flex h-9 w-9 items-center justify-center rounded-lg">
+                  <Bell size={17} />
+                </span>
+                <h2
+                  id="channel-dialog-title"
+                  className="mt-4 text-lg font-semibold"
                 >
-                  <X size={18} />
-                </button>
+                  {channelDialog.mode === "create"
+                    ? "Add notification channel"
+                    : `Edit ${channelDialog.channel.name}`}
+                </h2>
               </div>
-
-              <ChannelForm
-                dialog={channelDialog}
-                pending={pending}
-                error={error}
-                onSubmit={submitChannelForm}
-              />
+              <button
+                type="button"
+                onClick={closeDialogs}
+                aria-label="Close dialog"
+                className="text-muted-foreground p-1"
+              >
+                <X size={18} />
+              </button>
             </div>
+
+            <ChannelForm
+              dialog={channelDialog}
+              pending={pending}
+              error={error}
+              onSubmit={submitChannelForm}
+            />
           </div>
-        </Portal>
+        </ModalOverlay>
       ) : null}
 
       {destinationDialog ? (
-        <Portal>
-          <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="destination-dialog-title"
-              className="bg-background border-foreground/15 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border p-6 shadow-2xl"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <span className="bg-accent/10 text-accent flex h-9 w-9 items-center justify-center rounded-lg">
-                    <Send size={17} />
-                  </span>
-                  <h2
-                    id="destination-dialog-title"
-                    className="mt-4 text-lg font-semibold"
-                  >
-                    {destinationDialog.mode === "create"
-                      ? `Add destination · ${destinationDialog.channel.name}`
-                      : `Edit ${destinationDialog.destination.name}`}
-                  </h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeDialogs}
-                  aria-label="Close dialog"
-                  className="text-muted-foreground p-1"
+        <ModalOverlay onClose={closeDialogs}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="destination-dialog-title"
+            className="bg-background border-foreground/15 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border p-6 shadow-2xl"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="bg-accent/10 text-accent flex h-9 w-9 items-center justify-center rounded-lg">
+                  <Send size={17} />
+                </span>
+                <h2
+                  id="destination-dialog-title"
+                  className="mt-4 text-lg font-semibold"
                 >
-                  <X size={18} />
-                </button>
+                  {destinationDialog.mode === "create"
+                    ? `Add destination · ${destinationDialog.channel.name}`
+                    : `Edit ${destinationDialog.destination.name}`}
+                </h2>
               </div>
-
-              <DestinationForm
-                dialog={destinationDialog}
-                provider={
-                  destinationDialog.mode === "create"
-                    ? destinationDialog.channel.provider
-                    : (channelById.get(destinationDialog.destination.channel_id)
-                        ?.provider ?? "webhook")
-                }
-                channelHasCredential={
-                  destinationDialog.mode === "create"
-                    ? destinationDialog.channel.has_credential
-                    : (channelById.get(destinationDialog.destination.channel_id)
-                        ?.has_credential ?? false)
-                }
-                pending={pending}
-                error={error}
-                onSubmit={submitDestinationForm}
-              />
+              <button
+                type="button"
+                onClick={closeDialogs}
+                aria-label="Close dialog"
+                className="text-muted-foreground p-1"
+              >
+                <X size={18} />
+              </button>
             </div>
+
+            <DestinationForm
+              dialog={destinationDialog}
+              provider={
+                destinationDialog.mode === "create"
+                  ? destinationDialog.channel.provider
+                  : (channelById.get(destinationDialog.destination.channel_id)
+                      ?.provider ?? "webhook")
+              }
+              channelHasCredential={
+                destinationDialog.mode === "create"
+                  ? destinationDialog.channel.has_credential
+                  : (channelById.get(destinationDialog.destination.channel_id)
+                      ?.has_credential ?? false)
+              }
+              pending={pending}
+              error={error}
+              onSubmit={submitDestinationForm}
+            />
           </div>
-        </Portal>
+        </ModalOverlay>
       ) : null}
 
       {deleteChannelTarget ? (

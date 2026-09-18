@@ -15,8 +15,13 @@ import type {
   ScopeDimension,
 } from "@/lib/core/api";
 import { DestructiveActionDialog } from "@/components/dashboard/destructive-action-dialog";
+import { ModalOverlay } from "@/components/dashboard/modal-overlay";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
-import { SCOPE_DIMENSION_LABELS, ScopeEditor, summarizeScope } from "./scope-editor";
+import {
+  SCOPE_DIMENSION_LABELS,
+  ScopeEditor,
+  summarizeScope,
+} from "./scope-editor";
 
 type GroupByDimension = Exclude<ScopeDimension, "tag">;
 
@@ -46,9 +51,10 @@ function toFormState(view?: CoreSavedView): SavedViewFormState {
   return {
     name: view?.name ?? "",
     description: view?.description ?? "",
-    groupBy: (view?.group_by.filter(
-      (dimension): dimension is GroupByDimension => dimension !== "tag",
-    )) ?? [],
+    groupBy:
+      view?.group_by.filter(
+        (dimension): dimension is GroupByDimension => dimension !== "tag",
+      ) ?? [],
     granularity: view?.granularity ?? "daily",
     visibility: view?.visibility ?? "private",
   };
@@ -102,7 +108,7 @@ function SavedViewDialog({
   }
 
   return (
-    <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 backdrop-blur-sm">
+    <ModalOverlay onClose={onClose}>
       <div
         role="dialog"
         aria-modal="true"
@@ -240,7 +246,7 @@ function SavedViewDialog({
           </button>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

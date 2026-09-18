@@ -52,6 +52,7 @@ import {
 } from "@/lib/sync/datasets";
 import { stageProgress } from "@/lib/sync/progress";
 import { useSyncRunEvents } from "@/hooks/use-sync-run-events";
+import { ModalOverlay } from "./modal-overlay";
 import { EmptyState, StatusBadge } from "./primitives";
 import { Toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -1247,19 +1248,13 @@ export function SyncPanel({
       ) : null}
 
       {policyDialogOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-          <button
-            type="button"
-            aria-label="Close automatic sync settings"
-            onClick={() => setPolicyDialogOpen(false)}
-            className="bg-background/75 absolute inset-0 backdrop-blur-sm"
-          />
+        <ModalOverlay onClose={() => setPolicyDialogOpen(false)}>
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="automatic-sync-title"
             aria-describedby="automatic-sync-description"
-            className="border-border-soft bg-background relative flex max-h-[min(46rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border shadow-2xl"
+            className="border-border-soft bg-background relative flex max-h-[min(46rem,calc(100dvh-2rem))] w-full max-w-2xl flex-col !overflow-hidden rounded-2xl border shadow-2xl"
           >
             <div className="border-border-soft flex items-start justify-between gap-4 border-b px-5 py-4 sm:px-6 sm:py-5">
               <div className="flex items-start gap-3">
@@ -1412,11 +1407,11 @@ export function SyncPanel({
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {dialogOpen ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={() => setDialogOpen(false)}>
           <div
             role="dialog"
             aria-modal="true"
@@ -1561,7 +1556,7 @@ export function SyncPanel({
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {toast ? (

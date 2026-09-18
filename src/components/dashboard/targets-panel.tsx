@@ -18,6 +18,7 @@ import {
   renameTargetAction,
   replaceTargetIdentityAction,
 } from "@/app/dashboard/integrations/actions";
+import { ModalOverlay } from "./modal-overlay";
 import { EmptyState, StatusBadge } from "./primitives";
 import { hasResourceMetadata, ResourceMetadata } from "./resource-metadata";
 
@@ -188,7 +189,7 @@ function TargetRow({
       ) : null}
 
       {replaceDialog ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={() => setReplaceDialog(false)}>
           <div
             role="dialog"
             aria-modal="true"
@@ -261,11 +262,11 @@ function TargetRow({
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {renameDialog ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={() => setRenameDialog(false)}>
           <div
             role="dialog"
             aria-modal="true"
@@ -339,7 +340,7 @@ function TargetRow({
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
     </div>
   );

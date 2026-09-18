@@ -34,6 +34,7 @@ import type {
   TelemetrySourceType,
 } from "@/lib/core/api";
 import { DestructiveActionDialog } from "./destructive-action-dialog";
+import { ModalOverlay } from "./modal-overlay";
 import { hasResourceMetadata, ResourceMetadata } from "./resource-metadata";
 import { EmptyState, StatusBadge } from "./primitives";
 
@@ -534,7 +535,7 @@ export function EnvironmentTelemetryClient({
       </section>
 
       {environmentDialog ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={closeDialogs}>
           <div
             role="dialog"
             aria-modal="true"
@@ -597,11 +598,11 @@ export function EnvironmentTelemetryClient({
               </button>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {sourceDialog ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={closeDialogs}>
           <div
             role="dialog"
             aria-modal="true"
@@ -766,11 +767,11 @@ export function EnvironmentTelemetryClient({
               </button>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {tokenSource ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={closeDialogs}>
           <div
             role="dialog"
             aria-modal="true"
@@ -877,11 +878,17 @@ export function EnvironmentTelemetryClient({
               </button>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {generatedToken ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay
+          onClose={() => {
+            setGeneratedToken(null);
+            setCopied(false);
+            setError("");
+          }}
+        >
           <div
             role="dialog"
             aria-modal="true"
@@ -926,7 +933,7 @@ export function EnvironmentTelemetryClient({
               Done
             </button>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {deleteTarget ? (

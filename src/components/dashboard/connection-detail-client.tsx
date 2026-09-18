@@ -43,6 +43,7 @@ import {
   updateConnectionAction,
   verifyAwsConnectionAction,
 } from "@/app/dashboard/integrations/actions";
+import { ModalOverlay } from "./modal-overlay";
 import { EmptyState, Section, StatusBadge } from "./primitives";
 import { AwsSetupPanel } from "./integrations/aws-setup-panel";
 import { SyncPanel } from "./sync-panel";
@@ -855,7 +856,7 @@ export function ConnectionDetailClient({
 
       {/* Modify Connection Dialog */}
       {editDialog ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={() => setEditDialog(false)}>
           <div
             role="dialog"
             aria-modal="true"
@@ -988,12 +989,12 @@ export function ConnectionDetailClient({
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {/* Re-verify Connection Dialog */}
       {verifyDialog ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={() => setVerifyDialog(false)}>
           <div
             role="dialog"
             aria-modal="true"
@@ -1077,12 +1078,12 @@ export function ConnectionDetailClient({
               </div>
             ) : null}
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {/* Remove Connection Dialog */}
       {removeDialog ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={() => setRemoveDialog(false)}>
           <div
             role="alertdialog"
             aria-modal="true"
@@ -1112,12 +1113,12 @@ export function ConnectionDetailClient({
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {/* Purge Connection Dialog */}
       {purgeDialog ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={() => setPurgeDialog(false)}>
           <div
             role="alertdialog"
             aria-modal="true"
@@ -1165,12 +1166,12 @@ export function ConnectionDetailClient({
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {/* Add Scope Dialog */}
       {scopeDialog ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={() => setScopeDialog(false)}>
           <div
             role="dialog"
             aria-modal="true"
@@ -1247,7 +1248,7 @@ export function ConnectionDetailClient({
               </button>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
     </div>
   );

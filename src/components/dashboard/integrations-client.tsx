@@ -18,6 +18,7 @@ import type {
 } from "@/lib/core/api";
 import { providerCapabilityCode } from "@/lib/core/api";
 import { createConnectionAction } from "@/app/dashboard/integrations/actions";
+import { ModalOverlay } from "./modal-overlay";
 import { EmptyState, Section, StatusBadge } from "./primitives";
 import { AwsOnboardingWizard } from "./integrations/aws-onboarding-wizard";
 
@@ -311,7 +312,7 @@ export function IntegrationsClient({
       ))}
 
       {connectTo ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={close}>
           <div
             role="dialog"
             aria-modal="true"
@@ -389,7 +390,7 @@ export function IntegrationsClient({
               </button>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {onboarding ? (

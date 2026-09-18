@@ -17,6 +17,7 @@ import type {
   ReportFormat,
 } from "@/lib/core/api";
 import { DestructiveActionDialog } from "@/components/dashboard/destructive-action-dialog";
+import { ModalOverlay } from "@/components/dashboard/modal-overlay";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { ScopeEditor, summarizeScope } from "./scope-editor";
 
@@ -100,7 +101,7 @@ function ReportDialog({
   }
 
   return (
-    <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 backdrop-blur-sm">
+    <ModalOverlay onClose={onClose}>
       <div
         role="dialog"
         aria-modal="true"
@@ -272,7 +273,7 @@ function ReportDialog({
           </button>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

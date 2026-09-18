@@ -10,6 +10,7 @@ import {
   verifyAwsConnectionAction,
 } from "@/app/dashboard/integrations/actions";
 import { StatusBadge } from "../primitives";
+import { ModalOverlay } from "../modal-overlay";
 import { AwsSetupPanel } from "./aws-setup-panel";
 
 /**
@@ -35,29 +36,27 @@ function ModalShell({
   children,
 }: {
   titleId: string;
-  onClose?: () => void;
+  onClose: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+    <ModalOverlay onClose={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         className="bg-background border-foreground/15 w-full max-w-lg rounded-xl border p-6 shadow-2xl"
       >
-        {onClose ? (
-          <button
-            onClick={onClose}
-            aria-label="Close dialog"
-            className="text-muted-foreground float-right p-1"
-          >
-            <X size={18} />
-          </button>
-        ) : null}
+        <button
+          onClick={onClose}
+          aria-label="Close dialog"
+          className="text-muted-foreground float-right p-1"
+        >
+          <X size={18} />
+        </button>
         {children}
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

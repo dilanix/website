@@ -26,6 +26,7 @@ import type {
   CoreApplicationEnvironment,
 } from "@/lib/core/api";
 import { DestructiveActionDialog } from "./destructive-action-dialog";
+import { ModalOverlay } from "./modal-overlay";
 import { EmptyState, StatusBadge } from "./primitives";
 
 function sortEnvironments(environments: CoreApplicationEnvironment[]) {
@@ -302,7 +303,7 @@ export function ApplicationDetailClient({
       </section>
 
       {dialog ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={closeDialog}>
           <div
             role="dialog"
             aria-modal="true"
@@ -434,7 +435,7 @@ export function ApplicationDetailClient({
               </button>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {deleteTarget ? (

@@ -11,6 +11,7 @@ import {
 } from "@/app/dashboard/applications/actions";
 import type { CoreApplication } from "@/lib/core/api";
 import { DestructiveActionDialog } from "./destructive-action-dialog";
+import { ModalOverlay } from "./modal-overlay";
 import { EmptyState, StatusBadge } from "./primitives";
 
 function sortApplications(applications: CoreApplication[]) {
@@ -194,7 +195,7 @@ export function ApplicationsClient({
       )}
 
       {createOpen ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={closeCreate}>
           <div
             role="dialog"
             aria-modal="true"
@@ -290,7 +291,7 @@ export function ApplicationsClient({
               </button>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
 
       {deleteTarget ? (
