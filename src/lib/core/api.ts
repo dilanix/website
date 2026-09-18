@@ -2305,10 +2305,11 @@ export interface CoreReport {
   description: string | null;
   format: ReportFormat;
   recipients: string[];
+  /** Shared Notification destinations explicitly selected for this report. */
+  destination_ids: string[];
   schedule_cron: string | null;
-  /** Always `null` today — Core never computes this from `schedule_cron` yet,
-   * and there is no generation/delivery job. Report definitions are pure
-   * CRUD until that ships. */
+  /** Always `null` today — on-demand generation exists, but Core does not yet
+   * compute or execute `schedule_cron`. */
   next_run_at: string | null;
   enabled: boolean;
   scope: CoreScopeCondition[];
@@ -2325,6 +2326,7 @@ export interface CreateReportInput {
   description?: string | null;
   format?: ReportFormat;
   recipients?: string[];
+  destination_ids?: string[];
   schedule_cron?: string | null;
   scope?: CoreScopeCondition[];
 }
@@ -2334,6 +2336,7 @@ export interface UpdateReportInput {
   description?: string | null;
   format?: ReportFormat;
   recipients?: string[];
+  destination_ids?: string[];
   schedule_cron?: string | null;
   enabled?: boolean;
   scope?: CoreScopeCondition[];
@@ -2399,6 +2402,43 @@ export function deleteReport(
     `/v1/organizations/${organizationId}/cost/reports/${reportId}`,
     token,
     { method: "DELETE" },
+  );
+}
+
+export interface GenerateReportInput {
+  /** Both omitted defaults to the last fully-elapsed calendar month. */
+  period_start?: string | null;
+  period_end?: string | null;
+}
+
+/** Mirrors Core's `GenerateReportResponse`. `notification_request_id` is the
+ * published `NotificationRequest.id` — delivery status is visible under
+ * `.../notifications/deliveries`. */
+export interface GenerateReportResult {
+  notification_request_id: string;
+}
+
+/**
+ * Builds the report's CSV now and delivers it through the shared
+ * Notification platform (`cost.report.generated`) rather than emailing
+ * `Report.recipients` directly. Only the report's explicitly selected
+ * Slack/Telegram/Email/Webhook destinations receive it
+ * (`ReportGenerationService.generate_now` in Core).
+ */
+export function generateReport(
+  organizationId: string,
+  reportId: string,
+  token: string,
+  input: GenerateReportInput = {},
+) {
+  return coreRequest<GenerateReportResult>(
+    `/v1/organizations/${organizationId}/cost/reports/${reportId}/generate`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
   );
 }
 
@@ -3178,6 +3218,33 @@ export function listNotificationDeliveries(
 ) {
   return coreRequest<CoreNotificationDeliveryListResponse>(
     `/v1/organizations/${organizationId}/notifications/deliveries?limit=${params.limit}&offset=${params.offset}`,
+    token,
+  );
+}
+
+/**
+ * One well-known `Notification.event_type` a producer somewhere on the
+ * platform actually publishes (e.g. `cost.report.generated`) — purely
+ * descriptive catalog data for a destination's event-type picker. A
+ * destination is never restricted to these values; the dashboard still lets
+ * someone type a custom event type alongside picking from this list.
+ */
+export interface CoreNotificationEventType {
+  code: string;
+  label: string;
+  description: string;
+}
+
+export interface CoreNotificationEventTypeListResponse {
+  items: CoreNotificationEventType[];
+}
+
+export function listNotificationEventTypes(
+  organizationId: string,
+  token: string,
+) {
+  return coreRequest<CoreNotificationEventTypeListResponse>(
+    `/v1/organizations/${organizationId}/notifications/event-types`,
     token,
   );
 }

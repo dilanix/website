@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { listReports } from "@/lib/core/api";
+import {
+  listNotificationChannels,
+  listNotificationDestinations,
+  listReports,
+} from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { ReportsClient } from "@/components/dashboard/cost/reports-client";
 
@@ -16,7 +20,18 @@ export default async function CostReportsPage({
   if (slug !== "cost") notFound();
 
   const { token, organization } = await requireDashboardOrganization();
-  const { items } = await listReports(organization.organization_id, token);
+  const [{ items }, { items: channels }, { items: destinations }] =
+    await Promise.all([
+      listReports(organization.organization_id, token),
+      listNotificationChannels(organization.organization_id, token),
+      listNotificationDestinations(organization.organization_id, token),
+    ]);
 
-  return <ReportsClient initialReports={items} />;
+  return (
+    <ReportsClient
+      initialReports={items}
+      channels={channels}
+      destinations={destinations}
+    />
+  );
 }

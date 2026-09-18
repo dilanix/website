@@ -14,6 +14,7 @@ import {
   deleteBudget,
   deleteReport,
   deleteSavedView,
+  generateReport,
   getAllocationBreakdown,
   getCostDrivers,
   getCostForecast,
@@ -37,6 +38,7 @@ import {
   type CoreSavedView,
   type CoreScopeCondition,
   type CostExplorerQueryInput,
+  type GenerateReportResult,
 } from "@/lib/core/api";
 
 export type CostActionResult<T = undefined> = {
@@ -689,6 +691,7 @@ const reportInputSchema = z.object({
   description: descriptionSchema,
   format: z.enum(["csv", "pdf"]),
   recipients: recipientsSchema,
+  destinationIds: z.array(idSchema).max(50),
   scheduleCron: z.string().trim().min(1).max(120).nullable(),
   scope: scopeSchema,
 });
@@ -706,6 +709,7 @@ export async function createReportAction(
       description: parsed.data.description,
       format: parsed.data.format,
       recipients: parsed.data.recipients,
+      destination_ids: parsed.data.destinationIds,
       schedule_cron: parsed.data.scheduleCron,
       scope: toScopeInput(parsed.data.scope),
     });
@@ -732,6 +736,7 @@ export async function updateReportAction(
       description: parsed.data.description,
       format: parsed.data.format,
       recipients: parsed.data.recipients,
+      destination_ids: parsed.data.destinationIds,
       schedule_cron: parsed.data.scheduleCron,
       enabled: input.enabled,
       scope: parsed.data.scope ? toScopeInput(parsed.data.scope) : undefined,
@@ -754,6 +759,21 @@ export async function deleteReportAction(
     await deleteReport(organizationId, parsed.data, token);
     revalidatePath(BASE_PATH);
     return { data: { deletedId: parsed.data } };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function generateReportAction(
+  reportId: string,
+): Promise<CostActionResult<GenerateReportResult>> {
+  const parsed = idSchema.safeParse(reportId);
+  if (!parsed.success) return { error: "Invalid report." };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await generateReport(organizationId, parsed.data, token);
+    return { data };
   } catch (error) {
     return { error: message(error) };
   }

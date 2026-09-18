@@ -30,6 +30,7 @@ import {
 } from "@/app/dashboard/notifications/actions";
 import { EmptyState, Section, StatusBadge } from "./primitives";
 import { DestructiveActionDialog } from "./destructive-action-dialog";
+import { Portal } from "./portal";
 
 type ConfigFieldType = "text" | "number" | "checkbox";
 
@@ -724,99 +725,103 @@ export function NotificationsClient({
       </Section>
 
       {channelDialog ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="channel-dialog-title"
-            className="bg-background border-foreground/15 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border p-6 shadow-2xl"
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="bg-accent/10 text-accent flex h-9 w-9 items-center justify-center rounded-lg">
-                  <Bell size={17} />
-                </span>
-                <h2
-                  id="channel-dialog-title"
-                  className="mt-4 text-lg font-semibold"
+        <Portal>
+          <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="channel-dialog-title"
+              className="bg-background border-foreground/15 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border p-6 shadow-2xl"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="bg-accent/10 text-accent flex h-9 w-9 items-center justify-center rounded-lg">
+                    <Bell size={17} />
+                  </span>
+                  <h2
+                    id="channel-dialog-title"
+                    className="mt-4 text-lg font-semibold"
+                  >
+                    {channelDialog.mode === "create"
+                      ? "Add notification channel"
+                      : `Edit ${channelDialog.channel.name}`}
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeDialogs}
+                  aria-label="Close dialog"
+                  className="text-muted-foreground p-1"
                 >
-                  {channelDialog.mode === "create"
-                    ? "Add notification channel"
-                    : `Edit ${channelDialog.channel.name}`}
-                </h2>
+                  <X size={18} />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={closeDialogs}
-                aria-label="Close dialog"
-                className="text-muted-foreground p-1"
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            <ChannelForm
-              dialog={channelDialog}
-              pending={pending}
-              error={error}
-              onSubmit={submitChannelForm}
-            />
+              <ChannelForm
+                dialog={channelDialog}
+                pending={pending}
+                error={error}
+                onSubmit={submitChannelForm}
+              />
+            </div>
           </div>
-        </div>
+        </Portal>
       ) : null}
 
       {destinationDialog ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="destination-dialog-title"
-            className="bg-background border-foreground/15 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border p-6 shadow-2xl"
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="bg-accent/10 text-accent flex h-9 w-9 items-center justify-center rounded-lg">
-                  <Send size={17} />
-                </span>
-                <h2
-                  id="destination-dialog-title"
-                  className="mt-4 text-lg font-semibold"
+        <Portal>
+          <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="destination-dialog-title"
+              className="bg-background border-foreground/15 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border p-6 shadow-2xl"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="bg-accent/10 text-accent flex h-9 w-9 items-center justify-center rounded-lg">
+                    <Send size={17} />
+                  </span>
+                  <h2
+                    id="destination-dialog-title"
+                    className="mt-4 text-lg font-semibold"
+                  >
+                    {destinationDialog.mode === "create"
+                      ? `Add destination · ${destinationDialog.channel.name}`
+                      : `Edit ${destinationDialog.destination.name}`}
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeDialogs}
+                  aria-label="Close dialog"
+                  className="text-muted-foreground p-1"
                 >
-                  {destinationDialog.mode === "create"
-                    ? `Add destination · ${destinationDialog.channel.name}`
-                    : `Edit ${destinationDialog.destination.name}`}
-                </h2>
+                  <X size={18} />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={closeDialogs}
-                aria-label="Close dialog"
-                className="text-muted-foreground p-1"
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            <DestinationForm
-              dialog={destinationDialog}
-              provider={
-                destinationDialog.mode === "create"
-                  ? destinationDialog.channel.provider
-                  : (channelById.get(destinationDialog.destination.channel_id)
-                      ?.provider ?? "webhook")
-              }
-              channelHasCredential={
-                destinationDialog.mode === "create"
-                  ? destinationDialog.channel.has_credential
-                  : (channelById.get(destinationDialog.destination.channel_id)
-                      ?.has_credential ?? false)
-              }
-              pending={pending}
-              error={error}
-              onSubmit={submitDestinationForm}
-            />
+              <DestinationForm
+                dialog={destinationDialog}
+                provider={
+                  destinationDialog.mode === "create"
+                    ? destinationDialog.channel.provider
+                    : (channelById.get(destinationDialog.destination.channel_id)
+                        ?.provider ?? "webhook")
+                }
+                channelHasCredential={
+                  destinationDialog.mode === "create"
+                    ? destinationDialog.channel.has_credential
+                    : (channelById.get(destinationDialog.destination.channel_id)
+                        ?.has_credential ?? false)
+                }
+                pending={pending}
+                error={error}
+                onSubmit={submitDestinationForm}
+              />
+            </div>
           </div>
-        </div>
+        </Portal>
       ) : null}
 
       {deleteChannelTarget ? (
@@ -871,12 +876,9 @@ function ChannelForm({
   const [provider, setProvider] = useState<NotificationProvider>(
     dialog.mode === "edit" ? dialog.channel.provider : "slack",
   );
-  const [slackMode, setSlackMode] = useState<"webhook" | "bot">("webhook");
   const meta = PROVIDER_META[provider];
   const configuration =
     dialog.mode === "edit" ? dialog.channel.configuration : {};
-  const isSlackWebhookMode =
-    dialog.mode === "create" && provider === "slack" && slackMode === "webhook";
 
   return (
     <form
@@ -901,37 +903,6 @@ function ChannelForm({
             ))}
           </select>
         </label>
-      ) : null}
-
-      {dialog.mode === "create" && provider === "slack" ? (
-        <fieldset className="text-sm">
-          <legend className="mb-2 font-medium">Connection method</legend>
-          <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="slack_mode"
-              checked={slackMode === "webhook"}
-              onChange={() => setSlackMode("webhook")}
-            />
-            Incoming Webhook (recommended — no bot required)
-          </label>
-          <label className="mt-2 flex items-center gap-2">
-            <input
-              type="radio"
-              name="slack_mode"
-              checked={slackMode === "bot"}
-              onChange={() => setSlackMode("bot")}
-            />
-            Bot token (Slack Web API)
-          </label>
-          {slackMode === "webhook" ? (
-            <p className="text-muted-foreground mt-2 text-xs leading-5">
-              No credential needed here — create a Slack Incoming Webhook (Slack
-              → your workspace → Apps → Incoming Webhooks) and paste its URL as
-              this channel&apos;s destination after saving.
-            </p>
-          ) : null}
-        </fieldset>
       ) : null}
 
       <label className="block text-sm">
@@ -972,9 +943,14 @@ function ChannelForm({
         </label>
       ))}
 
-      {meta.credentialLabel && !isSlackWebhookMode ? (
+      {meta.credentialLabel ? (
         <label className="block text-sm">
-          <span className="mb-2 block font-medium">{meta.credentialLabel}</span>
+          <span className="mb-2 block font-medium">
+            {meta.credentialLabel}{" "}
+            <span className="text-muted-foreground font-normal">
+              (optional)
+            </span>
+          </span>
           <input
             name="credential"
             type="password"
@@ -986,6 +962,12 @@ function ChannelForm({
             }
             className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 outline-none"
           />
+          {provider === "slack" ? (
+            <span className="text-muted-foreground mt-1.5 block text-xs leading-5">
+              Leave blank to use a Slack Incoming Webhook URL instead — set that
+              as the destination&apos;s identifier when you add one below.
+            </span>
+          ) : null}
         </label>
       ) : null}
 

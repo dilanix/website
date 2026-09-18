@@ -132,7 +132,7 @@ describe("NotificationsClient", () => {
     );
   });
 
-  it("defaults a new Slack channel to Incoming Webhook mode with no credential field", async () => {
+  it("creates a Slack channel with no bot token, leaving credential null", async () => {
     vi.mocked(createNotificationChannelAction).mockResolvedValue({
       data: { ...slackChannel, has_credential: false },
     });
@@ -151,17 +151,13 @@ describe("NotificationsClient", () => {
     fireEvent.click(addChannelButton);
     const dialog = screen.getByRole("dialog");
 
-    expect(within(dialog).queryByLabelText("Bot User OAuth Token")).toBeNull();
-
-    fireEvent.click(within(dialog).getByRole("radio", { name: /bot token/i }));
+    // The credential field is always present and optional — no separate
+    // "connection method" step to choose upfront; whether a destination
+    // later uses a bot token or a webhook URL follows from whether this
+    // was left blank.
     expect(
-      within(dialog).getByLabelText("Bot User OAuth Token"),
+      within(dialog).getByLabelText(/bot user oauth token/i),
     ).not.toBeNull();
-
-    fireEvent.click(
-      within(dialog).getByRole("radio", { name: /incoming webhook/i }),
-    );
-    expect(within(dialog).queryByLabelText("Bot User OAuth Token")).toBeNull();
 
     fireEvent.change(within(dialog).getByLabelText("Channel name"), {
       target: { value: "Ops Slack" },

@@ -1,34 +1,37 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { FileText, Info, Pencil, Plus, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { FileText, Info, Pencil, Plus, Send, Trash2, X } from "lucide-react";
 import {
   createReportAction,
   deleteReportAction,
+  generateReportAction,
   updateReportAction,
 } from "@/app/dashboard/products/cost-actions";
-import type { CoreReport, CoreScopeCondition, ReportFormat } from "@/lib/core/api";
+import type {
+  CoreNotificationChannel,
+  CoreNotificationDestination,
+  CoreReport,
+  CoreScopeCondition,
+  ReportFormat,
+} from "@/lib/core/api";
 import { DestructiveActionDialog } from "@/components/dashboard/destructive-action-dialog";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { ScopeEditor, summarizeScope } from "./scope-editor";
 
 function sortReports(reports: CoreReport[]) {
-  return [...reports].sort((left, right) => left.name.localeCompare(right.name));
-}
-
-function parseRecipients(value: string): string[] {
-  return value
-    .split(/[,\n]/)
-    .map((part) => part.trim())
-    .filter(Boolean);
+  return [...reports].sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
 }
 
 interface ReportFormState {
   name: string;
   description: string;
   format: ReportFormat;
-  recipients: string;
   scheduleCron: string;
+  destinationIds: string[];
 }
 
 function toFormState(report?: CoreReport): ReportFormState {
@@ -36,19 +39,28 @@ function toFormState(report?: CoreReport): ReportFormState {
     name: report?.name ?? "",
     description: report?.description ?? "",
     format: report?.format ?? "csv",
-    recipients: report?.recipients.join(", ") ?? "",
     scheduleCron: report?.schedule_cron ?? "",
+    destinationIds: report?.destination_ids ?? [],
   };
+}
+
+function providerLabel(channel: CoreNotificationChannel | undefined) {
+  if (!channel) return "Unknown channel";
+  return `${channel.provider.charAt(0).toUpperCase()}${channel.provider.slice(1)} · ${channel.name}`;
 }
 
 function ReportDialog({
   report,
   onClose,
   onSaved,
+  channels,
+  destinations,
 }: {
   report: CoreReport | null;
   onClose: () => void;
   onSaved: (report: CoreReport) => void;
+  channels: CoreNotificationChannel[];
+  destinations: CoreNotificationDestination[];
 }) {
   const [form, setForm] = useState<ReportFormState>(() =>
     toFormState(report ?? undefined),
@@ -59,14 +71,22 @@ function ReportDialog({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const isEditing = Boolean(report);
+  const channelById = new Map(channels.map((channel) => [channel.id, channel]));
 
   function submit() {
     setError("");
+    if (form.destinationIds.length === 0) {
+      setError("Select at least one notification destination.");
+      return;
+    }
     const input = {
       name: form.name,
       description: form.description.trim() || null,
       format: form.format,
-      recipients: parseRecipients(form.recipients),
+      // Preserve the legacy field for API compatibility. Delivery now uses
+      // the shared Notification module destinations below.
+      recipients: report?.recipients ?? [],
+      destinationIds: form.destinationIds,
       scheduleCron: form.scheduleCron.trim() || null,
       scope,
     };
@@ -103,8 +123,8 @@ function ReportDialog({
 
         <div className="border-accent/20 bg-accent/5 text-accent mt-4 flex items-start gap-2 rounded-lg border p-3 text-xs leading-5">
           <Info size={14} className="mt-0.5 shrink-0" />
-          Scheduling is coming soon. Report definitions save now, but nothing
-          generates or sends automatically yet.
+          Automatic scheduling is coming soon. You can generate and send this
+          report on demand from the reports list.
         </div>
 
         <form
@@ -170,20 +190,68 @@ function ReportDialog({
             </label>
           </div>
 
-          <label className="block text-sm">
-            <span className="mb-1.5 block font-medium">
-              Recipients (comma or newline separated)
-            </span>
-            <textarea
-              rows={2}
-              value={form.recipients}
-              onChange={(event) =>
-                setForm((f) => ({ ...f, recipients: event.target.value }))
-              }
-              placeholder="finance@company.com"
-              className="border-foreground/15 bg-background focus:border-accent w-full rounded-lg border px-3 py-2 font-mono text-xs outline-none"
-            />
-          </label>
+          <fieldset className="text-sm">
+            <legend className="mb-1.5 font-medium">
+              Notification destinations
+            </legend>
+            {destinations.length === 0 ? (
+              <div className="border-foreground/15 text-muted-foreground rounded-lg border border-dashed p-3 text-xs leading-5">
+                No destinations are configured. Add an Email, Slack, Telegram,
+                or Webhook destination in{" "}
+                <Link
+                  href="/dashboard/notifications"
+                  className="text-accent font-medium hover:underline"
+                >
+                  Notifications
+                </Link>
+                .
+              </div>
+            ) : (
+              <div className="border-foreground/15 divide-foreground/10 max-h-48 divide-y overflow-y-auto rounded-lg border">
+                {destinations.map((destination) => {
+                  const channel = channelById.get(destination.channel_id);
+                  const selected = form.destinationIds.includes(destination.id);
+                  const available = Boolean(
+                    destination.is_enabled &&
+                    channel?.is_enabled &&
+                    channel.status === "active",
+                  );
+                  return (
+                    <label
+                      key={destination.id}
+                      className="flex cursor-pointer items-start gap-3 px-3 py-2.5"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        disabled={!available && !selected}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            destinationIds: event.target.checked
+                              ? [...current.destinationIds, destination.id]
+                              : current.destinationIds.filter(
+                                  (id) => id !== destination.id,
+                                ),
+                          }))
+                        }
+                        className="mt-0.5"
+                      />
+                      <span className="min-w-0">
+                        <span className="block font-medium">
+                          {destination.name}
+                        </span>
+                        <span className="text-muted-foreground block text-xs">
+                          {providerLabel(channel)}
+                          {!available ? " · disabled" : ""}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </fieldset>
 
           <div>
             <span className="mb-1.5 block text-sm font-medium">Scope</span>
@@ -210,8 +278,12 @@ function ReportDialog({
 
 export function ReportsClient({
   initialReports,
+  channels,
+  destinations,
 }: {
   initialReports: CoreReport[];
+  channels: CoreNotificationChannel[];
+  destinations: CoreNotificationDestination[];
 }) {
   const [reports, setReports] = useState(() => sortReports(initialReports));
   const [dialogState, setDialogState] = useState<
@@ -219,6 +291,10 @@ export function ReportsClient({
   >("closed");
   const [deleteTarget, setDeleteTarget] = useState<CoreReport | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [generatingReportId, setGeneratingReportId] = useState<string | null>(
+    null,
+  );
   const [pending, startTransition] = useTransition();
 
   function toggleEnabled(report: CoreReport) {
@@ -240,6 +316,20 @@ export function ReportsClient({
     });
   }
 
+  function generate(report: CoreReport) {
+    setError("");
+    setNotice("");
+    setGeneratingReportId(report.id);
+    startTransition(async () => {
+      const result = await generateReportAction(report.id);
+      setGeneratingReportId(null);
+      if (result.error) return setError(result.error);
+      setNotice(
+        `${report.name} was generated and queued for notification delivery.`,
+      );
+    });
+  }
+
   function remove() {
     if (!deleteTarget) return;
     const target = deleteTarget;
@@ -256,14 +346,14 @@ export function ReportsClient({
     <div className="flex flex-col gap-5">
       <div className="border-accent/20 bg-accent/5 text-accent flex items-start gap-2 rounded-lg border p-3 text-xs leading-5">
         <Info size={14} className="mt-0.5 shrink-0" />
-        Scheduling is coming soon — report definitions save today, but
-        generation and delivery aren&apos;t live yet.
+        Automatic scheduling is coming soon. On-demand generation and delivery
+        through Notifications are available now.
       </div>
 
       <div className="flex items-center justify-between gap-4">
         <p className="text-muted-foreground max-w-2xl text-sm leading-6">
-          Define exportable cost reports, ready to schedule once automatic
-          delivery ships.
+          Define cost reports, choose their notification destinations, and send
+          them on demand.
         </p>
         <button
           type="button"
@@ -279,11 +369,19 @@ export function ReportsClient({
           {error}
         </p>
       ) : null}
+      {notice && dialogState === "closed" && !deleteTarget ? (
+        <p
+          role="status"
+          className="border-accent/20 bg-accent/5 text-accent rounded-lg border px-3 py-2 text-sm"
+        >
+          {notice}
+        </p>
+      ) : null}
 
       {reports.length === 0 ? (
         <EmptyState
           title="No reports yet"
-          description="Define a report now so it's ready the moment scheduled delivery ships."
+          description="Create a report and choose where Notifications should deliver it."
           actions={
             <button
               type="button"
@@ -309,7 +407,9 @@ export function ReportsClient({
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold">{report.name}</p>
-                      <StatusBadge status={report.enabled ? "success" : "neutral"}>
+                      <StatusBadge
+                        status={report.enabled ? "success" : "neutral"}
+                      >
                         {report.enabled ? "Enabled" : "Disabled"}
                       </StatusBadge>
                       <span className="text-muted-foreground font-mono text-[11px] uppercase">
@@ -325,8 +425,8 @@ export function ReportsClient({
                       {report.schedule_cron
                         ? `Schedule: ${report.schedule_cron} (not active yet)`
                         : "On-demand only"}{" "}
-                      · {report.recipients.length} recipient
-                      {report.recipients.length === 1 ? "" : "s"}
+                      · {report.destination_ids.length} destination
+                      {report.destination_ids.length === 1 ? "" : "s"}
                     </p>
                     <p className="text-muted-foreground mt-1 text-xs">
                       Scope: {summarizeScope(report.scope)}
@@ -334,6 +434,28 @@ export function ReportsClient({
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={
+                      pending ||
+                      report.destination_ids.length === 0 ||
+                      report.format !== "csv"
+                    }
+                    onClick={() => generate(report)}
+                    title={
+                      report.destination_ids.length === 0
+                        ? "Edit the report and select a notification destination first"
+                        : report.format !== "csv"
+                          ? "On-demand generation currently supports CSV reports only"
+                          : undefined
+                    }
+                    className="text-accent inline-flex items-center gap-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Send size={13} />
+                    {generatingReportId === report.id
+                      ? "Sending…"
+                      : "Generate & send"}
+                  </button>
                   <button
                     type="button"
                     disabled={pending}
@@ -385,6 +507,8 @@ export function ReportsClient({
             });
             setDialogState("closed");
           }}
+          channels={channels}
+          destinations={destinations}
         />
       ) : null}
 
