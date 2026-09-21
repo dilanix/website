@@ -18,6 +18,7 @@ import {
   queryCostExplorerAction,
 } from "@/app/dashboard/products/cost-actions";
 import type {
+  BillingCostSource,
   CoreAnomaly,
   CoreBudget,
   CoreCostDriver,
@@ -36,9 +37,8 @@ import {
   type DateRange,
   type PeriodPresetId,
 } from "@/lib/billing/cost-summaries";
-import { EmptyState } from "@/components/dashboard/primitives";
+import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { StatCard } from "@/components/dashboard/stat-card";
-import { SourceBadge } from "@/components/dashboard/unified-cost-totals";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 import { formatAmount } from "@/components/dashboard/cost/format";
 import { SCOPE_DIMENSION_LABELS } from "@/components/dashboard/cost/scope-editor";
@@ -51,6 +51,16 @@ import {
   type SpendTrajectoryAnomaly,
   type SpendTrajectoryPoint,
 } from "@/components/dashboard/cost/spend-trajectory-chart";
+
+/** Discloses which `BillingCostSource` answered a Cost read — `cost_usage` (FOCUS)
+ * is the complete-coverage source, `cost_summary` (Cost Explorer) the fallback. */
+function SourceBadge({ source }: { source: BillingCostSource }) {
+  return (
+    <StatusBadge status={source === "cost_usage" ? "success" : "neutral"}>
+      {source === "cost_usage" ? "FOCUS" : "Cost Explorer"}
+    </StatusBadge>
+  );
+}
 
 type OverviewPresetId = PeriodPresetId | "mtd";
 type OverviewPeriodId = OverviewPresetId | "custom";

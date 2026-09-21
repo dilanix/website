@@ -16,14 +16,12 @@ import {
   COST_BASIS_FILTER_ORDER,
   COST_SUMMARIES_PAGE_SIZE,
   PERIOD_PRESETS,
-  presetRange,
   type PeriodPresetId,
 } from "@/lib/billing/cost-summaries";
 import { COST_USAGE_PAGE_SIZE } from "@/lib/billing/cost-usage";
 import { CloudConnectionSelector } from "@/components/dashboard/cloud-connection-selector";
 import { CostSummaryPanel } from "@/components/dashboard/cost-summary-panel";
 import { CostUsagePanel } from "@/components/dashboard/cost-usage-panel";
-import { UnifiedCostTotals } from "@/components/dashboard/unified-cost-totals";
 import {
   EmptyState,
   PageHeader,
@@ -251,29 +249,6 @@ export default async function CostsPage({
       ) : null}
       {connectionUsable && costReadGranted ? (
         <>
-          <Section title="Cost overview">
-            {costReadEnabled ? (
-              <UnifiedCostTotals
-                key={`${selectedConnection.id}:${targetId ?? "all"}`}
-                connectionId={selectedConnection.id}
-                targetId={targetId}
-                range={presetRange("30d")}
-              />
-            ) : (
-              <EmptyState
-                title="Cost access is not enabled"
-                description="Enable the provider's cost-read capability under Access, then run a cost sync to collect spend data."
-                actions={
-                  <Link
-                    href={connectionSettingsHref}
-                    className="bg-accent text-accent-foreground rounded-lg px-4 py-2 text-sm font-medium"
-                  >
-                    Configure access
-                  </Link>
-                }
-              />
-            )}
-          </Section>
           <Section title="Cost Explorer breakdown">
             <CostSummaryPanel
               key={`${selectedConnection.id}:${targetId ?? "all"}`}

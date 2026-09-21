@@ -31,6 +31,7 @@ const costSummary: CoreCostSummary = {
   billing_authority: "AWS",
   service_provider: "AWS",
   service_name: "Amazon EC2",
+  charge_type: null,
   period_start: "2026-09-01T00:00:00Z",
   period_end: "2026-09-02T00:00:00Z",
   granularity: "daily",

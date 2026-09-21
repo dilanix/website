@@ -35,7 +35,6 @@ import {
   getCostSummaryTotals,
   listCostUsage,
   getCostUsageTotals,
-  getUnifiedCostTotals,
   CoreApiError,
   type CoreIntegrationConnection,
   type UpdateConnectionInput,
@@ -65,8 +64,6 @@ import {
   type ListCostUsageParams,
   type CoreCostUsageTotals,
   type GetCostUsageTotalsParams,
-  type CoreUnifiedCostTotals,
-  type GetUnifiedCostTotalsParams,
   type CorePurgeConnectionResult,
 } from "@/lib/core/api";
 
@@ -620,24 +617,6 @@ export async function getCostUsageTotalsAction(
   try {
     const { token, organizationId } = await context();
     const data = await getCostUsageTotals(
-      organizationId,
-      connectionId,
-      token,
-      params,
-    );
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function getUnifiedCostTotalsAction(
-  connectionId: string,
-  params: GetUnifiedCostTotalsParams,
-): Promise<ActionResult<CoreUnifiedCostTotals>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await getUnifiedCostTotals(
       organizationId,
       connectionId,
       token,

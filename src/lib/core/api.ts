@@ -1215,6 +1215,7 @@ export interface CoreCostSummary {
   billing_authority: string;
   service_provider: string;
   service_name: string;
+  charge_type: string | null;
   period_start: string;
   period_end: string;
   granularity: "daily";
@@ -1245,6 +1246,9 @@ export interface ListCostSummariesParams {
   targetId?: string | null;
   serviceName?: string | null;
   costBasis?: CostBasis | null;
+  /** Server default `false`: `Credit`/`Refund` charge types are left out, like
+   * the AWS console's default view. `true` returns the net figure. */
+  includeCredits?: boolean;
 }
 
 /**
@@ -1266,6 +1270,7 @@ export function listCostSummaries(
   if (params.targetId) query.set("target_id", params.targetId);
   if (params.serviceName) query.set("service_name", params.serviceName);
   if (params.costBasis) query.set("cost_basis", params.costBasis);
+  if (params.includeCredits) query.set("include_credits", "true");
   return coreRequest<CoreCostSummaryListResponse>(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-summaries?${query.toString()}`,
     token,
@@ -1310,6 +1315,8 @@ export interface GetCostSummaryTotalsParams {
   costBasis?: CostBasis | null;
   targetId?: string | null;
   serviceName?: string | null;
+  /** See `ListCostSummariesParams.includeCredits`. */
+  includeCredits?: boolean;
 }
 
 /**
@@ -1330,6 +1337,7 @@ export function getCostSummaryTotals(
   if (params.costBasis) query.set("cost_basis", params.costBasis);
   if (params.targetId) query.set("target_id", params.targetId);
   if (params.serviceName) query.set("service_name", params.serviceName);
+  if (params.includeCredits) query.set("include_credits", "true");
   return coreRequest<CoreCostSummaryTotals>(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-summaries/totals?${query.toString()}`,
     token,
@@ -1528,51 +1536,6 @@ export function getCostUsageTotals(
  * (Cost Explorer) is the always-available fallback otherwise.
  */
 export type BillingCostSource = "cost_usage" | "cost_summary";
-
-/**
- * Mirrors Core's `UnifiedCostTotalsResponse` (`BillingQueryService`) — the
- * coverage-aware, source-selecting total for a caller-chosen period. Never mixes
- * `billing.cost_usage` and `billing.cost_summary` within one answer; `source`
- * always discloses which one actually did.
- */
-export interface CoreUnifiedCostTotals {
-  source: BillingCostSource;
-  period_start: string;
-  period_end: string;
-  total_amount: string;
-  currency: string | null;
-  is_estimated: boolean;
-}
-
-export interface GetUnifiedCostTotalsParams {
-  periodStart: string;
-  periodEnd: string;
-  targetId?: string | null;
-  serviceName?: string | null;
-}
-
-/**
- * The single "best available total" read — never branches on provider/source
- * itself (`BillingQueryService.get_cost_totals` in Core). Requires
- * `billing.read`, exactly like the dataset-specific totals endpoints.
- */
-export function getUnifiedCostTotals(
-  organizationId: string,
-  connectionId: string,
-  token: string,
-  params: GetUnifiedCostTotalsParams,
-) {
-  const query = new URLSearchParams({
-    period_start: params.periodStart,
-    period_end: params.periodEnd,
-  });
-  if (params.targetId) query.set("target_id", params.targetId);
-  if (params.serviceName) query.set("service_name", params.serviceName);
-  return coreRequest<CoreUnifiedCostTotals>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/costs/totals?${query.toString()}`,
-    token,
-  );
-}
 
 /**
  * Cost management module (`src/modules/cost` in Core) — Budgets, Allocations,
@@ -2052,10 +2015,7 @@ export interface CoreCostOverview {
    * when no complete trailing FOCUS sub-range exists for the targets in scope.
    * In that case `by_currency[].financial_breakdown` is `null` and
    * `by_charge_category` is empty because Cost Explorer can't provide either.
-   * Always disclosed, matching `CoreUnifiedCostTotals.source`'s own convention
-   * on `/dashboard/costs` — `current_total`/`previous_total`/`absolute_delta`/
-   * `change_percent` are guaranteed to match that page's own totals for the
-   * same connection/target/period. */
+   * Always disclosed. */
   source: BillingCostSource;
   by_currency: CoreCostOverviewCurrency[];
 }

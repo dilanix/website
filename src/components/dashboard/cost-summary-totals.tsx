@@ -73,6 +73,7 @@ export function CostSummaryTotals({
   targetId = null,
   range,
   costBasis,
+  includeCredits = false,
   refreshKey = 0,
 }: {
   connectionId: string;
@@ -81,6 +82,7 @@ export function CostSummaryTotals({
   targetId?: string | null;
   range: DateRange | null;
   costBasis: CostBasis;
+  includeCredits?: boolean;
   refreshKey?: number;
 }) {
   const [current, setCurrent] = useState<CoreCostSummaryTotals | null>(null);
@@ -99,12 +101,14 @@ export function CostSummaryTotals({
           periodEnd: range.end.toISOString(),
           costBasis,
           targetId,
+          includeCredits,
         }),
         getCostSummaryTotalsAction(connectionId, {
           periodStart: previousPeriod.start.toISOString(),
           periodEnd: previousPeriod.end.toISOString(),
           costBasis,
           targetId,
+          includeCredits,
         }),
       ]);
       if (currentResult.error) return setError(currentResult.error);
@@ -112,7 +116,7 @@ export function CostSummaryTotals({
       setCurrent(currentResult.data ?? null);
       setPrevious(previousResult.data ?? null);
     });
-  }, [connectionId, targetId, range, costBasis, refreshKey]);
+  }, [connectionId, targetId, range, costBasis, includeCredits, refreshKey]);
 
   return (
     <div

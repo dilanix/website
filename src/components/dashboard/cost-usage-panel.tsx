@@ -258,7 +258,7 @@ function isCostUsageMetric(value: unknown): value is CostUsageMetric {
  * `CostSummaryPanel`. Deliberately simpler: no URL-persisted filter state (this
  * panel's filters are independent of `CostSummaryPanel`'s own filters and are
  * persisted under their own localStorage key. There is no period picker of its
- * own — period-level totals are already covered by `UnifiedCostTotals` above.
+ * own.
  */
 export function CostUsagePanel({
   connectionId,

@@ -234,6 +234,7 @@ export function CostSummaryPanel({
     isString,
     { fallbackPriority: preferInitialFilters },
   );
+  const [includeCredits, setIncludeCredits] = useState(false);
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -256,7 +257,7 @@ export function CostSummaryPanel({
     });
   }, [costSummaries, range]);
 
-  function reload(next: CostSummaryFilters) {
+  function reload(next: CostSummaryFilters, credits = includeCredits) {
     setRefreshing(true);
     setError("");
     startTransition(async () => {
@@ -266,6 +267,7 @@ export function CostSummaryPanel({
         targetId,
         costBasis: next.costBasis,
         serviceName: next.serviceName || null,
+        includeCredits: credits,
       });
       setRefreshing(false);
       if (result.error) return setError(result.error);
@@ -312,6 +314,12 @@ export function CostSummaryPanel({
     reload(nextFilters);
   }
 
+  function toggleIncludeCredits() {
+    const next = !includeCredits;
+    setIncludeCredits(next);
+    reload(filters, next);
+  }
+
   function submitServiceNameFilter(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextFilters = { ...filters, serviceName: serviceNameInput.trim() };
@@ -329,6 +337,7 @@ export function CostSummaryPanel({
         targetId,
         costBasis: filters.costBasis,
         serviceName: filters.serviceName || null,
+        includeCredits,
       });
       setLoadingMore(false);
       if (result.error) return setError(result.error);
@@ -467,6 +476,9 @@ export function CostSummaryPanel({
               ))}
             </div>
           </div>
+          <FilterChip active={includeCredits} onClick={toggleIncludeCredits}>
+            Include credits
+          </FilterChip>
           <form
             onSubmit={submitServiceNameFilter}
             className="flex min-w-56 flex-1 items-center gap-2 sm:max-w-sm"
@@ -499,6 +511,7 @@ export function CostSummaryPanel({
         targetId={targetId}
         range={range}
         costBasis={filters.costBasis}
+        includeCredits={includeCredits}
         refreshKey={refreshVersion}
       />
 
