@@ -76,6 +76,51 @@ function uniqueSorted(values: (string | null | undefined)[]) {
   ).sort();
 }
 
+/** Pulls the resource's own AWS identifier (e.g. `i-0abc123`, `vol-0abc123`)
+ * and, when tagged, its human-assigned `Name` out of the analyzer's
+ * `resource_identity` evidence entry — older recommendations created before
+ * analyzers started emitting it won't have one. */
+function resourceIdentity(recommendation: CoreUnifiedRecommendation) {
+  const evidence = recommendation.evidence.find(
+    (item) => item.evidence_key === "resource_identity",
+  );
+  const externalId = evidence?.value.external_id;
+  if (typeof externalId !== "string") return null;
+  const name = evidence?.value.name;
+  return typeof name === "string" && name.length > 0
+    ? `${name} (${externalId})`
+    : externalId;
+}
+
+const EVIDENCE_LABELS: Record<string, string> = {
+  resource_identity: "Resource",
+  cpu_utilization: "CPU utilization",
+  volume_state: "Volume state",
+  pricing_quote: "Pricing",
+};
+
+function evidenceFieldLabel(key: string) {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatEvidenceFieldValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (typeof value === "number") return value.toLocaleString("en-US");
+  return String(value);
+}
+
+function formatObservedAt(value: string) {
+  return new Date(value).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /** Only Cost's own dismiss/restore/explain endpoints exist today — a
  * recommendation from a future product isn't actionable from this inbox
  * until that product ships its own equivalent endpoints. */
@@ -102,7 +147,17 @@ export function RecommendationsInboxClient({
   const [error, setError] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [, startTransition] = useTransition();
+
+  function toggleExpanded(id: string) {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   // A best-effort snapshot of what products/analyzers exist, taken once from
   // the first unfiltered page load — never shrinks as filters narrow the
@@ -326,6 +381,8 @@ export function RecommendationsInboxClient({
               const savings = savingsLabel(recommendation);
               const isPending = pendingId === recommendation.id;
               const actionable = isActionable(recommendation);
+              const identity = resourceIdentity(recommendation);
+              const expanded = expandedIds.has(recommendation.id);
               return (
                 <div
                   key={recommendation.id}
@@ -340,6 +397,11 @@ export function RecommendationsInboxClient({
                         <p className="text-sm font-semibold">
                           {recommendation.title}
                         </p>
+                        {identity ? (
+                          <code className="border-border-soft bg-card-strong/60 rounded px-1.5 py-0.5 text-[11px]">
+                            {identity}
+                          </code>
+                        ) : null}
                         {recommendation.priority ? (
                           <StatusBadge
                             status={priorityTone(recommendation.priority)}
@@ -361,6 +423,18 @@ export function RecommendationsInboxClient({
                         {recommendation.analyzer_key} · first detected{" "}
                         {formatDate(recommendation.first_detected_at)} · last
                         seen {formatDate(recommendation.last_detected_at)}
+                        {recommendation.evidence.length > 0 ? (
+                          <>
+                            {" · "}
+                            <button
+                              type="button"
+                              onClick={() => toggleExpanded(recommendation.id)}
+                              className="text-accent underline-offset-2 hover:underline"
+                            >
+                              {expanded ? "Hide details" : "Show details"}
+                            </button>
+                          </>
+                        ) : null}
                       </p>
                     </div>
                     {actionable ? (
@@ -415,6 +489,34 @@ export function RecommendationsInboxClient({
                       </div>
                     ) : null}
                   </div>
+
+                  {expanded ? (
+                    <div className="border-border-soft bg-card-strong/30 flex flex-col gap-3 rounded-lg border p-3 text-xs">
+                      {recommendation.evidence.map((item, index) => (
+                        <div key={index}>
+                          <p className="font-medium">
+                            {EVIDENCE_LABELS[item.evidence_key] ??
+                              evidenceFieldLabel(item.evidence_key)}
+                            <span className="text-muted-foreground ml-2 font-normal">
+                              observed {formatObservedAt(item.observed_at)}
+                            </span>
+                          </p>
+                          <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5">
+                            {Object.entries(item.value).map(
+                              ([field, value]) => (
+                                <div key={field} className="contents">
+                                  <dt className="text-muted-foreground">
+                                    {evidenceFieldLabel(field)}
+                                  </dt>
+                                  <dd>{formatEvidenceFieldValue(value)}</dd>
+                                </div>
+                              ),
+                            )}
+                          </dl>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
 
                   {recommendation.explanation ? (
                     <div className="border-border-soft bg-card-strong/40 rounded-lg border p-3 text-xs">
