@@ -1886,6 +1886,209 @@ export function updateAnomalyStatus(
   );
 }
 
+export type RecommendationStatus = "active" | "dismissed" | "resolved";
+export type RecommendationPriority = "low" | "medium" | "high";
+export type RecommendationRunStatus = "running" | "succeeded" | "failed";
+
+export interface CoreRecommendationTarget {
+  target_type: string;
+  target_id: string;
+  role: string;
+}
+
+export interface CoreRecommendationEvidence {
+  evidence_key: string;
+  value: Record<string, unknown>;
+  source_type: string;
+  source_ref: string | null;
+  observed_at: string;
+}
+
+export interface CoreRecommendationImpact {
+  impact_type: string;
+  amount: string | null;
+  currency: string | null;
+  period: string;
+  estimated: boolean;
+  calculation_method: string;
+  calculation_version: string;
+}
+
+export interface CoreRecommendationExplanation {
+  summary: string;
+  risk_notes: string[];
+  suggested_steps: string[];
+  model: string;
+  generated_at: string;
+}
+
+export interface CoreRecommendation {
+  id: string;
+  analyzer_key: string;
+  analyzer_version: string;
+  recommendation_type: string;
+  status: RecommendationStatus;
+  title: string;
+  summary: string | null;
+  priority: RecommendationPriority | null;
+  confidence: string | null;
+  evidence_valid_until: string | null;
+  first_detected_at: string;
+  last_detected_at: string;
+  dismissed_at: string | null;
+  resolved_at: string | null;
+  targets: CoreRecommendationTarget[];
+  evidence: CoreRecommendationEvidence[];
+  impacts: CoreRecommendationImpact[];
+  explanation: CoreRecommendationExplanation | null;
+}
+
+export interface CoreRecommendationListResponse {
+  items: CoreRecommendation[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * The cross-product recommendation inbox (`GET
+ * /v1/organizations/{organization_id}/recommendations`) — reads across
+ * every product's recommendations for the organization, gated only by the
+ * `recommendations.read` permission (granted to every role including
+ * Member/Viewer by default), never by any one product's own `product.*`
+ * access. `product_key` is present here (it's implicit — always `"cost"` —
+ * on the product-scoped `dismiss`/`restore`/`explain` endpoints below, so
+ * it isn't repeated on their own response shape).
+ */
+export interface CoreUnifiedRecommendation extends CoreRecommendation {
+  product_key: string;
+}
+
+export interface CoreUnifiedRecommendationListResponse {
+  items: CoreUnifiedRecommendation[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export function listAllRecommendations(
+  organizationId: string,
+  token: string,
+  options?: {
+    productKey?: string | null;
+    status?: RecommendationStatus | null;
+    analyzerKey?: string | null;
+    recommendationType?: string | null;
+    limit?: number;
+    offset?: number;
+  },
+) {
+  const params = new URLSearchParams();
+  if (options?.productKey) params.set("product_key", options.productKey);
+  if (options?.status) params.set("status", options.status);
+  if (options?.analyzerKey) params.set("analyzer_key", options.analyzerKey);
+  if (options?.recommendationType)
+    params.set("recommendation_type", options.recommendationType);
+  params.set("limit", String(options?.limit ?? 50));
+  params.set("offset", String(options?.offset ?? 0));
+  return coreRequest<CoreUnifiedRecommendationListResponse>(
+    `/v1/organizations/${organizationId}/recommendations?${params.toString()}`,
+    token,
+  );
+}
+
+export function getUnifiedRecommendation(
+  organizationId: string,
+  recommendationId: string,
+  token: string,
+) {
+  return coreRequest<CoreUnifiedRecommendation>(
+    `/v1/organizations/${organizationId}/recommendations/${recommendationId}`,
+    token,
+  );
+}
+
+/** Dismiss/restore/explain remain product-owned (only Cost exists today) —
+ * the dashboard routes each row's action to its own `product_key`'s
+ * endpoint; these three always call Cost's. */
+export function dismissRecommendation(
+  organizationId: string,
+  recommendationId: string,
+  token: string,
+) {
+  return coreRequest<CoreRecommendation>(
+    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/dismiss`,
+    token,
+    { method: "POST" },
+  );
+}
+
+export function restoreRecommendation(
+  organizationId: string,
+  recommendationId: string,
+  token: string,
+) {
+  return coreRequest<CoreRecommendation>(
+    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/restore`,
+    token,
+    { method: "POST" },
+  );
+}
+
+/** May fail with a 403 (the `cost.recommendations.ai_explanation` capability
+ * isn't granted for this organization — not on by default, real per-call AI
+ * spend), a 409 (the recommendation is `resolved` — nothing left to
+ * explain), or a 429/502 (AI budget exceeded / provider or malformed-output
+ * failure) — see `docs/RECOMMENDATION_ARCHITECTURE.md` §21 in Core. */
+export function explainRecommendation(
+  organizationId: string,
+  recommendationId: string,
+  token: string,
+) {
+  return coreRequest<CoreRecommendation>(
+    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/explain`,
+    token,
+    { method: "POST" },
+  );
+}
+
+export interface CoreRecommendationRun {
+  id: string;
+  analyzer_key: string;
+  analyzer_version: string;
+  scope_key: string;
+  status: RecommendationRunStatus;
+  started_at: string;
+  finished_at: string | null;
+  candidate_count: number | null;
+  created_count: number | null;
+  updated_count: number | null;
+  resolved_count: number | null;
+  error_code: string | null;
+}
+
+export interface CoreRecommendationRunListResponse {
+  items: CoreRecommendationRun[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export function listRecommendationRuns(
+  organizationId: string,
+  token: string,
+  options?: { analyzerKey?: string | null; limit?: number; offset?: number },
+) {
+  const params = new URLSearchParams();
+  if (options?.analyzerKey) params.set("analyzer_key", options.analyzerKey);
+  params.set("limit", String(options?.limit ?? 50));
+  params.set("offset", String(options?.offset ?? 0));
+  return coreRequest<CoreRecommendationRunListResponse>(
+    `/v1/organizations/${organizationId}/cost/recommendation-runs?${params.toString()}`,
+    token,
+  );
+}
+
 export type ExplorerGranularity = "daily" | "weekly" | "monthly";
 
 export interface CostExplorerGroupByField {
