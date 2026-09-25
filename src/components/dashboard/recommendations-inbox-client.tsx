@@ -5,12 +5,13 @@ import { ChevronDown, Search, Sparkles, Undo2 } from "lucide-react";
 import { listAllRecommendationsAction } from "@/app/dashboard/recommendations/actions";
 import {
   dismissRecommendationAction,
-  explainRecommendationAction,
   restoreRecommendationAction,
 } from "@/app/dashboard/products/cost-actions";
 import type {
+  CoreRecommendationAIReview,
   CoreUnifiedRecommendation,
   CoreUnifiedRecommendationListResponse,
+  RecommendationAIOutcome,
   RecommendationStatus,
 } from "@/lib/core/api";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
@@ -25,6 +26,130 @@ const STATUS_FILTERS: { id: RecommendationStatus | "all"; label: string }[] = [
 ];
 
 const ALL_OPTION = "all";
+
+/** `default` = what Core lists without an `ai_outcome` filter: AI-approved
+ * (`completed`) findings plus any never reviewed. Every other outcome is
+ * hidden unless picked here explicitly. */
+const REVIEW_FILTERS: {
+  id: RecommendationAIOutcome | "default";
+  label: string;
+}[] = [
+  { id: "default", label: "AI-approved" },
+  { id: "needs_input", label: "Needs your input" },
+  { id: "insufficient_evidence", label: "Insufficient evidence" },
+  { id: "rejected", label: "Rejected by AI review" },
+];
+
+type ReviewFilter = (typeof REVIEW_FILTERS)[number]["id"];
+
+function reviewOutcome(filter: ReviewFilter) {
+  return filter === "default" ? null : filter;
+}
+
+function riskTone(risk: string | null) {
+  if (risk === "high") return "warning" as const;
+  if (risk === "low") return "success" as const;
+  return "neutral" as const;
+}
+
+function AiReviewPanel({ review }: { review: CoreRecommendationAIReview }) {
+  return (
+    <div className="border-border-soft bg-card-strong/40 flex flex-col gap-3 rounded-lg border p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="flex items-center gap-1.5 font-medium">
+          <Sparkles size={12} className="text-accent" /> AI review
+        </p>
+        {review.outcome !== "completed" ? (
+          <StatusBadge status="neutral">
+            {review.outcome.replace(/_/g, " ")}
+          </StatusBadge>
+        ) : null}
+        {review.risk_level ? (
+          <StatusBadge status={riskTone(review.risk_level)}>
+            {review.risk_level} risk
+          </StatusBadge>
+        ) : null}
+      </div>
+      <p className="text-muted-foreground leading-5">{review.summary}</p>
+
+      {review.options.length > 0 ? (
+        <div className="grid gap-2 md:grid-cols-2">
+          {review.options.map((option, index) => (
+            <div
+              key={index}
+              className={cn(
+                "border-border-soft rounded-lg border p-2.5",
+                option.is_preferred && "border-accent/60",
+              )}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-medium">{option.title}</p>
+                {option.is_preferred ? (
+                  <StatusBadge status="success">recommended</StatusBadge>
+                ) : null}
+                {option.risk_level ? (
+                  <StatusBadge status={riskTone(option.risk_level)}>
+                    {option.risk_level} risk
+                  </StatusBadge>
+                ) : null}
+              </div>
+              <p className="text-muted-foreground mt-1 leading-5">
+                {option.description}
+              </p>
+              {option.pros.length > 0 ? (
+                <ul className="mt-1.5 space-y-0.5">
+                  {option.pros.map((pro, proIndex) => (
+                    <li key={proIndex} className="text-success">
+                      + {pro}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {option.cons.length > 0 ? (
+                <ul className="mt-1 space-y-0.5">
+                  {option.cons.map((con, conIndex) => (
+                    <li key={conIndex} className="text-red-500">
+                      − {con}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {review.risk_notes.length > 0 ? (
+        <div>
+          <p className="font-medium">Before acting</p>
+          <ul className="text-muted-foreground mt-1 list-disc space-y-0.5 pl-4">
+            {review.risk_notes.map((note, index) => (
+              <li key={index}>{note}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {review.open_questions.length > 0 ? (
+        <div>
+          <p className="font-medium">Open questions</p>
+          <ul className="text-muted-foreground mt-1 list-disc space-y-0.5 pl-4">
+            {review.open_questions.map((question, index) => (
+              <li key={index}>{question}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <p className="text-muted-foreground">
+        {review.model} · reviewed {formatDate(review.reviewed_at)}
+        {review.facts.length > 0
+          ? ` · ${review.facts.length} extra fact${review.facts.length === 1 ? "" : "s"} checked`
+          : ""}
+      </p>
+    </div>
+  );
+}
 
 function isRecommendationFilter(
   value: unknown,
@@ -121,7 +246,7 @@ function formatObservedAt(value: string) {
   });
 }
 
-/** Only Cost's own dismiss/restore/explain endpoints exist today — a
+/** Only Cost's own dismiss/restore endpoints exist today — a
  * recommendation from a future product isn't actionable from this inbox
  * until that product ships its own equivalent endpoints. */
 function isActionable(recommendation: CoreUnifiedRecommendation) {
@@ -143,6 +268,7 @@ export function RecommendationsInboxClient({
   >("recommendations.status", "all", isRecommendationFilter);
   const [productFilter, setProductFilter] = useState(ALL_OPTION);
   const [analyzerFilter, setAnalyzerFilter] = useState(ALL_OPTION);
+  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("default");
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -196,6 +322,7 @@ export function RecommendationsInboxClient({
     status: RecommendationStatus | "all";
     product: string;
     analyzer: string;
+    review: ReviewFilter;
   }) {
     setError("");
     setLoading(true);
@@ -204,6 +331,7 @@ export function RecommendationsInboxClient({
         productKey: next.product === ALL_OPTION ? null : next.product,
         status: next.status,
         analyzerKey: next.analyzer === ALL_OPTION ? null : next.analyzer,
+        aiOutcome: reviewOutcome(next.review),
       },
       0,
     );
@@ -222,13 +350,19 @@ export function RecommendationsInboxClient({
       status: next,
       product: productFilter,
       analyzer: analyzerFilter,
+      review: reviewFilter,
     });
   }
 
   function onProductChange(next: string) {
     setProductFilter(next);
     setAnalyzerFilter(ALL_OPTION);
-    void refetch({ status: statusFilter, product: next, analyzer: ALL_OPTION });
+    void refetch({
+      status: statusFilter,
+      product: next,
+      analyzer: ALL_OPTION,
+      review: reviewFilter,
+    });
   }
 
   function onAnalyzerChange(next: string) {
@@ -237,6 +371,17 @@ export function RecommendationsInboxClient({
       status: statusFilter,
       product: productFilter,
       analyzer: next,
+      review: reviewFilter,
+    });
+  }
+
+  function onReviewChange(next: ReviewFilter) {
+    setReviewFilter(next);
+    void refetch({
+      status: statusFilter,
+      product: productFilter,
+      analyzer: analyzerFilter,
+      review: next,
     });
   }
 
@@ -262,6 +407,7 @@ export function RecommendationsInboxClient({
         productKey: productFilter === ALL_OPTION ? null : productFilter,
         status: statusFilter,
         analyzerKey: analyzerFilter === ALL_OPTION ? null : analyzerFilter,
+        aiOutcome: reviewOutcome(reviewFilter),
       },
       offset,
     );
@@ -279,9 +425,11 @@ export function RecommendationsInboxClient({
   return (
     <div className="flex flex-col gap-5">
       <p className="text-muted-foreground max-w-2xl text-sm leading-6">
-        Every deterministic recommendation across every product you have access
-        to, in one place — never gated by a single product&apos;s own access
-        grant. Filter by product, analyzer, status, or search by title.
+        Every recommendation across every product you have access to, in one
+        place. Each finding was reviewed by AI before it was saved — for
+        usefulness, safety and alternatives — and only AI-approved findings are
+        shown by default. Filter by product, analyzer, status, AI review, or
+        search by title.
       </p>
 
       <div
@@ -345,6 +493,23 @@ export function RecommendationsInboxClient({
             {analyzerOptions.map((analyzer) => (
               <option key={analyzer} value={analyzer}>
                 {analyzer}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">AI review</span>
+          <select
+            value={reviewFilter}
+            onChange={(event) =>
+              onReviewChange(event.target.value as ReviewFilter)
+            }
+            className="border-border-soft bg-card-strong/60 rounded-md border px-2 py-1.5 text-xs"
+          >
+            {REVIEW_FILTERS.map((filter) => (
+              <option key={filter.id} value={filter.id}>
+                {filter.label}
               </option>
             ))}
           </select>
@@ -469,23 +634,6 @@ export function RecommendationsInboxClient({
                             <Undo2 size={13} /> Restore
                           </button>
                         ) : null}
-                        {recommendation.status !== "resolved" &&
-                        !recommendation.explanation ? (
-                          <button
-                            type="button"
-                            disabled={isPending}
-                            onClick={() =>
-                              runAction(
-                                recommendation,
-                                explainRecommendationAction,
-                              )
-                            }
-                            className="text-accent inline-flex items-center gap-1 text-xs disabled:opacity-50"
-                          >
-                            <Sparkles size={13} />{" "}
-                            {isPending ? "Explaining…" : "Explain with AI"}
-                          </button>
-                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -518,34 +666,8 @@ export function RecommendationsInboxClient({
                     </div>
                   ) : null}
 
-                  {recommendation.explanation ? (
-                    <div className="border-border-soft bg-card-strong/40 rounded-lg border p-3 text-xs">
-                      <p className="flex items-center gap-1.5 font-medium">
-                        <Sparkles size={12} className="text-accent" /> AI
-                        explanation
-                      </p>
-                      <p className="text-muted-foreground mt-1.5 leading-5">
-                        {recommendation.explanation.summary}
-                      </p>
-                      {recommendation.explanation.risk_notes.length > 0 ? (
-                        <ul className="text-muted-foreground mt-2 list-disc space-y-0.5 pl-4">
-                          {recommendation.explanation.risk_notes.map(
-                            (note, index) => (
-                              <li key={index}>{note}</li>
-                            ),
-                          )}
-                        </ul>
-                      ) : null}
-                      {recommendation.explanation.suggested_steps.length > 0 ? (
-                        <ol className="text-muted-foreground mt-2 list-decimal space-y-0.5 pl-4">
-                          {recommendation.explanation.suggested_steps.map(
-                            (step, index) => (
-                              <li key={index}>{step}</li>
-                            ),
-                          )}
-                        </ol>
-                      ) : null}
-                    </div>
+                  {recommendation.ai_review ? (
+                    <AiReviewPanel review={recommendation.ai_review} />
                   ) : null}
                 </div>
               );

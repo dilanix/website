@@ -16,7 +16,6 @@ import {
   deleteReport,
   deleteSavedView,
   dismissRecommendation,
-  explainRecommendation,
   generateReport,
   getAllocationBreakdown,
   getCostDrivers,
@@ -632,26 +631,6 @@ export async function restoreRecommendationAction(
   try {
     const { token, organizationId } = await context();
     const data = await restoreRecommendation(
-      organizationId,
-      parsed.data,
-      token,
-    );
-    revalidatePath(`${BASE_PATH}/recommendations`);
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function explainRecommendationAction(
-  recommendationId: string,
-): Promise<CostActionResult<CoreRecommendation>> {
-  const parsed = idSchema.safeParse(recommendationId);
-  if (!parsed.success) return { error: validationMessage(parsed.error) };
-
-  try {
-    const { token, organizationId } = await context();
-    const data = await explainRecommendation(
       organizationId,
       parsed.data,
       token,

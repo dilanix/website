@@ -1914,12 +1914,41 @@ export interface CoreRecommendationImpact {
   calculation_version: string;
 }
 
-export interface CoreRecommendationExplanation {
+/** Outcome of Core's mandatory pre-persistence AI review — only
+ * `completed` (or a never-reviewed row) is listed by default; the others are
+ * returned only when requested explicitly via `ai_outcome`. */
+export type RecommendationAIOutcome =
+  "completed" | "rejected" | "insufficient_evidence" | "needs_input";
+
+export interface CoreRecommendationOption {
+  title: string;
+  description: string;
+  pros: string[];
+  cons: string[];
+  risk_level: string | null;
+  is_preferred: boolean;
+}
+
+export interface CoreRecommendationReviewFact {
+  fact_key: string;
+  description: string;
+  source: string;
+}
+
+export interface CoreRecommendationAIReview {
+  outcome: RecommendationAIOutcome;
   summary: string;
+  reasoning: string | null;
+  risk_level: string | null;
   risk_notes: string[];
-  suggested_steps: string[];
+  open_questions: string[];
+  options: CoreRecommendationOption[];
+  facts: CoreRecommendationReviewFact[];
+  analysis_rounds: number;
+  critic_rounds: number;
+  tool_calls: number;
   model: string;
-  generated_at: string;
+  reviewed_at: string;
 }
 
 export interface CoreRecommendation {
@@ -1940,7 +1969,7 @@ export interface CoreRecommendation {
   targets: CoreRecommendationTarget[];
   evidence: CoreRecommendationEvidence[];
   impacts: CoreRecommendationImpact[];
-  explanation: CoreRecommendationExplanation | null;
+  ai_review: CoreRecommendationAIReview | null;
 }
 
 export interface CoreRecommendationListResponse {
@@ -1957,7 +1986,7 @@ export interface CoreRecommendationListResponse {
  * `recommendations.read` permission (granted to every role including
  * Member/Viewer by default), never by any one product's own `product.*`
  * access. `product_key` is present here (it's implicit — always `"cost"` —
- * on the product-scoped `dismiss`/`restore`/`explain` endpoints below, so
+ * on the product-scoped `dismiss`/`restore` endpoints below, so
  * it isn't repeated on their own response shape).
  */
 export interface CoreUnifiedRecommendation extends CoreRecommendation {
@@ -1979,6 +2008,7 @@ export function listAllRecommendations(
     status?: RecommendationStatus | null;
     analyzerKey?: string | null;
     recommendationType?: string | null;
+    aiOutcome?: RecommendationAIOutcome | null;
     limit?: number;
     offset?: number;
   },
@@ -1989,6 +2019,7 @@ export function listAllRecommendations(
   if (options?.analyzerKey) params.set("analyzer_key", options.analyzerKey);
   if (options?.recommendationType)
     params.set("recommendation_type", options.recommendationType);
+  if (options?.aiOutcome) params.set("ai_outcome", options.aiOutcome);
   params.set("limit", String(options?.limit ?? 50));
   params.set("offset", String(options?.offset ?? 0));
   return coreRequest<CoreUnifiedRecommendationListResponse>(
@@ -2008,9 +2039,9 @@ export function getUnifiedRecommendation(
   );
 }
 
-/** Dismiss/restore/explain remain product-owned (only Cost exists today) —
- * the dashboard routes each row's action to its own `product_key`'s
- * endpoint; these three always call Cost's. */
+/** Dismiss/restore remain product-owned (only Cost exists today) — the
+ * dashboard routes each row's action to its own `product_key`'s endpoint;
+ * these two always call Cost's. */
 export function dismissRecommendation(
   organizationId: string,
   recommendationId: string,
@@ -2030,23 +2061,6 @@ export function restoreRecommendation(
 ) {
   return coreRequest<CoreRecommendation>(
     `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/restore`,
-    token,
-    { method: "POST" },
-  );
-}
-
-/** May fail with a 403 (the `cost.recommendations.ai_explanation` capability
- * isn't granted for this organization — not on by default, real per-call AI
- * spend), a 409 (the recommendation is `resolved` — nothing left to
- * explain), or a 429/502 (AI budget exceeded / provider or malformed-output
- * failure) — see `docs/RECOMMENDATION_ARCHITECTURE.md` §21 in Core. */
-export function explainRecommendation(
-  organizationId: string,
-  recommendationId: string,
-  token: string,
-) {
-  return coreRequest<CoreRecommendation>(
-    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/explain`,
     token,
     { method: "POST" },
   );
