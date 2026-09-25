@@ -24,6 +24,7 @@ import {
   getNotificationAttachmentDownloadUrl,
   listNotifications,
   queryCostExplorer,
+  recheckRecommendation,
   restoreRecommendation,
   runCostExplorerSavedView,
   updateAllocation,
@@ -631,6 +632,26 @@ export async function restoreRecommendationAction(
   try {
     const { token, organizationId } = await context();
     const data = await restoreRecommendation(
+      organizationId,
+      parsed.data,
+      token,
+    );
+    revalidatePath(`${BASE_PATH}/recommendations`);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function recheckRecommendationAction(
+  recommendationId: string,
+): Promise<CostActionResult<CoreRecommendation>> {
+  const parsed = idSchema.safeParse(recommendationId);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await recheckRecommendation(
       organizationId,
       parsed.data,
       token,

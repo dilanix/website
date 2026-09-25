@@ -1914,9 +1914,8 @@ export interface CoreRecommendationImpact {
   calculation_version: string;
 }
 
-/** Outcome of Core's mandatory pre-persistence AI review — only
- * `completed` (or a never-reviewed row) is listed by default; the others are
- * returned only when requested explicitly via `ai_outcome`. */
+/** How Core's internal review concluded on a recommendation — only
+ * `completed` recommendations are listed by default. */
 export type RecommendationAIOutcome =
   "completed" | "rejected" | "insufficient_evidence" | "needs_input";
 
@@ -2008,7 +2007,6 @@ export function listAllRecommendations(
     status?: RecommendationStatus | null;
     analyzerKey?: string | null;
     recommendationType?: string | null;
-    aiOutcome?: RecommendationAIOutcome | null;
     limit?: number;
     offset?: number;
   },
@@ -2019,7 +2017,6 @@ export function listAllRecommendations(
   if (options?.analyzerKey) params.set("analyzer_key", options.analyzerKey);
   if (options?.recommendationType)
     params.set("recommendation_type", options.recommendationType);
-  if (options?.aiOutcome) params.set("ai_outcome", options.aiOutcome);
   params.set("limit", String(options?.limit ?? 50));
   params.set("offset", String(options?.offset ?? 0));
   return coreRequest<CoreUnifiedRecommendationListResponse>(
@@ -2061,6 +2058,22 @@ export function restoreRecommendation(
 ) {
   return coreRequest<CoreRecommendation>(
     `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/restore`,
+    token,
+    { method: "POST" },
+  );
+}
+
+/** Re-checks one recommendation against fresh data (synchronous, typically
+ * 10-60 s). May fail with a 409 (resolved, or its cloud account is no
+ * longer verified), 429 (usage limit reached) or 502 (the check failed —
+ * the stored recommendation is left unchanged). */
+export function recheckRecommendation(
+  organizationId: string,
+  recommendationId: string,
+  token: string,
+) {
+  return coreRequest<CoreRecommendation>(
+    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/review`,
     token,
     { method: "POST" },
   );

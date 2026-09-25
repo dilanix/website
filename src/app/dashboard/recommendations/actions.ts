@@ -6,7 +6,6 @@ import {
   CoreApiError,
   listAllRecommendations,
   type CoreUnifiedRecommendationListResponse,
-  type RecommendationAIOutcome,
   type RecommendationStatus,
 } from "@/lib/core/api";
 
@@ -36,7 +35,6 @@ export async function listAllRecommendationsAction(
     productKey?: string | null;
     status?: RecommendationStatus | "all";
     analyzerKey?: string | null;
-    aiOutcome?: RecommendationAIOutcome | null;
   },
   offset: number,
 ): Promise<RecommendationsActionResult<CoreUnifiedRecommendationListResponse>> {
@@ -47,7 +45,6 @@ export async function listAllRecommendationsAction(
       status:
         !filters.status || filters.status === "all" ? null : filters.status,
       analyzerKey: filters.analyzerKey,
-      aiOutcome: filters.aiOutcome,
       offset,
     });
     return { data };

@@ -21,7 +21,7 @@ export default async function RecommendationsPage() {
       <PageHeader
         eyebrow="Insights"
         title="Recommendations"
-        description="A unified, cross-product inbox of AI-reviewed optimization findings — never gated by a single product's own access grant."
+        description="A unified, cross-product inbox of optimization recommendations — never gated by a single product's own access grant."
       />
       <RecommendationsInboxClient initial={initial} />
     </div>
