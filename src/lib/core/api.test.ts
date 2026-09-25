@@ -1399,4 +1399,36 @@ describe("submitContactMessage", () => {
       }),
     ).rejects.toThrow("Message too long.");
   });
+
+  it("sends review answers as a JSON body", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: "review-1" }), { status: 202 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { answerRecommendationReview } = await import("./api");
+    await answerRecommendationReview(
+      "org-123",
+      "rec-1",
+      { "resource.purpose": "vpn_gateway" },
+      "test-token",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/recommendations/rec-1/review/answers",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          answers: { "resource.purpose": "vpn_gateway" },
+        }),
+      }),
+    );
+  });
 });

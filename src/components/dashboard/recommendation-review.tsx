@@ -272,7 +272,6 @@ function riskTone(risk: string | null) {
 
 const EVIDENCE_QUALITY_LABELS: Record<string, string> = {
   user_confirmed: "Confirmed by you",
-  infrastructure_verified: "Verified from infrastructure",
 };
 
 function StepList({ title, items }: { title: string; items: string[] }) {

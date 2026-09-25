@@ -2156,7 +2156,11 @@ export function answerRecommendationReview(
   return coreRequest<CoreRecommendationReview>(
     `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/review/answers`,
     token,
-    { method: "POST", body: JSON.stringify({ answers }) },
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answers }),
+    },
   );
 }
 
