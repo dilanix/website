@@ -24,7 +24,9 @@ import {
   getNotificationAttachmentDownloadUrl,
   listNotifications,
   queryCostExplorer,
-  recheckRecommendation,
+  answerRecommendationReview,
+  getRecommendationReview,
+  requestRecommendationReview,
   restoreRecommendation,
   runCostExplorerSavedView,
   updateAllocation,
@@ -42,6 +44,7 @@ import {
   type CoreCostOverview,
   type CoreNotification,
   type CoreRecommendation,
+  type CoreRecommendationReview,
   type CoreReport,
   type CoreSavedView,
   type CoreScopeCondition,
@@ -643,20 +646,67 @@ export async function restoreRecommendationAction(
   }
 }
 
-export async function recheckRecommendationAction(
+export async function requestRecommendationReviewAction(
   recommendationId: string,
-): Promise<CostActionResult<CoreRecommendation>> {
+): Promise<CostActionResult<CoreRecommendationReview>> {
   const parsed = idSchema.safeParse(recommendationId);
   if (!parsed.success) return { error: validationMessage(parsed.error) };
 
   try {
     const { token, organizationId } = await context();
-    const data = await recheckRecommendation(
+    const data = await requestRecommendationReview(
       organizationId,
       parsed.data,
       token,
     );
-    revalidatePath(`${BASE_PATH}/recommendations`);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getRecommendationReviewAction(
+  recommendationId: string,
+): Promise<CostActionResult<CoreRecommendationReview>> {
+  const parsed = idSchema.safeParse(recommendationId);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getRecommendationReview(
+      organizationId,
+      parsed.data,
+      token,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const reviewAnswersSchema = z.record(
+  z.string().regex(/^[a-z0-9_.]{1,100}$/),
+  z.string().regex(/^[a-z0-9_]{1,50}$/),
+);
+
+export async function answerRecommendationReviewAction(
+  recommendationId: string,
+  answers: Record<string, string>,
+): Promise<CostActionResult<CoreRecommendationReview>> {
+  const parsedId = idSchema.safeParse(recommendationId);
+  if (!parsedId.success) return { error: validationMessage(parsedId.error) };
+  const parsedAnswers = reviewAnswersSchema.safeParse(answers);
+  if (!parsedAnswers.success)
+    return { error: validationMessage(parsedAnswers.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await answerRecommendationReview(
+      organizationId,
+      parsedId.data,
+      parsedAnswers.data,
+      token,
+    );
     return { data };
   } catch (error) {
     return { error: message(error) };

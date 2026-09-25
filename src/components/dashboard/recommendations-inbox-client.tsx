@@ -2,19 +2,27 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { ChevronDown, RefreshCw, Search, Undo2 } from "lucide-react";
-import { listAllRecommendationsAction } from "@/app/dashboard/recommendations/actions";
+import {
+  getRecommendationAction,
+  listAllRecommendationsAction,
+} from "@/app/dashboard/recommendations/actions";
 import {
   dismissRecommendationAction,
-  recheckRecommendationAction,
   restoreRecommendationAction,
 } from "@/app/dashboard/products/cost-actions";
 import type {
-  CoreRecommendationAIReview,
   CoreUnifiedRecommendation,
   CoreUnifiedRecommendationListResponse,
   RecommendationStatus,
 } from "@/lib/core/api";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
+import {
+  FinalRecommendation,
+  NonActionableResult,
+  ReviewProgress,
+  ReviewQuestions,
+  useRecommendationReview,
+} from "@/components/dashboard/recommendation-review";
 import { cn } from "@/lib/utils";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 
@@ -26,94 +34,6 @@ const STATUS_FILTERS: { id: RecommendationStatus | "all"; label: string }[] = [
 ];
 
 const ALL_OPTION = "all";
-
-function riskTone(risk: string | null) {
-  if (risk === "high") return "warning" as const;
-  if (risk === "low") return "success" as const;
-  return "neutral" as const;
-}
-
-/** A recommendation's options (with their trade-offs), what to check before
- * acting, and open questions — produced by Core while creating the
- * recommendation. */
-function RecommendationGuidance({
-  guidance,
-}: {
-  guidance: CoreRecommendationAIReview;
-}) {
-  return (
-    <div className="border-border-soft bg-card-strong/40 flex flex-col gap-3 rounded-lg border p-3 text-xs">
-      {guidance.options.length > 0 ? (
-        <div className="grid gap-2 md:grid-cols-2">
-          {guidance.options.map((option, index) => (
-            <div
-              key={index}
-              className={cn(
-                "border-border-soft rounded-lg border p-2.5",
-                option.is_preferred && "border-accent/60",
-              )}
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="font-medium">{option.title}</p>
-                {option.is_preferred ? (
-                  <StatusBadge status="success">recommended</StatusBadge>
-                ) : null}
-                {option.risk_level ? (
-                  <StatusBadge status={riskTone(option.risk_level)}>
-                    {option.risk_level} risk
-                  </StatusBadge>
-                ) : null}
-              </div>
-              <p className="text-muted-foreground mt-1 leading-5">
-                {option.description}
-              </p>
-              {option.pros.length > 0 ? (
-                <ul className="mt-1.5 space-y-0.5">
-                  {option.pros.map((pro, proIndex) => (
-                    <li key={proIndex} className="text-success">
-                      + {pro}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {option.cons.length > 0 ? (
-                <ul className="mt-1 space-y-0.5">
-                  {option.cons.map((con, conIndex) => (
-                    <li key={conIndex} className="text-red-500">
-                      − {con}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {guidance.risk_notes.length > 0 ? (
-        <div>
-          <p className="font-medium">Before acting</p>
-          <ul className="text-muted-foreground mt-1 list-disc space-y-0.5 pl-4">
-            {guidance.risk_notes.map((note, index) => (
-              <li key={index}>{note}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      {guidance.open_questions.length > 0 ? (
-        <div>
-          <p className="font-medium">Open questions</p>
-          <ul className="text-muted-foreground mt-1 list-disc space-y-0.5 pl-4">
-            {guidance.open_questions.map((question, index) => (
-              <li key={index}>{question}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function isRecommendationFilter(
   value: unknown,
@@ -215,6 +135,200 @@ function formatObservedAt(value: string) {
  * until that product ships its own equivalent endpoints. */
 function isActionable(recommendation: CoreUnifiedRecommendation) {
   return recommendation.product_key === "cost";
+}
+
+/** Savings are only shown for something Dilanix actually recommends — never
+ * for a candidate its review found non-actionable. */
+function showsSavings(recommendation: CoreUnifiedRecommendation) {
+  const outcome = recommendation.ai_review?.outcome;
+  return outcome === undefined || outcome === "completed";
+}
+
+function RecommendationRow({
+  recommendation,
+  pending,
+  expanded,
+  onToggleDetails,
+  onAction,
+  onUpdated,
+}: {
+  recommendation: CoreUnifiedRecommendation;
+  pending: boolean;
+  expanded: boolean;
+  onToggleDetails: () => void;
+  onAction: (
+    recommendation: CoreUnifiedRecommendation,
+    action: (id: string) => ReturnType<typeof dismissRecommendationAction>,
+  ) => void;
+  onUpdated: (recommendation: CoreUnifiedRecommendation) => void;
+}) {
+  const review = useRecommendationReview({
+    recommendationId: recommendation.id,
+    onFinished: async () => {
+      const result = await getRecommendationAction(recommendation.id);
+      if (result.data) onUpdated(result.data);
+    },
+  });
+  const savings = showsSavings(recommendation)
+    ? savingsLabel(recommendation)
+    : null;
+  const actionable = isActionable(recommendation);
+  const identity = resourceIdentity(recommendation);
+  const guidance = recommendation.ai_review;
+  const currency =
+    recommendation.impacts.find((item) => item.impact_type === "cost_savings")
+      ?.currency ?? null;
+  const summary =
+    guidance?.outcome === "completed"
+      ? guidance.summary
+      : recommendation.summary;
+  const busy = pending || review.active;
+
+  return (
+    <div className="flex flex-col gap-3 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status="neutral">
+              {recommendation.product_key}
+            </StatusBadge>
+            <p className="text-sm font-semibold">{recommendation.title}</p>
+            {identity ? (
+              <code className="border-border-soft bg-card-strong/60 rounded px-1.5 py-0.5 text-[11px]">
+                {identity}
+              </code>
+            ) : null}
+            {recommendation.priority && showsSavings(recommendation) ? (
+              <StatusBadge status={priorityTone(recommendation.priority)}>
+                {recommendation.priority}
+              </StatusBadge>
+            ) : null}
+            <StatusBadge status={statusTone(recommendation.status)}>
+              {recommendation.status}
+            </StatusBadge>
+          </div>
+          {summary ? (
+            <p className="text-muted-foreground mt-1 text-xs">{summary}</p>
+          ) : null}
+          <p className="text-muted-foreground mt-1 text-xs">
+            {savings ? `${savings} · ` : ""}
+            {recommendation.analyzer_key} · first detected{" "}
+            {formatDate(recommendation.first_detected_at)} · last seen{" "}
+            {formatDate(recommendation.last_detected_at)}
+            {recommendation.evidence.length > 0 ? (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  onClick={onToggleDetails}
+                  className="text-accent underline-offset-2 hover:underline"
+                >
+                  {expanded ? "Hide details" : "Show details"}
+                </button>
+              </>
+            ) : null}
+          </p>
+        </div>
+        {actionable ? (
+          <div className="flex shrink-0 items-center gap-3">
+            {recommendation.status === "active" ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  onAction(recommendation, dismissRecommendationAction)
+                }
+                className="text-muted-foreground hover:text-foreground text-xs disabled:opacity-50"
+              >
+                Dismiss
+              </button>
+            ) : null}
+            {recommendation.status !== "resolved" ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void review.start()}
+                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs disabled:opacity-50"
+              >
+                <RefreshCw
+                  size={13}
+                  className={cn(review.active && "animate-spin")}
+                />
+                {review.active ? "Re-checking…" : "Re-check"}
+              </button>
+            ) : null}
+            {recommendation.status === "dismissed" ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  onAction(recommendation, restoreRecommendationAction)
+                }
+                className="text-success inline-flex items-center gap-1 text-xs disabled:opacity-50"
+              >
+                <Undo2 size={13} /> Restore
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {expanded ? (
+        <div className="border-border-soft bg-card-strong/30 flex flex-col gap-3 rounded-lg border p-3 text-xs">
+          {recommendation.evidence.map((item, index) => (
+            <div key={index}>
+              <p className="font-medium">
+                {EVIDENCE_LABELS[item.evidence_key] ??
+                  evidenceFieldLabel(item.evidence_key)}
+                <span className="text-muted-foreground ml-2 font-normal">
+                  observed {formatObservedAt(item.observed_at)}
+                </span>
+              </p>
+              <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5">
+                {Object.entries(item.value).map(([field, value]) => (
+                  <div key={field} className="contents">
+                    <dt className="text-muted-foreground">
+                      {evidenceFieldLabel(field)}
+                    </dt>
+                    <dd>{formatEvidenceFieldValue(value)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {review.error ? (
+        <p role="alert" className="text-xs text-red-500">
+          {review.error}
+        </p>
+      ) : null}
+
+      {review.active && review.review ? (
+        <ReviewProgress review={review.review} />
+      ) : review.review?.status === "failed" ? (
+        <p className="text-muted-foreground text-xs">
+          The check couldn&apos;t be completed. The recommendation is unchanged
+          — try again later.
+        </p>
+      ) : guidance?.outcome === "needs_input" &&
+        guidance.questions.length > 0 ? (
+        <ReviewQuestions
+          key={guidance.questions.map((question) => question.fact_key).join()}
+          questions={guidance.questions}
+          pending={busy}
+          onSubmit={(answers) => void review.answer(answers)}
+        />
+      ) : guidance?.outcome === "completed" ? (
+        <FinalRecommendation review={guidance} currency={currency} />
+      ) : guidance &&
+        (guidance.outcome === "rejected" ||
+          guidance.outcome === "insufficient_evidence") ? (
+        <NonActionableResult review={guidance} />
+      ) : null}
+    </div>
+  );
 }
 
 export function RecommendationsInboxClient({
@@ -347,28 +461,6 @@ export function RecommendationsInboxClient({
     });
   }
 
-  function recheck(recommendation: CoreUnifiedRecommendation) {
-    setError("");
-    setPendingId(recommendation.id);
-    startTransition(async () => {
-      const result = await recheckRecommendationAction(recommendation.id);
-      setPendingId(null);
-      if (result.error) return setError(result.error);
-      if (!result.data) return;
-      if (
-        result.data.ai_review &&
-        result.data.ai_review.outcome !== "completed"
-      ) {
-        setRecommendations((current) =>
-          current.filter((item) => item.id !== recommendation.id),
-        );
-        setTotal((current) => Math.max(current - 1, 0));
-        return;
-      }
-      applyUpdate({ ...recommendation, ...result.data });
-    });
-  }
-
   async function loadMore() {
     setError("");
     setLoading(true);
@@ -492,154 +584,17 @@ export function RecommendationsInboxClient({
       ) : (
         <div className="border-border-soft overflow-hidden rounded-xl border">
           <div className="divide-border-soft divide-y">
-            {visible.map((recommendation) => {
-              const savings = savingsLabel(recommendation);
-              const isPending = pendingId === recommendation.id;
-              const actionable = isActionable(recommendation);
-              const identity = resourceIdentity(recommendation);
-              const expanded = expandedIds.has(recommendation.id);
-              return (
-                <div
-                  key={recommendation.id}
-                  className="flex flex-col gap-3 p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <StatusBadge status="neutral">
-                          {recommendation.product_key}
-                        </StatusBadge>
-                        <p className="text-sm font-semibold">
-                          {recommendation.title}
-                        </p>
-                        {identity ? (
-                          <code className="border-border-soft bg-card-strong/60 rounded px-1.5 py-0.5 text-[11px]">
-                            {identity}
-                          </code>
-                        ) : null}
-                        {recommendation.priority ? (
-                          <StatusBadge
-                            status={priorityTone(recommendation.priority)}
-                          >
-                            {recommendation.priority}
-                          </StatusBadge>
-                        ) : null}
-                        <StatusBadge status={statusTone(recommendation.status)}>
-                          {recommendation.status}
-                        </StatusBadge>
-                      </div>
-                      {(recommendation.ai_review?.summary ??
-                      recommendation.summary) ? (
-                        <p className="text-muted-foreground mt-1 text-xs">
-                          {recommendation.ai_review?.summary ??
-                            recommendation.summary}
-                        </p>
-                      ) : null}
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        {savings ? `${savings} · ` : ""}
-                        {recommendation.analyzer_key} · first detected{" "}
-                        {formatDate(recommendation.first_detected_at)} · last
-                        seen {formatDate(recommendation.last_detected_at)}
-                        {recommendation.evidence.length > 0 ? (
-                          <>
-                            {" · "}
-                            <button
-                              type="button"
-                              onClick={() => toggleExpanded(recommendation.id)}
-                              className="text-accent underline-offset-2 hover:underline"
-                            >
-                              {expanded ? "Hide details" : "Show details"}
-                            </button>
-                          </>
-                        ) : null}
-                      </p>
-                    </div>
-                    {actionable ? (
-                      <div className="flex shrink-0 items-center gap-3">
-                        {recommendation.status === "active" ? (
-                          <button
-                            type="button"
-                            disabled={isPending}
-                            onClick={() =>
-                              runAction(
-                                recommendation,
-                                dismissRecommendationAction,
-                              )
-                            }
-                            className="text-muted-foreground hover:text-foreground text-xs disabled:opacity-50"
-                          >
-                            Dismiss
-                          </button>
-                        ) : null}
-                        {recommendation.status !== "resolved" ? (
-                          <button
-                            type="button"
-                            disabled={isPending}
-                            onClick={() => recheck(recommendation)}
-                            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs disabled:opacity-50"
-                          >
-                            <RefreshCw
-                              size={13}
-                              className={cn(isPending && "animate-spin")}
-                            />
-                            {isPending ? "Re-checking…" : "Re-check"}
-                          </button>
-                        ) : null}
-                        {recommendation.status === "dismissed" ? (
-                          <button
-                            type="button"
-                            disabled={isPending}
-                            onClick={() =>
-                              runAction(
-                                recommendation,
-                                restoreRecommendationAction,
-                              )
-                            }
-                            className="text-success inline-flex items-center gap-1 text-xs disabled:opacity-50"
-                          >
-                            <Undo2 size={13} /> Restore
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  {expanded ? (
-                    <div className="border-border-soft bg-card-strong/30 flex flex-col gap-3 rounded-lg border p-3 text-xs">
-                      {recommendation.evidence.map((item, index) => (
-                        <div key={index}>
-                          <p className="font-medium">
-                            {EVIDENCE_LABELS[item.evidence_key] ??
-                              evidenceFieldLabel(item.evidence_key)}
-                            <span className="text-muted-foreground ml-2 font-normal">
-                              observed {formatObservedAt(item.observed_at)}
-                            </span>
-                          </p>
-                          <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5">
-                            {Object.entries(item.value).map(
-                              ([field, value]) => (
-                                <div key={field} className="contents">
-                                  <dt className="text-muted-foreground">
-                                    {evidenceFieldLabel(field)}
-                                  </dt>
-                                  <dd>{formatEvidenceFieldValue(value)}</dd>
-                                </div>
-                              ),
-                            )}
-                          </dl>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {recommendation.ai_review ? (
-                    <RecommendationGuidance
-                      guidance={recommendation.ai_review}
-                    />
-                  ) : null}
-                </div>
-              );
-            })}
+            {visible.map((recommendation) => (
+              <RecommendationRow
+                key={recommendation.id}
+                recommendation={recommendation}
+                pending={pendingId === recommendation.id}
+                expanded={expandedIds.has(recommendation.id)}
+                onToggleDetails={() => toggleExpanded(recommendation.id)}
+                onAction={runAction}
+                onUpdated={applyUpdate}
+              />
+            ))}
           </div>
         </div>
       )}

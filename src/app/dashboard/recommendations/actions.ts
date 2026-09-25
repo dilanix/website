@@ -4,7 +4,9 @@ import { getMe } from "@/lib/auth/api";
 import { getAccessToken } from "@/lib/auth/session";
 import {
   CoreApiError,
+  getUnifiedRecommendation,
   listAllRecommendations,
+  type CoreUnifiedRecommendation,
   type CoreUnifiedRecommendationListResponse,
   type RecommendationStatus,
 } from "@/lib/core/api";
@@ -47,6 +49,22 @@ export async function listAllRecommendationsAction(
       analyzerKey: filters.analyzerKey,
       offset,
     });
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getRecommendationAction(
+  recommendationId: string,
+): Promise<RecommendationsActionResult<CoreUnifiedRecommendation>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await getUnifiedRecommendation(
+      organizationId,
+      recommendationId,
+      token,
+    );
     return { data };
   } catch (error) {
     return { error: message(error) };

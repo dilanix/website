@@ -168,8 +168,8 @@ export default async function ResourcesPage({
   )?.slug;
   const requestedTargetId = firstParam(query.target);
   const targetId =
-    connectionTargets.find((target) => target.id === requestedTargetId)
-      ?.id ?? null;
+    connectionTargets.find((target) => target.id === requestedTargetId)?.id ??
+    null;
 
   if (!inventoryEnabled) {
     return (

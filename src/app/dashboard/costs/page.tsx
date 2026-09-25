@@ -135,8 +135,8 @@ export default async function CostsPage({
   ]);
   const requestedTargetId = firstParam(query.target);
   const targetId =
-    connectionTargets.find((target) => target.id === requestedTargetId)
-      ?.id ?? null;
+    connectionTargets.find((target) => target.id === requestedTargetId)?.id ??
+    null;
   const selectedIntegration = integrationsById.get(
     selectedConnection.integration_id,
   );

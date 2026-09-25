@@ -1926,6 +1926,27 @@ export interface CoreRecommendationOption {
   cons: string[];
   risk_level: string | null;
   is_preferred: boolean;
+  action_type: string | null;
+  expected_monthly_savings: string | null;
+  prerequisites: string[];
+  validation_steps: string[];
+  rollback: string[];
+}
+
+export interface CoreRecommendationQuestionOption {
+  value: string;
+  label: string;
+}
+
+/** A targeted question a paused review asks. `applies_when` makes it a
+ * conditional follow-up: show it only when every named fact's selected
+ * answer is one of the listed values. */
+export interface CoreRecommendationQuestion {
+  fact_key: string;
+  prompt: string;
+  options: CoreRecommendationQuestionOption[];
+  context: string | null;
+  applies_when: Record<string, string[]> | null;
 }
 
 export interface CoreRecommendationReviewFact {
@@ -1938,9 +1959,14 @@ export interface CoreRecommendationAIReview {
   outcome: RecommendationAIOutcome;
   summary: string;
   reasoning: string | null;
+  detected_issue: string | null;
+  evidence_summary: string[];
+  confidence: string | null;
+  evidence_quality: string | null;
   risk_level: string | null;
   risk_notes: string[];
   open_questions: string[];
+  questions: CoreRecommendationQuestion[];
   options: CoreRecommendationOption[];
   facts: CoreRecommendationReviewFact[];
   analysis_rounds: number;
@@ -2063,19 +2089,74 @@ export function restoreRecommendation(
   );
 }
 
-/** Re-checks one recommendation against fresh data (synchronous, typically
- * 10-60 s). May fail with a 409 (resolved, or its cloud account is no
- * longer verified), 429 (usage limit reached) or 502 (the check failed —
- * the stored recommendation is left unchanged). */
-export function recheckRecommendation(
+export type RecommendationReviewStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "rejected"
+  | "insufficient_evidence"
+  | "needs_input"
+  | "failed";
+
+export interface CoreRecommendationReviewStage {
+  key: string;
+  label: string;
+  state: "completed" | "current" | "pending";
+}
+
+/** A review session's user-facing progress — fixed stages and activity
+ * messages only, never model reasoning. */
+export interface CoreRecommendationReview {
+  id: string;
+  recommendation_id: string;
+  trigger: "scheduled" | "recheck" | "answer";
+  status: RecommendationReviewStatus;
+  activity: string | null;
+  stages: CoreRecommendationReviewStage[];
+  error_code: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+/** Queues a fresh review of one recommendation (202); poll
+ * `getRecommendationReview` for progress. 409 when one is already running
+ * or the recommendation is resolved. */
+export function requestRecommendationReview(
   organizationId: string,
   recommendationId: string,
   token: string,
 ) {
-  return coreRequest<CoreRecommendation>(
+  return coreRequest<CoreRecommendationReview>(
     `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/review`,
     token,
     { method: "POST" },
+  );
+}
+
+export function getRecommendationReview(
+  organizationId: string,
+  recommendationId: string,
+  token: string,
+) {
+  return coreRequest<CoreRecommendationReview>(
+    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/review`,
+    token,
+  );
+}
+
+/** Stores the answers as structured facts about the resource and resumes
+ * the review (202). */
+export function answerRecommendationReview(
+  organizationId: string,
+  recommendationId: string,
+  answers: Record<string, string>,
+  token: string,
+) {
+  return coreRequest<CoreRecommendationReview>(
+    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/review/answers`,
+    token,
+    { method: "POST", body: JSON.stringify({ answers }) },
   );
 }
 
