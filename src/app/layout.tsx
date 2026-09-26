@@ -16,7 +16,7 @@ const geistMono = localFont({
   variable: "--font-geist-mono",
 });
 
-const defaultTitle = `${siteConfig.name} — AWS Cost Optimization & Multicloud Cost Visibility`;
+const defaultTitle = `${siteConfig.name} — Technology Intelligence & Cost Management Platform`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
@@ -62,6 +62,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
+      data-scroll-behavior="smooth"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">

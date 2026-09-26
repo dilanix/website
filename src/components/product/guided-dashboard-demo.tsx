@@ -39,10 +39,10 @@ const manageItems = [
 ];
 
 const inventory = [
-  { name: "prod-api-cluster", type: "ECS Cluster", region: "us-east-1" },
-  { name: "analytics-primary", type: "RDS PostgreSQL", region: "eu-west-1" },
-  { name: "assets-production", type: "S3 Bucket", region: "us-east-1" },
-  { name: "worker-fleet", type: "EC2 Auto Scaling", region: "us-west-2" },
+  { name: "prod-api-cluster", type: "Compute Cluster", region: "Region 01" },
+  { name: "analytics-primary", type: "Managed Database", region: "Region 02" },
+  { name: "assets-production", type: "Object Storage", region: "Region 01" },
+  { name: "worker-fleet", type: "Compute Fleet", region: "Region 03" },
 ];
 
 const overviewMetrics = [
@@ -108,14 +108,13 @@ function OverviewPanel({ snapshot }: { snapshot: ProductDashboardSnapshot }) {
           <div className="min-w-0">
             <div className="border-success/20 bg-success/8 text-success mb-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[7.5px] font-semibold tracking-[0.14em] uppercase">
               <span className="bg-success size-1 rounded-full shadow-[0_0_8px_var(--success)]" />
-              Cloud command center
+              Technology command center
             </div>
             <p className="text-[13px] font-semibold tracking-[-0.02em] sm:text-[15px]">
               Good to see you, Jordan.
             </p>
             <p className="text-muted-foreground mt-1 max-w-[15rem] text-[9.5px] leading-4">
-              Spend is trending down 4.8% with one optimization ready to
-              apply.
+              Spend is trending down 4.8% with one optimization ready to apply.
             </p>
           </div>
           <div className="flex items-center gap-3.5">
@@ -127,9 +126,7 @@ function OverviewPanel({ snapshot }: { snapshot: ProductDashboardSnapshot }) {
               }}
             >
               <div className="bg-dashboard-panel-strong flex size-full items-center justify-center rounded-full">
-                <span className="font-mono text-[11px] font-semibold">
-                  92%
-                </span>
+                <span className="font-mono text-[11px] font-semibold">92%</span>
               </div>
             </div>
             <dl className="space-y-1.5">
@@ -193,7 +190,7 @@ function OverviewPanel({ snapshot }: { snapshot: ProductDashboardSnapshot }) {
             <div>
               <p className="text-[10px] font-semibold">Spend trend</p>
               <p className="text-muted-foreground mt-0.5 text-[8px]">
-                Last 14 days · FOCUS 1.2
+                Last 14 days · Unified cost data
               </p>
             </div>
             <span className="text-success bg-success/8 rounded-full px-2 py-1 text-[8px] font-semibold">
@@ -204,7 +201,7 @@ function OverviewPanel({ snapshot }: { snapshot: ProductDashboardSnapshot }) {
             viewBox="0 0 560 160"
             preserveAspectRatio="none"
             className="mt-3 h-32 w-full overflow-visible"
-            aria-label="Sample 14-day cloud spend trend"
+            aria-label="Sample 14-day technology spend trend"
             role="img"
           >
             <defs>
@@ -252,8 +249,8 @@ function OverviewPanel({ snapshot }: { snapshot: ProductDashboardSnapshot }) {
           </span>
           <p className="mt-4 text-xs font-semibold">Optimization found</p>
           <p className="text-muted-foreground mt-1 text-[9px] leading-4">
-            Idle EC2 reservations and oversized RDS instances are increasing
-            effective cost.
+            Idle compute capacity and oversized database instances are
+            increasing effective cost.
           </p>
           <div className="border-success/15 bg-dashboard-panel-strong mt-4 rounded-lg border p-3">
             <p className="text-muted-foreground text-[8px] uppercase">
@@ -261,9 +258,7 @@ function OverviewPanel({ snapshot }: { snapshot: ProductDashboardSnapshot }) {
             </p>
             <p className="text-success mt-1 font-mono text-xl font-semibold">
               $
-              {snapshot.recommendation.monthlySavingUsd.toLocaleString(
-                "en-US",
-              )}
+              {snapshot.recommendation.monthlySavingUsd.toLocaleString("en-US")}
             </p>
           </div>
           <div className="text-accent-foreground from-accent to-accent-secondary mt-4 flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-br px-3 py-2 text-[9px] font-semibold shadow-[0_10px_24px_var(--shadow-brand)]">
@@ -322,7 +317,9 @@ function CostsPanel({ snapshot }: { snapshot: ProductDashboardSnapshot }) {
           <p className="mt-2 font-mono text-xl font-semibold">
             ${snapshot.monthlySpendUsd.toLocaleString("en-US")}
           </p>
-          <p className="text-muted-foreground mt-1 text-[8px]">FOCUS dataset</p>
+          <p className="text-muted-foreground mt-1 text-[8px]">
+            Unified cost dataset
+          </p>
         </div>
         <div className="border-success/18 from-success/10 to-card-strong/60 rounded-xl border bg-gradient-to-br p-4">
           <p className="text-success text-[8px] font-semibold tracking-wide uppercase">
@@ -384,8 +381,8 @@ function InfrastructurePanel() {
 
 function HealthPanel() {
   const providers = [
-    { name: "AWS Production", score: 100, detail: "Synced 2m ago" },
-    { name: "AWS Analytics", score: 96, detail: "Synced 4m ago" },
+    { name: "Production Platform", score: 100, detail: "Synced 2m ago" },
+    { name: "Analytics Platform", score: 96, detail: "Synced 4m ago" },
     { name: "Telemetry API", score: 100, detail: "Receiving data" },
   ];
 
@@ -567,7 +564,9 @@ export function GuidedDashboardDemo({
                       ) : null}
                       <Icon
                         size={13}
-                        className={active ? "text-accent" : "text-muted-foreground/70"}
+                        className={
+                          active ? "text-accent" : "text-muted-foreground/70"
+                        }
                       />
                       <span className="truncate">{tab.label}</span>
                       {active && autoplay && !paused && !reducedMotion ? (

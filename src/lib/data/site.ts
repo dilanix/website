@@ -11,9 +11,9 @@ const defaultSettings: SiteSettings = {
   calendlyUrl: "https://calendly.com",
   social: {},
   nav: [
-    { label: "Products", href: "/products" },
-    { label: "Company", href: "/company" },
-    { label: "Blog", href: "/blog" },
+    { label: "Platform", href: "/#platform" },
+    { label: "Technology Intelligence", href: "/#technology-intelligence" },
+    { label: "Cost Management", href: "/#cost-management" },
     { label: "Contact", href: "/contact" },
   ],
 };
@@ -35,11 +35,13 @@ export async function getSiteSettings(): Promise<SiteSettings> {
       return {
         name: (general.name as string) ?? defaultSettings.name,
         domain: (general.domain as string) ?? defaultSettings.domain,
-        description: (general.description as string) ?? defaultSettings.description,
+        description:
+          (general.description as string) ?? defaultSettings.description,
         url: (general.url as string) ?? defaultSettings.url,
         email: (s.support_email as string) ?? defaultSettings.email,
         calendlyUrl: (s.calendly_url as string) ?? defaultSettings.calendlyUrl,
-        social: (general.social as SiteSettings["social"]) ?? defaultSettings.social,
+        social:
+          (general.social as SiteSettings["social"]) ?? defaultSettings.social,
         nav: defaultSettings.nav,
       };
     }

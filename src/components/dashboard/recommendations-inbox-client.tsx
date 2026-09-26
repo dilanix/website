@@ -137,11 +137,11 @@ function isActionable(recommendation: CoreUnifiedRecommendation) {
   return recommendation.product_key === "cost";
 }
 
-/** Savings are only shown for something Dilanix actually recommends — never
- * for a candidate its review found non-actionable. */
+/** Savings are only shown for something Dilanix actually recommends — a
+ * completed review — never for an unreviewed candidate or one its review
+ * found non-actionable. */
 function showsSavings(recommendation: CoreUnifiedRecommendation) {
-  const outcome = recommendation.ai_review?.outcome;
-  return outcome === undefined || outcome === "completed";
+  return recommendation.ai_review?.outcome === "completed";
 }
 
 function RecommendationRow({
@@ -579,7 +579,7 @@ export function RecommendationsInboxClient({
       ) : visible.length === 0 ? (
         <EmptyState
           title="No matching recommendations"
-          description="Analyzers run on an hourly schedule against every verified cloud connection. Findings show up here as soon as one completes, or try clearing a filter."
+          description="Analyzers run on an hourly schedule against every verified cloud connection. A finding shows up here once its review has checked what the resource is for, or try clearing a filter."
         />
       ) : (
         <div className="border-border-soft overflow-hidden rounded-xl border">

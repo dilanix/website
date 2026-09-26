@@ -6,7 +6,8 @@ const fallbackProducts: Product[] = [
     name: "Dilanix CostOps",
     shortName: "CostOps",
     eyebrow: "Featured Product",
-    headline: "AWS Cost Optimization & Multicloud Cost Visibility, Backed by FOCUS 1.2 Data",
+    headline:
+      "AWS Cost Optimization & Multicloud Cost Visibility, Backed by FOCUS 1.2 Data",
     description:
       "Dilanix CostOps unifies AWS Cost Explorer and FOCUS 1.2 Data Export billing into one cost overview, so engineering and finance teams see where cloud spend actually goes and where AWS cost optimization opportunities are hiding — per account, per service, per resource.",
     status: "active",
@@ -31,7 +32,8 @@ const fallbackProducts: Product[] = [
     ],
     faqs: [
       {
-        question: "What is AWS FOCUS cost data, and why does it matter for cost optimization?",
+        question:
+          "What is AWS FOCUS cost data, and why does it matter for cost optimization?",
         answer:
           "FOCUS (FinOps Open Cost & Usage Specification) is a standardized, resource-level AWS billing export. Unlike Cost Explorer's rolled-up totals, FOCUS 1.2 data exposes per-resource, per-SKU charge detail across billed, effective, list, and contracted cost — the granularity real AWS cost optimization work needs.",
       },
@@ -54,8 +56,10 @@ const fallbackProducts: Product[] = [
     name: "Dena Cloud Storage",
     shortName: "Dena",
     eyebrow: "Pipeline Q4",
-    headline: "High-Throughput Global Object & Block Storage for AI Datasets and Artifacts",
-    description: "S3-compatible distributed object storage engineered for low-latency checkpointing and large dataset streaming.",
+    headline:
+      "High-Throughput Global Object & Block Storage for AI Datasets and Artifacts",
+    description:
+      "S3-compatible distributed object storage engineered for low-latency checkpointing and large dataset streaming.",
     status: "upcoming",
     featured: false,
     tag: "Pipeline Q4",
@@ -84,8 +88,10 @@ const fallbackProducts: Product[] = [
     name: "Dilanix Pulse",
     shortName: "Pulse",
     eyebrow: "Private Beta",
-    headline: "Next-Generation Application Performance Monitoring & Distributed Tracing",
-    description: "Low-overhead telemetry agents with eBPF-powered kernel tracing and automatic anomaly detection.",
+    headline:
+      "Next-Generation Application Performance Monitoring & Distributed Tracing",
+    description:
+      "Low-overhead telemetry agents with eBPF-powered kernel tracing and automatic anomaly detection.",
     status: "upcoming",
     featured: false,
     tag: "Private Beta",
@@ -114,8 +120,10 @@ const fallbackProducts: Product[] = [
     name: "Dilanix Guard",
     shortName: "Guard",
     eyebrow: "Roadmap 2027",
-    headline: "Cloud Infrastructure Security Posture Management & Continuous Compliance",
-    description: "Continuous IAM drift detection, exposed bucket scanners, and automated CIS Benchmark compliance auditing.",
+    headline:
+      "Cloud Infrastructure Security Posture Management & Continuous Compliance",
+    description:
+      "Continuous IAM drift detection, exposed bucket scanners, and automated CIS Benchmark compliance auditing.",
     status: "upcoming",
     featured: false,
     tag: "Roadmap 2027",
@@ -150,18 +158,19 @@ const defaultDashboardSnapshots: Record<string, ProductDashboardSnapshot> = {
       48610, 47280, 49150, 48600,
     ],
     breakdown: [
-      { label: "EC2 & Compute", amountUsd: 21400 },
-      { label: "S3 & Storage", amountUsd: 12800 },
-      { label: "RDS & Databases", amountUsd: 9600 },
+      { label: "Compute", amountUsd: 21400 },
+      { label: "Storage", amountUsd: 12800 },
+      { label: "Databases", amountUsd: 9600 },
       { label: "Data Transfer", amountUsd: 4800 },
     ],
     recommendation: {
-      title: "AWS cost optimization opportunity detected",
-      description: "FOCUS cost data shows idle EC2 reservations and oversized RDS instances driving avoidable spend.",
+      title: "Cost optimization opportunity detected",
+      description:
+        "Unified cost data shows idle compute capacity and oversized database instances driving avoidable spend.",
       monthlySavingUsd: 7300,
       metrics: [
         { label: "Optimization score", value: "72%" },
-        { label: "Cost data source", value: "FOCUS 1.2" },
+        { label: "Cost data source", value: "Unified dataset" },
       ],
     },
   },
@@ -179,7 +188,8 @@ const defaultDashboardSnapshots: Record<string, ProductDashboardSnapshot> = {
     ],
     recommendation: {
       title: "Cold archive tiering opportunity",
-      description: "Auto-tiering objects unread for 30+ days saves substantial storage spend.",
+      description:
+        "Auto-tiering objects unread for 30+ days saves substantial storage spend.",
       monthlySavingUsd: 2800,
       metrics: [
         { label: "Cold tier ratio", value: "64%" },
@@ -189,15 +199,15 @@ const defaultDashboardSnapshots: Record<string, ProductDashboardSnapshot> = {
   },
 };
 
-function mapDtoToProduct(
-  dto: Record<string, unknown>,
-): Product {
+function mapDtoToProduct(dto: Record<string, unknown>): Product {
   const slug = String(dto.slug || "");
   const name = String(dto.name || "");
   const shortName = dto.short_name ? String(dto.short_name) : name;
   const isFeatured = Boolean(dto.is_featured);
   const status = dto.product_status === "active" ? "active" : "upcoming";
-  const features = Array.isArray(dto.features) ? (dto.features as string[]) : [];
+  const features = Array.isArray(dto.features)
+    ? (dto.features as string[])
+    : [];
   const highlights = Array.isArray(dto.highlights)
     ? (dto.highlights as { label: string; value: string }[])
     : [];
@@ -210,19 +220,25 @@ function mapDtoToProduct(
     name,
     shortName,
     eyebrow: isFeatured ? "Featured Product" : "Upcoming Product",
-    headline: dto.headline ? String(dto.headline) : dto.description ? String(dto.description) : "",
+    headline: dto.headline
+      ? String(dto.headline)
+      : dto.description
+        ? String(dto.description)
+        : "",
     description: dto.description ? String(dto.description) : "",
     status,
     featured: isFeatured,
     tag: dto.tag ? String(dto.tag) : undefined,
     category: dto.category ? String(dto.category) : "Infrastructure",
-    capabilities: features.length > 0
-      ? features.map((label) => ({ label }))
-      : [{ label: "High Availability" }, { label: "Enterprise Security" }],
+    capabilities:
+      features.length > 0
+        ? features.map((label) => ({ label }))
+        : [{ label: "High Availability" }, { label: "Enterprise Security" }],
     features,
     highlights,
     faqs,
-    documentation: typeof dto.documentation === "string" ? dto.documentation : undefined,
+    documentation:
+      typeof dto.documentation === "string" ? dto.documentation : undefined,
     ctaLabel: "Request Early Access",
     ctaHref: "/contact",
   };
@@ -245,7 +261,9 @@ export async function getProducts(): Promise<Product[]> {
     });
 
     if (unique.length > 0) {
-      return unique.map((p) => mapDtoToProduct(p as unknown as Record<string, unknown>));
+      return unique.map((p) =>
+        mapDtoToProduct(p as unknown as Record<string, unknown>),
+      );
     }
   } catch {
     // Graceful fallback
