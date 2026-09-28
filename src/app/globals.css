@@ -461,3 +461,35 @@ body {
     transition-duration: 0.01ms;
   }
 }
+
+/* Infrastructure → Graph: traffic-flow animation along configured/observed edges. */
+@keyframes graph-edge-flow {
+  to {
+    stroke-dashoffset: -34;
+  }
+}
+
+.graph-edge-flow {
+  animation: graph-edge-flow 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .graph-edge-flow {
+    animation: none;
+  }
+}
+
+.infrastructure-graph {
+  --xy-background-color: transparent;
+  --xy-node-border-radius: 1rem;
+  --xy-edge-label-background-color: transparent;
+}
+
+.infrastructure-graph .react-flow__node-group,
+.infrastructure-graph .react-flow__node-resource,
+.infrastructure-graph .react-flow__node-internet {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}

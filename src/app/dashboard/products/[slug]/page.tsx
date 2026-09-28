@@ -77,7 +77,14 @@ export default async function ProductOverviewPage({
   }
 
   if (slug === "infrastructure") {
-    return <InfrastructureGraph />;
+    const { token, organization } = await requireDashboardOrganization();
+    return (
+      <InfrastructureGraph
+        organizationId={organization.organization_id}
+        token={token}
+        searchParams={await searchParams}
+      />
+    );
   }
 
   const overview = await getDashboardOverview(slug);

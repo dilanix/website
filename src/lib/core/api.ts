@@ -3542,3 +3542,172 @@ export function getNotificationAttachmentDownloadUrl(
     token,
   );
 }
+
+/** A resource as a node of the shared Resource Graph (Infrastructure → Graph). */
+export interface CoreGraphNode {
+  id: string;
+  target_id: string;
+  provider: string;
+  provider_resource_type: string;
+  resource_type: string;
+  category: string;
+  external_id: string;
+  name: string | null;
+  region: string;
+  status: string;
+  lifecycle_status: string;
+}
+
+/**
+ * `service` nodes form the Architecture view; `network`/`security` nodes join
+ * in the Network/Security views; `detail` nodes appear only when expanded.
+ * Derived by Core from the normalized resource type, never the provider.
+ */
+export type CoreGraphLayer = "service" | "network" | "security" | "detail";
+
+/**
+ * `configured` — configuration declares it; `permitted` — configuration allows
+ * it ("can reach"); `observed` — telemetry saw it; `inferred` — contextual
+ * analysis suggests it; `user_confirmed` — a member asserted it.
+ */
+export type CoreEvidenceKind =
+  "configured" | "permitted" | "observed" | "inferred" | "user_confirmed";
+
+export interface CoreGraphEdgeSummary {
+  id: string;
+  source_resource_id: string;
+  target_resource_id: string;
+  relationship_type: string;
+  evidence_kinds: CoreEvidenceKind[];
+  ports: {
+    protocol: string | null;
+    from_port: number | null;
+    to_port: number | null;
+  }[];
+  last_seen_at: string;
+}
+
+export interface CoreGraphResolution {
+  status: "succeeded" | "failed";
+  resolved_at: string;
+  inventory_watermark: string;
+  relationship_count: number;
+}
+
+export interface CoreScopeGraph {
+  nodes: { node: CoreGraphNode; layer: CoreGraphLayer }[];
+  edges: CoreGraphEdgeSummary[];
+  total_nodes: number;
+  truncated: boolean;
+  resolution: CoreGraphResolution | null;
+}
+
+export interface CoreGraphEvidence {
+  kind: CoreEvidenceKind;
+  producer: string;
+  attributes: Record<string, unknown>;
+  confidence: number | null;
+  first_observed_at: string;
+  last_observed_at: string;
+}
+
+export interface CoreGraphEdge {
+  id: string;
+  source_resource_id: string;
+  target_resource_id: string;
+  relationship_type: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  evidence: CoreGraphEvidence[];
+}
+
+export interface CoreGraphNodeDetail {
+  node: CoreGraphNode;
+  connection_id: string;
+  provider_resource_key: string;
+  zone: string | null;
+  tags: Record<string, string>;
+  extra: Record<string, unknown>;
+  capacity: Record<string, unknown>;
+  first_seen_at: string;
+  last_seen_at: string;
+}
+
+export interface CoreResourceNeighborhood {
+  resource: CoreGraphNode;
+  edges: CoreGraphEdge[];
+  peers: CoreGraphNode[];
+  total_edges: number;
+}
+
+export interface CoreConnectionDetail {
+  edge: CoreGraphEdge;
+  source: CoreGraphNode;
+  target: CoreGraphNode;
+  path: CoreGraphNode[];
+  status: {
+    configured: boolean;
+    permitted: boolean;
+    /** `null` when the relationship type is not about traffic. */
+    reachable: boolean | null;
+    observed: boolean;
+    inferred: boolean;
+    user_confirmed: boolean;
+    internet_exposed: boolean;
+    last_observed_at: string | null;
+    confidence: number | null;
+  };
+}
+
+function infrastructureGraphPath(organizationId: string) {
+  return `/v1/organizations/${organizationId}/infrastructure/graph`;
+}
+
+export function getInfrastructureGraph(
+  organizationId: string,
+  token: string,
+  params: { targetId: string; region?: string | null; limit?: number },
+) {
+  const query = new URLSearchParams({ target_id: params.targetId });
+  if (params.region) query.set("region", params.region);
+  if (params.limit) query.set("limit", String(params.limit));
+  return coreRequest<CoreScopeGraph>(
+    `${infrastructureGraphPath(organizationId)}?${query.toString()}`,
+    token,
+  );
+}
+
+export function getInfrastructureResource(
+  organizationId: string,
+  resourceId: string,
+  token: string,
+) {
+  return coreRequest<CoreGraphNodeDetail>(
+    `${infrastructureGraphPath(organizationId)}/resources/${resourceId}`,
+    token,
+  );
+}
+
+export function listInfrastructureRelationships(
+  organizationId: string,
+  resourceId: string,
+  token: string,
+  params: { limit?: number } = {},
+) {
+  const query = new URLSearchParams({ limit: String(params.limit ?? 200) });
+  return coreRequest<CoreResourceNeighborhood>(
+    `${infrastructureGraphPath(organizationId)}/resources/${resourceId}/relationships?${query.toString()}`,
+    token,
+  );
+}
+
+export function getInfrastructureConnection(
+  organizationId: string,
+  relationshipId: string,
+  token: string,
+) {
+  return coreRequest<CoreConnectionDetail>(
+    `${infrastructureGraphPath(organizationId)}/relationships/${relationshipId}`,
+    token,
+  );
+}

@@ -52,9 +52,14 @@ connection. Billing remains an internal normalized-data boundary with no
 frontend-facing routes of its own.
 
 The Infrastructure product dashboard has exactly two sections (`ProductTabs`):
-**Graph** at `/dashboard/products/infrastructure` (default; an honest empty
-state until Core has relationship producers — no renderer or mock data yet,
-components live under `src/components/dashboard/infrastructure/`) and
+**Graph** at `/dashboard/products/infrastructure` (default) — an interactive
+React Flow canvas laid out by ELK (`src/lib/infrastructure/graph-layout.ts`)
+over Core's scoped graph (`?connection=&target=&region=`), with Architecture/
+Network/Security views, search, category filters, expand/collapse, minimap,
+and resource/connection inspectors loaded lazily through
+`infrastructure-actions.ts`. View logic is provider-neutral and unit-tested
+(`src/lib/infrastructure/graph-model.ts`); nothing is drawn without a Core
+resource or relationship behind it — and
 **Resources** at `/dashboard/products/infrastructure/resources[/{resourceId}]`,
 the normalized inventory UI. The former `/dashboard/resources` routes redirect
 there (`next.config.ts`); Resources is no longer a Workspace sidebar item.
