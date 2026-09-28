@@ -16,6 +16,7 @@ import {
 } from "@/components/dashboard/cost/cost-overview-tabs";
 import { CostDataView } from "@/components/dashboard/cost/cost-data-view";
 import { CostTrends } from "@/components/dashboard/cost/cost-trends";
+import { InfrastructureGraph } from "@/components/dashboard/infrastructure/infrastructure-graph";
 
 export async function generateMetadata({
   params,
@@ -73,6 +74,10 @@ export default async function ProductOverviewPage({
         )}
       </div>
     );
+  }
+
+  if (slug === "infrastructure") {
+    return <InfrastructureGraph />;
   }
 
   const overview = await getDashboardOverview(slug);

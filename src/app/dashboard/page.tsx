@@ -55,7 +55,7 @@ function formatLastSync(value: string | null) {
 
 const workspaceLinks = [
   {
-    href: "/dashboard/resources" as const,
+    href: "/dashboard/products/infrastructure/resources" as const,
     title: "Cloud resources",
     description: "Search and inspect your live infrastructure inventory.",
     icon: Boxes,
@@ -90,7 +90,7 @@ export default async function DashboardPage() {
     .filter((capability) => capability.access_status === "active")
     .map((capability) => capability.code);
   const visibleWorkspaceLinks = workspaceLinks.filter((item) => {
-    if (item.href === "/dashboard/resources") {
+    if (item.href === "/dashboard/products/infrastructure/resources") {
       return activeCapabilityCodes.some((code) =>
         code.endsWith(".inventory.read"),
       );

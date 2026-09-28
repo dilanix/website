@@ -76,7 +76,8 @@ describe("DashboardShell", () => {
     );
 
     expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
+    // Resources lives in the Infrastructure product, never a workspace section.
+    expect(screen.queryByRole("link", { name: "Resources" })).toBeNull();
     expect(screen.getByRole("link", { name: "Applications" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Integrations" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "API Keys" })).toBeTruthy();
@@ -106,7 +107,6 @@ describe("DashboardShell", () => {
     );
 
     expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Applications" })).toBeNull();
     expect(screen.getByRole("link", { name: "Integrations" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "API Keys" })).toBeTruthy();
@@ -129,7 +129,6 @@ describe("DashboardShell", () => {
     );
 
     expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Applications" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Integrations" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "API Keys" })).toBeNull();
@@ -147,7 +146,7 @@ describe("DashboardShell", () => {
       </DashboardShell>,
     );
 
-    expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Applications" })).toBeNull();
     expect(screen.queryByRole("link", { name: "API Keys" })).toBeNull();
   });

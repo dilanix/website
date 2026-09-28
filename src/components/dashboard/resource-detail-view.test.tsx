@@ -48,7 +48,7 @@ describe("ResourceDetailView", () => {
       <ResourceDetailView
         resource={resource}
         connectionName="Production AWS"
-        backHref="/dashboard/resources"
+        backHref="/dashboard/products/infrastructure/resources"
         initialMetricSummary={{ items: [] }}
         initialMetrics={{ items: [], total: 0 }}
       />,

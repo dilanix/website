@@ -38,6 +38,20 @@ const PRODUCT_EXTRA_TABS: Record<string, { label: string; path: string }[]> = {
   ],
 };
 
+/**
+ * Products whose module defines its full section set, replacing the generic
+ * Overview/Usage/Documentation tabs. Infrastructure has exactly Graph (the
+ * default, at the product root) and Resources; graph projections such as
+ * network or security views are modes inside Graph, never extra tabs.
+ */
+const PRODUCT_SECTION_TABS: Record<string, { label: string; path: string }[]> =
+  {
+    infrastructure: [
+      { label: "Graph", path: "" },
+      { label: "Resources", path: "resources" },
+    ],
+  };
+
 export function ProductTabs({ slug }: { slug: string }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -51,7 +65,7 @@ export function ProductTabs({ slug }: { slug: string }) {
   }
   const costScopeQuery = costScopeParams.toString();
 
-  const tabs = [
+  const tabs = PRODUCT_SECTION_TABS[slug] ?? [
     { label: "Overview", path: "" },
     ...(PRODUCT_EXTRA_TABS[slug] ?? []),
     ...(slug === "cost" ? [] : [{ label: "Usage", path: "usage" }]),
@@ -63,7 +77,10 @@ export function ProductTabs({ slug }: { slug: string }) {
       {tabs.map((tab) => {
         const path = tab.path ? `${base}/${tab.path}` : base;
         const href = `${path}${costScopeQuery ? `?${costScopeQuery}` : ""}`;
-        const active = pathname === path;
+        // A section's own detail pages (e.g. one resource) keep it active.
+        const active = tab.path
+          ? pathname === path || pathname.startsWith(`${path}/`)
+          : pathname === path;
         return (
           <Link
             key={tab.label}

@@ -767,18 +767,22 @@ export function ResourcePanel({
                     : null
                 }
                 href={
-                  `/dashboard/resources/${resource.id}?${new URLSearchParams({
-                    connection: connectionId,
-                    ...(filters.category ? { category: filters.category } : {}),
-                    ...(filters.resourceType
-                      ? { type: filters.resourceType }
-                      : {}),
-                    ...(filters.region ? { region: filters.region } : {}),
-                    lifecycle: resource.lifecycle_status,
-                    ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
-                    sort: sortKey,
-                    direction: sortDirection,
-                  }).toString()}` as Route
+                  `/dashboard/products/infrastructure/resources/${resource.id}?${new URLSearchParams(
+                    {
+                      connection: connectionId,
+                      ...(filters.category
+                        ? { category: filters.category }
+                        : {}),
+                      ...(filters.resourceType
+                        ? { type: filters.resourceType }
+                        : {}),
+                      ...(filters.region ? { region: filters.region } : {}),
+                      lifecycle: resource.lifecycle_status,
+                      ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
+                      sort: sortKey,
+                      direction: sortDirection,
+                    },
+                  ).toString()}` as Route
                 }
               />
             ))}

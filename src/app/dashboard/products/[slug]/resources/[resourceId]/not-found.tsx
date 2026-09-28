@@ -15,7 +15,7 @@ export default function ResourceNotFound() {
         inventory scope, or been removed.
       </p>
       <Link
-        href="/dashboard/resources"
+        href="/dashboard/products/infrastructure/resources"
         className="bg-accent text-accent-foreground mt-6 inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium shadow-[0_12px_30px_var(--shadow-brand)]"
       >
         <ArrowLeft size={15} />

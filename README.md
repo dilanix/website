@@ -51,6 +51,14 @@ Services and Resources are connection-scoped and require `billing.read` on the
 connection. Billing remains an internal normalized-data boundary with no
 frontend-facing routes of its own.
 
+The Infrastructure product dashboard has exactly two sections (`ProductTabs`):
+**Graph** at `/dashboard/products/infrastructure` (default; an honest empty
+state until Core has relationship producers — no renderer or mock data yet,
+components live under `src/components/dashboard/infrastructure/`) and
+**Resources** at `/dashboard/products/infrastructure/resources[/{resourceId}]`,
+the normalized inventory UI. The former `/dashboard/resources` routes redirect
+there (`next.config.ts`); Resources is no longer a Workspace sidebar item.
+
 Cost Overview (`SpendOverviewClient`) defaults to calendar
 month-to-date, with explicit rolling 1 day/3 days/Week/30 days presets plus a
 custom range. It queries `GET .../cost/overview` first to resolve the actual

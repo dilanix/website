@@ -66,7 +66,7 @@ describe("ResourcePanel", () => {
 
     const link = screen.getByRole("link", { name: /Production API/i });
     expect(link.getAttribute("href")).toBe(
-      "/dashboard/resources/resource-1?connection=conn-1&category=compute&type=compute.instance&region=us-east-1&lifecycle=active&sort=lastSeen&direction=desc",
+      "/dashboard/products/infrastructure/resources/resource-1?connection=conn-1&category=compute&type=compute.instance&region=us-east-1&lifecycle=active&sort=lastSeen&direction=desc",
     );
     expect(screen.queryByRole("dialog")).toBeNull();
   });

@@ -21,7 +21,7 @@ import { requireDashboardOrganization } from "@/lib/dashboard/session";
 const METRIC_SUMMARY_RESOURCE_LIMIT = 100;
 
 export const metadata: Metadata = {
-  title: "Resource details",
+  title: "Resource details — Infrastructure",
   robots: { index: false, follow: false },
 };
 
@@ -58,7 +58,7 @@ function resourcesHref(query: ResourceDetailSearchParams): Route {
     }
   });
   const search = params.toString();
-  return `/dashboard/resources${search ? `?${search}` : ""}` as Route;
+  return `/dashboard/products/infrastructure/resources${search ? `?${search}` : ""}` as Route;
 }
 
 async function listEcsClusterServices(
@@ -123,14 +123,12 @@ export default async function ResourceDetailPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ resourceId: string }>;
+  params: Promise<{ slug: string; resourceId: string }>;
   searchParams: Promise<ResourceDetailSearchParams>;
 }) {
-  const [{ resourceId }, query, { token, organization }] = await Promise.all([
-    params,
-    searchParams,
-    requireDashboardOrganization(),
-  ]);
+  const [{ slug, resourceId }, query, { token, organization }] =
+    await Promise.all([params, searchParams, requireDashboardOrganization()]);
+  if (slug !== "infrastructure") notFound();
   const connectionId = scalarParam(query.connection);
   if (!connectionId) notFound();
 

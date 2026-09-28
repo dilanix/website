@@ -534,7 +534,7 @@ export function ConnectionDetailClient({
                 {canViewResources ? (
                   <Link
                     href={
-                      `/dashboard/resources?connection=${connection.id}` as Route
+                      `/dashboard/products/infrastructure/resources?connection=${connection.id}` as Route
                     }
                     className="border-foreground/10 hover:border-accent/30 hover:bg-accent/5 flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-medium transition-colors"
                   >

@@ -43,13 +43,6 @@ const navGroups = [
         organizationRequired: true,
       },
       {
-        label: "Resources",
-        href: "/dashboard/resources",
-        icon: Boxes,
-        organizationRequired: true,
-        requiredCapability: "inventory.read",
-      },
-      {
         label: "Applications",
         href: "/dashboard/applications",
         icon: PanelsTopLeft,
@@ -163,6 +156,9 @@ function getPageContext(pathname: string, product?: DashboardProduct) {
     }
     if (pathname.endsWith("/docs")) {
       return { section: product.name, page: "Documentation" };
+    }
+    if (pathname.startsWith(`${product.href}/resources`)) {
+      return { section: product.name, page: "Resources" };
     }
     return { section: "Products", page: product.name };
   }

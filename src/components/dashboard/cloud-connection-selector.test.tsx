@@ -91,13 +91,13 @@ describe("CloudConnectionSelector", () => {
     const first = connection("connection-1", "Development");
     const second = connection("connection-2", "Production");
     localStorage.setItem(
-      "dilanix.dashboard.filters.v1:anonymous:cloud-connection:/dashboard/resources",
+      "dilanix.dashboard.filters.v1:anonymous:cloud-connection:/dashboard/products/infrastructure/resources",
       JSON.stringify(second.id),
     );
 
     render(
       <CloudConnectionSelector
-        basePath="/dashboard/resources"
+        basePath="/dashboard/products/infrastructure/resources"
         integrations={[integration]}
         connections={[first, second]}
         selectedConnectionId={first.id}
@@ -108,7 +108,7 @@ describe("CloudConnectionSelector", () => {
 
     await waitFor(() =>
       expect(navigation.replace).toHaveBeenCalledWith(
-        "/dashboard/resources?connection=connection-2",
+        "/dashboard/products/infrastructure/resources?connection=connection-2",
       ),
     );
   });
@@ -117,7 +117,7 @@ describe("CloudConnectionSelector", () => {
     const first = connection("connection-1", "Development");
     render(
       <CloudConnectionSelector
-        basePath="/dashboard/resources"
+        basePath="/dashboard/products/infrastructure/resources"
         integrations={[integration]}
         connections={[first]}
         targets={[target("target-1", first.id, "111111111111")]}
@@ -134,7 +134,7 @@ describe("CloudConnectionSelector", () => {
     const first = connection("connection-1", "Development");
     render(
       <CloudConnectionSelector
-        basePath="/dashboard/resources"
+        basePath="/dashboard/products/infrastructure/resources"
         integrations={[integration]}
         connections={[first]}
         targets={[
@@ -154,7 +154,7 @@ describe("CloudConnectionSelector", () => {
     const first = connection("connection-1", "Development");
     render(
       <CloudConnectionSelector
-        basePath="/dashboard/resources"
+        basePath="/dashboard/products/infrastructure/resources"
         integrations={[integration]}
         connections={[first]}
         targets={[
@@ -173,7 +173,7 @@ describe("CloudConnectionSelector", () => {
 
     await waitFor(() =>
       expect(navigation.push).toHaveBeenCalledWith(
-        "/dashboard/resources?target=target-2",
+        "/dashboard/products/infrastructure/resources?target=target-2",
       ),
     );
   });

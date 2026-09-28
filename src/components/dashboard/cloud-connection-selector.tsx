@@ -39,7 +39,8 @@ export function CloudConnectionSelector({
   showResources,
   showCosts,
 }: {
-  basePath: "/dashboard/resources" | "/dashboard/products/cost";
+  basePath:
+    "/dashboard/products/infrastructure/resources" | "/dashboard/products/cost";
   integrations: CoreIntegration[];
   connections: CoreIntegrationConnection[];
   /** Every target across `connections` — filtered per-connection below. A
@@ -212,7 +213,10 @@ export function CloudConnectionSelector({
         <div className="border-foreground/10 bg-background flex w-fit rounded-lg border p-1 text-xs">
           {[
             showResources
-              ? { label: "Resources", path: "/dashboard/resources" as const }
+              ? {
+                  label: "Resources",
+                  path: "/dashboard/products/infrastructure/resources" as const,
+                }
               : null,
             showCosts
               ? { label: "Cost", path: "/dashboard/products/cost" as const }

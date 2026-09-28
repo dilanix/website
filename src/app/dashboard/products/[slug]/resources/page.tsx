@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import {
   listConnections,
   listConnectionCapabilities,
@@ -13,18 +14,14 @@ import {
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { RESOURCES_PAGE_SIZE } from "@/lib/inventory/resources";
 import { CloudConnectionSelector } from "@/components/dashboard/cloud-connection-selector";
-import {
-  EmptyState,
-  PageHeader,
-  Section,
-} from "@/components/dashboard/primitives";
+import { EmptyState, Section } from "@/components/dashboard/primitives";
 import {
   ResourcePanel,
   type ResourceSortKey,
 } from "@/components/dashboard/resource-panel";
 
 export const metadata: Metadata = {
-  title: "Resources",
+  title: "Resources — Infrastructure",
   robots: { index: false, follow: false },
 };
 
@@ -37,8 +34,10 @@ function stringParam(value: string | string[] | undefined) {
 }
 
 export default async function ResourcesPage({
+  params,
   searchParams,
 }: {
+  params: Promise<{ slug: string }>;
   searchParams: Promise<{
     connection?: string | string[];
     target?: string | string[];
@@ -51,6 +50,8 @@ export default async function ResourcesPage({
     direction?: string | string[];
   }>;
 }) {
+  const { slug } = await params;
+  if (slug !== "infrastructure") notFound();
   const { token, organization } = await requireDashboardOrganization();
   const [integrations, connections, organizationCapabilities] =
     await Promise.all([
@@ -97,10 +98,6 @@ export default async function ResourcesPage({
   if (!selectedConnection) {
     return (
       <div className="flex flex-col gap-5">
-        <PageHeader
-          title="Resources"
-          description="Explore cloud resources across every connected provider."
-        />
         <EmptyState
           title={
             connections.length
@@ -174,12 +171,8 @@ export default async function ResourcesPage({
   if (!inventoryEnabled) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader
-          title="Resources"
-          description="Explore cloud resources across every connected provider."
-        />
         <CloudConnectionSelector
-          basePath="/dashboard/resources"
+          basePath="/dashboard/products/infrastructure/resources"
           integrations={integrations}
           connections={resourceConnections}
           targets={connectionTargets}
@@ -231,12 +224,8 @@ export default async function ResourcesPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Resources"
-        description="A provider-neutral inventory of your cloud infrastructure. Select a connection, then filter by category, type, region, or lifecycle."
-      />
       <CloudConnectionSelector
-        basePath="/dashboard/resources"
+        basePath="/dashboard/products/infrastructure/resources"
         integrations={integrations}
         connections={resourceConnections}
         targets={connectionTargets}
