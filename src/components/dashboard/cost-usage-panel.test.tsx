@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CoreCostUsage, CoreIntegrationTarget } from "@/lib/core/api";
 import { CostUsagePanel } from "./cost-usage-panel";
 
-vi.mock("@/app/dashboard/integrations/actions", () => ({
+vi.mock("@/app/dashboard/products/cost-actions", () => ({
   listCostUsageAction: vi.fn(),
 }));
 

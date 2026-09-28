@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CoreCostSummary, CoreIntegrationTarget } from "@/lib/core/api";
 import { CostSummaryPanel } from "./cost-summary-panel";
 
-vi.mock("@/app/dashboard/integrations/actions", () => ({
+vi.mock("@/app/dashboard/products/cost-actions", () => ({
   listCostSummariesAction: vi.fn(),
   getCostSummaryTotalsAction: vi.fn().mockResolvedValue({
     data: {

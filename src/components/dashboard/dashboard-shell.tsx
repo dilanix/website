@@ -57,13 +57,6 @@ const navGroups = [
         requiredCapability: "platform.application",
       },
       {
-        label: "Costs",
-        href: "/dashboard/costs",
-        icon: CircleDollarSign,
-        organizationRequired: true,
-        requiredCapability: "billing.read",
-      },
-      {
         label: "Recommendations",
         href: "/dashboard/recommendations",
         icon: Lightbulb,

@@ -62,6 +62,7 @@ export interface CoreProduct {
   description: string | null;
   dashboard_enabled: boolean;
   api_enabled: boolean;
+  availability: "core" | "entitled";
   access_status: "active" | "pending" | "expired" | "disabled";
   access_expires_at: string | null;
 }
@@ -1200,7 +1201,7 @@ export type CostBasis =
   "unblended" | "net_unblended" | "amortized" | "net_amortized";
 
 /**
- * Mirrors Core's `CostSummaryRead` (`modules/billing/schemas/cost_summary.py`) —
+ * Mirrors Core's Cost product `CostSummaryRead` contract —
  * one AWS Cost Explorer cost observation for one connection/target, one
  * `(service, period, granularity, cost_basis)` combination. Deliberately a
  * narrower, Cost-Explorer-API-sourced sibling of the still-planned FOCUS/CUR
@@ -1272,7 +1273,7 @@ export function listCostSummaries(
   if (params.costBasis) query.set("cost_basis", params.costBasis);
   if (params.includeCredits) query.set("include_credits", "true");
   return coreRequest<CoreCostSummaryListResponse>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-summaries?${query.toString()}`,
+    `/v1/organizations/${organizationId}/cost/data/connections/${connectionId}/summaries?${query.toString()}`,
     token,
   );
 }
@@ -1339,7 +1340,7 @@ export function getCostSummaryTotals(
   if (params.serviceName) query.set("service_name", params.serviceName);
   if (params.includeCredits) query.set("include_credits", "true");
   return coreRequest<CoreCostSummaryTotals>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-summaries/totals?${query.toString()}`,
+    `/v1/organizations/${organizationId}/cost/data/connections/${connectionId}/summaries/totals?${query.toString()}`,
     token,
   );
 }
@@ -1352,7 +1353,7 @@ export type CostUsageMetric =
   "billed_cost" | "effective_cost" | "list_cost" | "contracted_cost";
 
 /**
- * Mirrors Core's `CostUsageRead` (`modules/billing/schemas/cost_usage.py`) — one
+ * Mirrors Core's Cost product `CostUsageRead` contract — one
  * FOCUS 1.2 (with AWS columns) charge row from the customer's AWS Data Export.
  * The richer, provider-independent sibling of `CoreCostSummary`, sourced from a
  * FOCUS export rather than Cost Explorer — never the same numbers, never summed
@@ -1468,7 +1469,7 @@ export function listCostUsage(
   if (params.billingAccountId)
     query.set("billing_account_id", params.billingAccountId);
   return coreRequest<CoreCostUsageListResponse>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-usage?${query.toString()}`,
+    `/v1/organizations/${organizationId}/cost/data/connections/${connectionId}/usage?${query.toString()}`,
     token,
   );
 }
@@ -1524,18 +1525,18 @@ export function getCostUsageTotals(
   if (params.targetId) query.set("target_id", params.targetId);
   if (params.serviceName) query.set("service_name", params.serviceName);
   return coreRequest<CoreCostUsageTotals>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-usage/totals?${query.toString()}`,
+    `/v1/organizations/${organizationId}/cost/data/connections/${connectionId}/usage/totals?${query.toString()}`,
     token,
   );
 }
 
 /**
  * Which dataset actually answered a unified totals request — mirrors Core's
- * `BillingCostSource`. `cost_usage` (FOCUS) is used only when every expected
+ * `CostDataSource`. `cost_usage` (FOCUS) is used only when every expected
  * monthly partition for every target in scope is fully synced; `cost_summary`
  * (Cost Explorer) is the always-available fallback otherwise.
  */
-export type BillingCostSource = "cost_usage" | "cost_summary";
+export type CostDataSource = "cost_usage" | "cost_summary";
 
 /**
  * Cost management module (`src/modules/cost` in Core) — Budgets, Allocations,
@@ -2247,6 +2248,76 @@ export function queryCostExplorer(
   );
 }
 
+/** Mirrors Core's `SpendTrendGranularity` (`modules/cost/schemas/spend_trends.py`). */
+export type SpendTrendGranularity = "daily" | "monthly";
+
+/** One bucket of the current period aligned to its equal-length bucket in
+ * the immediately preceding period — mirrors Core's `SpendTrendPoint`. */
+export interface CoreSpendTrendPoint {
+  bucket_start: string;
+  bucket_end: string;
+  previous_bucket_start: string;
+  previous_bucket_end: string;
+  current_amount: string;
+  previous_amount: string;
+  current_cumulative_amount: string;
+  previous_cumulative_amount: string;
+  absolute_delta: string;
+  change_percent: number | null;
+}
+
+/** Mirrors Core's `CurrencySpendTrend` — currencies are never blended. */
+export interface CoreCurrencySpendTrend {
+  currency: string;
+  current_total: string;
+  previous_total: string;
+  absolute_delta: string;
+  change_percent: number | null;
+  items: CoreSpendTrendPoint[];
+}
+
+/** Mirrors Core's `SpendTrendsResponse`. `source` discloses which dataset
+ * answered the whole comparison window (`cost_summary` only for unscoped
+ * `effective_cost` trends without complete FOCUS coverage). */
+export interface CoreSpendTrends {
+  period_start: string;
+  period_end: string;
+  previous_period_start: string;
+  previous_period_end: string;
+  metric: CostUsageMetric;
+  granularity: SpendTrendGranularity;
+  source: CostDataSource;
+  by_currency: CoreCurrencySpendTrend[];
+}
+
+/** Mirrors Core's `SpendTrendsQuery`. Periods are UTC-midnight aligned and
+ * include only completed days (daily) or completed months (monthly). */
+export interface SpendTrendsQueryInput {
+  period_start: string;
+  period_end: string;
+  granularity: SpendTrendGranularity;
+  metric?: CostUsageMetric;
+  connection_id?: string | null;
+  target_id?: string | null;
+  scope?: CoreScopeCondition[];
+}
+
+export function querySpendTrends(
+  organizationId: string,
+  token: string,
+  input: SpendTrendsQueryInput,
+) {
+  return coreRequest<CoreSpendTrends>(
+    `/v1/organizations/${organizationId}/cost/spend-trends/query`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
 export function runCostExplorerSavedView(
   organizationId: string,
   savedViewId: string,
@@ -2309,7 +2380,7 @@ export interface CoreCostOverviewCurrency {
   other_total: string;
   /** FOCUS `charge_category` split (`Usage`, `Credit`, `Tax`, ...) — sums
    * exactly to `current_total`. Surfaces why a total can be near-zero (a
-   * credit netting out usage) directly, instead of only via `/dashboard/costs`. */
+   * credit netting out usage) directly in the Cost product. */
   by_charge_category: CoreCostOverviewChargeCategory[];
   /** `null` only when `CoreCostOverview.source` is `"cost_summary"` — Cost
    * Explorer data has no FOCUS `charge_category` to reconcile from. */
@@ -2331,7 +2402,7 @@ export interface CoreCostOverview {
    * In that case `by_currency[].financial_breakdown` is `null` and
    * `by_charge_category` is empty because Cost Explorer can't provide either.
    * Always disclosed. */
-  source: BillingCostSource;
+  source: CostDataSource;
   by_currency: CoreCostOverviewCurrency[];
 }
 
@@ -2430,7 +2501,7 @@ export interface CoreCostForecast {
   period_end: string;
   /** Which dataset actually answered — same disclosed, never-inferred
    * convention as `CoreCostOverview.source`. */
-  source: BillingCostSource;
+  source: CostDataSource;
   /** Start of the current UTC day — the boundary between complete history
    * and today's own not-yet-queryable charges. */
   data_through: string;

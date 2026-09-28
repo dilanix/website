@@ -21,8 +21,11 @@ import {
   getCostDrivers,
   getCostForecast,
   getCostOverview,
+  getCostSummaryTotals,
   getNotificationAttachmentDownloadUrl,
   listNotifications,
+  listCostSummaries,
+  listCostUsage,
   queryCostExplorer,
   answerRecommendationReview,
   getRecommendationReview,
@@ -42,6 +45,9 @@ import {
   type CoreCostExplorerResponse,
   type CoreCostForecast,
   type CoreCostOverview,
+  type CoreCostSummaryListResponse,
+  type CoreCostSummaryTotals,
+  type CoreCostUsageListResponse,
   type CoreNotification,
   type CoreRecommendation,
   type CoreRecommendationReview,
@@ -49,6 +55,9 @@ import {
   type CoreSavedView,
   type CoreScopeCondition,
   type CostExplorerQueryInput,
+  type GetCostSummaryTotalsParams,
+  type ListCostSummariesParams,
+  type ListCostUsageParams,
   type GenerateReportResult,
   type NotificationAttachmentDownloadResult,
 } from "@/lib/core/api";
@@ -78,6 +87,58 @@ function message(error: unknown) {
 
 function validationMessage(result: z.ZodError) {
   return result.issues[0]?.message ?? "The submitted data is invalid.";
+}
+
+export async function listCostSummariesAction(
+  connectionId: string,
+  params: ListCostSummariesParams,
+): Promise<CostActionResult<CoreCostSummaryListResponse>> {
+  try {
+    const { token, organizationId } = await context();
+    return {
+      data: await listCostSummaries(
+        organizationId,
+        connectionId,
+        token,
+        params,
+      ),
+    };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getCostSummaryTotalsAction(
+  connectionId: string,
+  params: GetCostSummaryTotalsParams,
+): Promise<CostActionResult<CoreCostSummaryTotals>> {
+  try {
+    const { token, organizationId } = await context();
+    return {
+      data: await getCostSummaryTotals(
+        organizationId,
+        connectionId,
+        token,
+        params,
+      ),
+    };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function listCostUsageAction(
+  connectionId: string,
+  params: ListCostUsageParams,
+): Promise<CostActionResult<CoreCostUsageListResponse>> {
+  try {
+    const { token, organizationId } = await context();
+    return {
+      data: await listCostUsage(organizationId, connectionId, token, params),
+    };
+  } catch (error) {
+    return { error: message(error) };
+  }
 }
 
 const idSchema = z.uuid();

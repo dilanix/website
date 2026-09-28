@@ -10,6 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { CostOverview } from "@/components/dashboard/cost/cost-overview";
 import { CostDataScope } from "@/components/dashboard/cost/cost-data-scope";
+import {
+  CostOverviewTabs,
+  parseCostOverviewView,
+} from "@/components/dashboard/cost/cost-overview-tabs";
+import { CostDataView } from "@/components/dashboard/cost/cost-data-view";
+import { CostTrends } from "@/components/dashboard/cost/cost-trends";
 
 export async function generateMetadata({
   params,
@@ -29,21 +35,43 @@ export default async function ProductOverviewPage({
   const { slug } = await params;
 
   if (slug === "cost") {
-    const costDataScope = parseCostDataScope(await searchParams);
+    const query = await searchParams;
+    const costDataScope = parseCostDataScope(query);
+    const view = parseCostOverviewView(query.view);
     const { token, organization } = await requireDashboardOrganization();
     return (
-      <>
+      <div className="flex flex-col gap-6">
         <CostDataScope
           organizationId={organization.organization_id}
           token={token}
         />
-        <CostOverview
-          organizationId={organization.organization_id}
-          token={token}
-          connectionId={costDataScope.connectionId}
-          targetId={costDataScope.targetId}
-        />
-      </>
+        <CostOverviewTabs active={view} searchParams={query} />
+        {view === "summary" ? (
+          <CostOverview
+            organizationId={organization.organization_id}
+            token={token}
+            connectionId={costDataScope.connectionId}
+            targetId={costDataScope.targetId}
+          />
+        ) : view === "trends" ? (
+          <CostTrends
+            organizationId={organization.organization_id}
+            token={token}
+            connectionId={costDataScope.connectionId}
+            targetId={costDataScope.targetId}
+            searchParams={query}
+          />
+        ) : (
+          <CostDataView
+            view={view}
+            organizationId={organization.organization_id}
+            token={token}
+            connectionId={costDataScope.connectionId}
+            targetId={costDataScope.targetId}
+            searchParams={query}
+          />
+        )}
+      </div>
     );
   }
 

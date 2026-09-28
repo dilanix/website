@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
 import type { CoreCostSummaryTotals, CostBasis } from "@/lib/core/api";
-import { getCostSummaryTotalsAction } from "@/app/dashboard/integrations/actions";
+import { getCostSummaryTotalsAction } from "@/app/dashboard/products/cost-actions";
 import {
   costDiff,
   formatCostAmount,

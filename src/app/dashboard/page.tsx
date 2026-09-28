@@ -62,7 +62,7 @@ const workspaceLinks = [
     iconClassName: "border-cyan-500/20 bg-cyan-500/10 text-cyan-500",
   },
   {
-    href: "/dashboard/costs" as const,
+    href: "/dashboard/products/cost" as const,
     title: "Cost intelligence",
     description: "Understand spend, trends, and optimization opportunities.",
     icon: CircleDollarSign,
@@ -93,11 +93,6 @@ export default async function DashboardPage() {
     if (item.href === "/dashboard/resources") {
       return activeCapabilityCodes.some((code) =>
         code.endsWith(".inventory.read"),
-      );
-    }
-    if (item.href === "/dashboard/costs") {
-      return activeCapabilityCodes.some((code) =>
-        code.endsWith(".billing.read"),
       );
     }
     return true;

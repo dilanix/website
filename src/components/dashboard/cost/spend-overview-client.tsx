@@ -18,7 +18,7 @@ import {
   queryCostExplorerAction,
 } from "@/app/dashboard/products/cost-actions";
 import type {
-  BillingCostSource,
+  CostDataSource,
   CoreAnomaly,
   CoreBudget,
   CoreCostDriver,
@@ -52,9 +52,9 @@ import {
   type SpendTrajectoryPoint,
 } from "@/components/dashboard/cost/spend-trajectory-chart";
 
-/** Discloses which `BillingCostSource` answered a Cost read — `cost_usage` (FOCUS)
+/** Discloses which `CostDataSource` answered a Cost read — `cost_usage` (FOCUS)
  * is the complete-coverage source, `cost_summary` (Cost Explorer) the fallback. */
-function SourceBadge({ source }: { source: BillingCostSource }) {
+function SourceBadge({ source }: { source: CostDataSource }) {
   return (
     <StatusBadge status={source === "cost_usage" ? "success" : "neutral"}>
       {source === "cost_usage" ? "FOCUS" : "Cost Explorer"}
@@ -78,8 +78,8 @@ const OVERVIEW_PERIOD_PRESETS: ReadonlyArray<{
 
 // Overview's headline KPIs and trend are always the canonical, non-selectable
 // `effective_cost` measure — matching Core's own fixed `_CANONICAL_COST_USAGE_METRIC`
-// (`OverviewService`) — so they can never disagree with Workspace -> Costs' own
-// totals for the same scope/period. Billed/list/contracted cost remain
+// (`OverviewService`) — so they can never disagree with Cost's canonical totals
+// for the same scope/period. Billed/list/contracted cost remain
 // selectable only in Cost Explorer.
 const CANONICAL_METRIC = "effective_cost" as const;
 

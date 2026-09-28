@@ -78,10 +78,11 @@ describe("DashboardShell", () => {
     expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Applications" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Costs" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Integrations" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "API Keys" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Billing" })).toBeNull();
+    // Cost data lives in the Cost product, never a separate workspace section.
+    expect(screen.queryByRole("link", { name: "Costs" })).toBeNull();
     expect(screen.getByText("Analytical Engines")).toBeTruthy();
     expect(screen.getAllByRole("link", { name: "Dilanix home" })).toHaveLength(
       1,
@@ -107,7 +108,6 @@ describe("DashboardShell", () => {
     expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Applications" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Costs" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Integrations" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "API Keys" })).toBeTruthy();
   });
@@ -131,7 +131,6 @@ describe("DashboardShell", () => {
     expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Applications" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Costs" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Integrations" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "API Keys" })).toBeNull();
   });
@@ -150,7 +149,6 @@ describe("DashboardShell", () => {
 
     expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Applications" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Costs" })).toBeNull();
     expect(screen.queryByRole("link", { name: "API Keys" })).toBeNull();
   });
 

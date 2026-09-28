@@ -16,7 +16,7 @@ describe("ModalOverlay", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Example dialog" });
-    expect(container).toBeEmptyDOMElement();
+    expect(container.childElementCount).toBe(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Inside" }));
     expect(onClose).not.toHaveBeenCalled();

@@ -2,7 +2,7 @@
  * Formats a cost-product amount as `"20.00 USD"` — always 2 decimals, no
  * localized currency symbol (this product's own convention, distinct from
  * `formatCostAmount` in `lib/billing/cost-summaries.ts`, which is for the
- * separate `/dashboard/costs` billing surface).
+ * Cost product data views).
  *
  * A value that rounds to zero at 2 decimals but is genuinely negative (e.g.
  * usage nearly fully offset by a credit) is normalized to `0` first —

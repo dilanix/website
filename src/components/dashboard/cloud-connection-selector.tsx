@@ -39,7 +39,7 @@ export function CloudConnectionSelector({
   showResources,
   showCosts,
 }: {
-  basePath: "/dashboard/resources" | "/dashboard/costs";
+  basePath: "/dashboard/resources" | "/dashboard/products/cost";
   integrations: CoreIntegration[];
   connections: CoreIntegrationConnection[];
   /** Every target across `connections` — filtered per-connection below. A
@@ -215,7 +215,7 @@ export function CloudConnectionSelector({
               ? { label: "Resources", path: "/dashboard/resources" as const }
               : null,
             showCosts
-              ? { label: "Costs", path: "/dashboard/costs" as const }
+              ? { label: "Cost", path: "/dashboard/products/cost" as const }
               : null,
           ]
             .filter((item) => item !== null)

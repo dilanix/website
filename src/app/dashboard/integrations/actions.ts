@@ -31,10 +31,6 @@ import {
   listResources,
   listResourceFilters,
   listMetricDatapoints,
-  listCostSummaries,
-  getCostSummaryTotals,
-  listCostUsage,
-  getCostUsageTotals,
   CoreApiError,
   type CoreIntegrationConnection,
   type UpdateConnectionInput,
@@ -56,14 +52,6 @@ import {
   type ListResourcesParams,
   type CoreMetricDatapointListResponse,
   type ListMetricDatapointsParams,
-  type CoreCostSummaryListResponse,
-  type ListCostSummariesParams,
-  type CoreCostSummaryTotals,
-  type GetCostSummaryTotalsParams,
-  type CoreCostUsageListResponse,
-  type ListCostUsageParams,
-  type CoreCostUsageTotals,
-  type GetCostUsageTotalsParams,
   type CorePurgeConnectionResult,
 } from "@/lib/core/api";
 
@@ -545,78 +533,6 @@ export async function listMetricDatapointsAction(
   try {
     const { token, organizationId } = await context();
     const data = await listMetricDatapoints(
-      organizationId,
-      connectionId,
-      token,
-      params,
-    );
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function listCostSummariesAction(
-  connectionId: string,
-  params: ListCostSummariesParams,
-): Promise<ActionResult<CoreCostSummaryListResponse>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await listCostSummaries(
-      organizationId,
-      connectionId,
-      token,
-      params,
-    );
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function getCostSummaryTotalsAction(
-  connectionId: string,
-  params: GetCostSummaryTotalsParams,
-): Promise<ActionResult<CoreCostSummaryTotals>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await getCostSummaryTotals(
-      organizationId,
-      connectionId,
-      token,
-      params,
-    );
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function listCostUsageAction(
-  connectionId: string,
-  params: ListCostUsageParams,
-): Promise<ActionResult<CoreCostUsageListResponse>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await listCostUsage(
-      organizationId,
-      connectionId,
-      token,
-      params,
-    );
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function getCostUsageTotalsAction(
-  connectionId: string,
-  params: GetCostUsageTotalsParams,
-): Promise<ActionResult<CoreCostUsageTotals>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await getCostUsageTotals(
       organizationId,
       connectionId,
       token,

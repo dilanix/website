@@ -17,7 +17,7 @@ import type {
   CoreIntegrationTarget,
   CostBasis,
 } from "@/lib/core/api";
-import { listCostSummariesAction } from "@/app/dashboard/integrations/actions";
+import { listCostSummariesAction } from "@/app/dashboard/products/cost-actions";
 import {
   COST_BASIS_FILTER_ORDER,
   COST_SUMMARIES_PAGE_SIZE,
@@ -169,11 +169,11 @@ export function CostSummaryPanel({
   connectionId: string;
   /** Narrows every fetch to one `IntegrationTarget` (provider account) within
    * this connection — `null` reads every target the connection currently
-   * holds. Set from the `target` URL param via `CloudConnectionSelector`. */
+   * holds. Set from the `target` URL param via `CostDataScopeSelector`. */
   targetId?: string | null;
   /** This connection's own targets, for resolving each row's `target_id` to a
    * human label — never fetched here, since the page already loads them for
-   * `CloudConnectionSelector`. */
+   * `CostDataScopeSelector`. */
   targets?: CoreIntegrationTarget[];
   /** Whether `billing.read` is enabled on this connection — Core's read API
    * 403s rather than returning an empty page when it isn't

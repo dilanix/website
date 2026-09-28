@@ -30,37 +30,28 @@ a frontend availability allowlist. The static sync dataset list (`src/lib/sync/d
 mirrors only Core's currently runnable `DEFAULT_DATASETS` entries (`inventory.resources`,
 `billing.cost_summary`, and `billing.cost_usage` today).
 
-The `/dashboard/costs` page reads both of Core's billing datasets for the
-selected connection, deliberately narrower/richer siblings never summed against
-each other (`docs/SYNC_INGESTION_ARCHITECTURE.md` "Cost data" in the Core repo):
+The Cost product dashboard at `/dashboard/products/cost` is the only cost
+workspace. Its Overview provides Summary, Services, Resources, and Trends
+views (`?view=`) while preserving the selected connection/target in the URL:
 
-- **Cost overview** — `GET .../costs/totals` (`src/components/dashboard/unified-cost-totals.tsx`),
-  Core's coverage-aware `BillingQueryService` read. Never branches on source
-  itself; always shows which dataset actually answered (a `FOCUS` or
-  `Cost Explorer` badge) and a rolling-30-day total plus previous-period diff.
-- **Cost Explorer breakdown** — `GET .../cost-summaries`(`/totals`) — Core's AWS
-  Cost Explorer-sourced `billing.cost_summary` data
-  (`src/lib/billing/cost-summaries.ts`, `src/components/dashboard/cost-summary-panel.tsx`):
-  period presets/custom range, per-cost-basis totals and daily chart, and raw
-  paginated rows filterable by service.
-- **FOCUS cost usage** — `GET .../cost-usage`(`/totals`) — Core's AWS FOCUS 1.2
-  Data-Export-sourced `billing.cost_usage` data (`src/lib/billing/cost-usage.ts`,
-  `src/components/dashboard/cost-usage-panel.tsx`): raw FOCUS detail rows
-  (service, resource, region, SKU, charge category) filterable by service and
-  billing account, with a `CostUsageMetric` selector (billed/effective/list/
-  contracted — all four already present per row, so switching metric never
-  re-fetches).
+- **Summary** — `cost/overview` plus Explorer series (`CostOverview`,
+  `SpendOverviewClient`) and the cost-management entry points.
+- **Services** — Cost Explorer-sourced service rows and per-cost-basis totals
+  from `GET .../cost/data/connections/{connection_id}/summaries`(`/totals`)
+  (`CostSummaryPanel`).
+- **Resources** — normalized FOCUS charge rows (resource, region, SKU, charge
+  category) from `GET .../cost/data/connections/{connection_id}/usage`
+  (`CostUsagePanel`); shown only when the organization has the FOCUS export
+  capability.
+- **Trends** — `POST .../cost/spend-trends/query` (`CostTrends`): 30/90 completed
+  days or 12 completed months (`?range=`), each bucket against the equal-length
+  previous period, with the answering source (FOCUS or Cost Explorer) disclosed.
 
-All three read paths 403 when `billing.read` isn't enabled on the connection
-rather than returning an empty page (unlike the Resources tab), so the page only
-fetches them server-side once that capability is already known to be enabled;
-each panel explains the gap otherwise.
+Services and Resources are connection-scoped and require `billing.read` on the
+connection. Billing remains an internal normalized-data boundary with no
+frontend-facing routes of its own.
 
-The Cost product dashboard at `/dashboard/products/cost` uses only Core's
-own Cost module endpoints (`cost/overview`, `cost/explorer/query`, ...) —
-never `billing`'s Cost-Explorer-sourced `costs/totals`/`cost-summaries`
-surface, which is `/dashboard/costs`'s own, separate dataset/product
-boundary. Its Overview (`SpendOverviewClient`) defaults to calendar
+Cost Overview (`SpendOverviewClient`) defaults to calendar
 month-to-date, with explicit rolling 1 day/3 days/Week/30 days presets plus a
 custom range. It queries `GET .../cost/overview` first to resolve the actual
 source and the largest complete trailing FOCUS range. The FOCUS-only current
@@ -96,8 +87,7 @@ other Explorer controls): `Summary` is the existing grouped bar-chart table;
 `Detailed` is a flat, spreadsheet-style table with one column per group
 dimension actually present on the rows (read from the results themselves, not
 the current `group_by` selection, so a saved view's own grouping renders
-correctly too) plus `Currency` and `Amount` — closer to `/dashboard/costs`'s
-own "Service costs" table. Both views share one "Load more" control (250 rows
+correctly too) plus `Currency` and `Amount`. Both views share one "Load more" control (250 rows
 at a time) instead of a hard first-250 cutoff.
 
 The Cost Allocations screen also reads

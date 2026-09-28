@@ -857,7 +857,7 @@ describe("cost summaries", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/v1/organizations/org-123/integrations/connections/conn-1/cost-summaries?limit=25&offset=0&service_name=Amazon+EC2&cost_basis=amortized",
+        "/v1/organizations/org-123/cost/data/connections/conn-1/summaries?limit=25&offset=0&service_name=Amazon+EC2&cost_basis=amortized",
       ),
       expect.objectContaining({
         headers: expect.objectContaining({
@@ -1081,7 +1081,7 @@ describe("cost summary totals", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/v1/organizations/org-123/integrations/connections/conn-1/cost-summaries/totals?period_start=2026-08-01T00%3A00%3A00Z&period_end=2026-08-02T00%3A00%3A00Z&cost_basis=net_unblended",
+        "/v1/organizations/org-123/cost/data/connections/conn-1/summaries/totals?period_start=2026-08-01T00%3A00%3A00Z&period_end=2026-08-02T00%3A00%3A00Z&cost_basis=net_unblended",
       ),
       expect.objectContaining({
         headers: expect.objectContaining({
@@ -1159,7 +1159,7 @@ describe("cost usage", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/v1/organizations/org-123/integrations/connections/conn-1/cost-usage?limit=25&offset=0&service_name=Amazon+EC2&billing_account_id=123456789012",
+        "/v1/organizations/org-123/cost/data/connections/conn-1/usage?limit=25&offset=0&service_name=Amazon+EC2&billing_account_id=123456789012",
       ),
       expect.objectContaining({
         headers: expect.objectContaining({
@@ -1238,7 +1238,7 @@ describe("cost usage totals", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/v1/organizations/org-123/integrations/connections/conn-1/cost-usage/totals?period_start=2026-08-01T00%3A00%3A00Z&period_end=2026-08-02T00%3A00%3A00Z&metric=effective_cost",
+        "/v1/organizations/org-123/cost/data/connections/conn-1/usage/totals?period_start=2026-08-01T00%3A00%3A00Z&period_end=2026-08-02T00%3A00%3A00Z&metric=effective_cost",
       ),
       expect.objectContaining({
         headers: expect.objectContaining({
