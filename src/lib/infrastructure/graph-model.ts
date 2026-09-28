@@ -21,7 +21,32 @@ export const GRAPH_VIEWS: { id: GraphView; label: string }[] = [
   { id: "security", label: "Security" },
 ];
 
+/**
+ * `provisioned` — how the infrastructure is built (placement, networking,
+ * routing, security groups). `runtime` — how services work together:
+ * configured dependencies, observed traffic, inferred and permitted access.
+ */
+export type GraphMode = "provisioned" | "runtime";
+
+export const GRAPH_MODES: { id: GraphMode; label: string; hint: string }[] = [
+  { id: "provisioned", label: "Provisioned", hint: "How it is built" },
+  { id: "runtime", label: "Runtime", hint: "How services interact" },
+];
+
 export const INTERNET_NODE_ID = "internet";
+
+/** Relationship types that describe services working together. */
+const RUNTIME_TYPES = new Set([
+  "connects_to",
+  "uses",
+  "reads_from",
+  "writes_to",
+  "triggers",
+  "depends_on",
+  "routes_to",
+  "targets",
+  "exposes",
+]);
 
 const VPC_TYPE = "network.vpc";
 const SUBNET_TYPE = "network.subnet";
@@ -65,6 +90,8 @@ export interface ModelEdge {
   relationshipIds: string[];
   /** Resources hidden along a collapsed chain, in order. */
   via: string[];
+  /** When telemetry last saw this interaction, if ever. */
+  lastObservedAt: string | null;
 }
 
 export interface GraphModel {
@@ -74,6 +101,9 @@ export interface GraphModel {
 }
 
 export interface GraphModelOptions {
+  mode?: GraphMode;
+  /** Runtime mode only: evidence kinds an edge must have to be drawn. */
+  evidenceKinds?: ReadonlySet<CoreEvidenceKind>;
   view: GraphView;
   expanded: ReadonlySet<string>;
   collapsedGroups: ReadonlySet<string>;
@@ -105,7 +135,12 @@ export function buildGraphModel(
   graph: CoreScopeGraph,
   options: GraphModelOptions,
 ): GraphModel {
-  const { view, expanded, collapsedGroups, hiddenCategories, query } = options;
+  const { expanded, collapsedGroups, hiddenCategories, query } = options;
+  const runtime = options.mode === "runtime";
+  // Runtime is a flat service data-flow: service layer only, no containers.
+  const view: GraphView = runtime ? "architecture" : options.view;
+  const isContainer = (resourceType: string) =>
+    !runtime && isContainerType(resourceType, view);
   const resources = new Map(graph.nodes.map((item) => [item.node.id, item]));
 
   // Placement: resource -> subnet/VPC it belongs to.
@@ -135,6 +170,7 @@ export function buildGraphModel(
     return null;
   };
   const containerOf = (id: string): string | null => {
+    if (runtime) return null;
     const resourceType = resources.get(id)?.node.resource_type;
     if (resourceType === VPC_TYPE || resourceType === INTERNET_GATEWAY_TYPE)
       return null;
@@ -182,7 +218,7 @@ export function buildGraphModel(
   const groupIds = new Set<string>();
   const members: string[] = [];
   for (const id of visible) {
-    if (isContainerType(resources.get(id)!.node.resource_type, view)) continue;
+    if (isContainer(resources.get(id)!.node.resource_type)) continue;
     members.push(id);
     for (
       let current = containerOf(id);
@@ -279,6 +315,11 @@ export function buildGraphModel(
     const existing = edges.get(key);
     if (existing) {
       existing.kinds = [...new Set([...existing.kinds, ...edge.kinds])].sort();
+      existing.lastObservedAt =
+        [existing.lastObservedAt, edge.lastObservedAt]
+          .filter((value): value is string => Boolean(value))
+          .sort()
+          .at(-1) ?? null;
       existing.relationshipIds = [
         ...new Set([...existing.relationshipIds, ...edge.relationshipIds]),
       ];
@@ -292,20 +333,38 @@ export function buildGraphModel(
     resources.get(edge.source_resource_id)?.node.resource_type !==
       SECURITY_GROUP_TYPE;
 
+  /** The evidence kinds an edge is drawn with, or `null` to hide it. Runtime
+   *  shows only interaction types, never bare "can reach" network edges,
+   *  and only the evidence kinds selected. */
+  const drawnKinds = (
+    edge: CoreGraphEdgeSummary,
+  ): CoreEvidenceKind[] | null => {
+    if (!runtime) return [...edge.evidence_kinds].sort();
+    if (!RUNTIME_TYPES.has(edge.relationship_type)) return null;
+    let kinds = [...edge.evidence_kinds];
+    if (edge.relationship_type === "connects_to")
+      kinds = kinds.filter((kind) => kind !== "permitted");
+    const selected = options.evidenceKinds;
+    if (selected) kinds = kinds.filter((kind) => selected.has(kind));
+    return kinds.length ? kinds.sort() : null;
+  };
+
   for (const edge of graph.edges) {
     if (edge.relationship_type === "belongs_to") continue;
     if (view === "security" && isWorkloadToWorkloadConnects(edge)) continue;
+    const kinds = drawnKinds(edge);
     const source = drawnId(edge.source_resource_id);
     const target = drawnId(edge.target_resource_id);
-    if (!source || !target) continue;
+    if (!kinds || !source || !target) continue;
     addEdge({
       source,
       target,
       relationshipType: edge.relationship_type,
-      kinds: [...edge.evidence_kinds].sort(),
+      kinds,
       ports: edge.ports,
       relationshipIds: [edge.id],
       via: [],
+      lastObservedAt: edge.last_observed_at,
     });
   }
 
@@ -319,7 +378,8 @@ export function buildGraphModel(
     ]);
   }
   for (const first of graph.edges) {
-    if (!FLOW_TYPES.has(first.relationship_type)) continue;
+    const firstKinds = drawnKinds(first);
+    if (!FLOW_TYPES.has(first.relationship_type) || !firstKinds) continue;
     const source = drawnId(first.source_resource_id);
     const hidden = first.target_resource_id;
     if (
@@ -333,17 +393,17 @@ export function buildGraphModel(
       continue;
     for (const second of outgoing.get(hidden) ?? []) {
       const target = drawnId(second.target_resource_id);
-      if (!target) continue;
+      const secondKinds = drawnKinds(second);
+      if (!target || !secondKinds) continue;
       addEdge({
         source,
         target,
         relationshipType: second.relationship_type,
-        kinds: [
-          ...new Set([...first.evidence_kinds, ...second.evidence_kinds]),
-        ].sort(),
+        kinds: [...new Set([...firstKinds, ...secondKinds])].sort(),
         ports: [...first.ports, ...second.ports],
         relationshipIds: [first.id, second.id],
         via: [hidden],
+        lastObservedAt: second.last_observed_at,
       });
     }
   }
@@ -366,21 +426,24 @@ export function buildGraphModel(
         ports: [],
         relationshipIds: [],
         via: [],
+        lastObservedAt: null,
       });
       continue;
     }
     if (edge.relationship_type !== "exposes") continue;
     const target = drawnId(edge.target_resource_id);
-    if (!target) continue;
+    const kinds = drawnKinds(edge);
+    if (!target || !kinds) continue;
     internetUsed = true;
     addEdge({
       source: INTERNET_NODE_ID,
       target,
       relationshipType: "exposes",
-      kinds: [...edge.evidence_kinds].sort(),
+      kinds,
       ports: edge.ports,
       relationshipIds: [edge.id],
       via: [edge.source_resource_id],
+      lastObservedAt: edge.last_observed_at,
     });
   }
   if (internetUsed) {

@@ -3585,6 +3585,18 @@ export interface CoreGraphEdgeSummary {
     to_port: number | null;
   }[];
   last_seen_at: string;
+  /** Latest time telemetry (X-Ray, flow logs) saw this interaction; null if never. */
+  last_observed_at: string | null;
+}
+
+/** Why one runtime-interaction source did or did not contribute, per region. */
+export interface CoreInteractionSourceStatus {
+  source: string;
+  region: string;
+  state: "collected" | "empty" | "not_enabled" | "not_permitted" | "failed";
+  detail: string | null;
+  evidence_count: number;
+  collected_at: string;
 }
 
 export interface CoreGraphResolution {
@@ -3600,6 +3612,7 @@ export interface CoreScopeGraph {
   total_nodes: number;
   truncated: boolean;
   resolution: CoreGraphResolution | null;
+  sources: CoreInteractionSourceStatus[];
 }
 
 export interface CoreGraphEvidence {

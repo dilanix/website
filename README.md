@@ -54,8 +54,10 @@ frontend-facing routes of its own.
 The Infrastructure product dashboard has exactly two sections (`ProductTabs`):
 **Graph** at `/dashboard/products/infrastructure` (default) — an interactive
 React Flow canvas laid out by ELK (`src/lib/infrastructure/graph-layout.ts`)
-over Core's scoped graph (`?connection=&target=&region=`), with Architecture/
-Network/Security views, search, category filters, expand/collapse, minimap,
+over Core's scoped graph (`?connection=&target=&region=`), with two modes —
+Provisioned (Architecture/Network/Security views) and Runtime (service
+interactions filtered by evidence kind, with a per-source status panel) —
+search, category filters, expand/collapse, minimap,
 and resource/connection inspectors loaded lazily through
 `infrastructure-actions.ts`. View logic is provider-neutral and unit-tested
 (`src/lib/infrastructure/graph-model.ts`); nothing is drawn without a Core

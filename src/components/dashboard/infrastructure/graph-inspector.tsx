@@ -41,6 +41,7 @@ const RELATIONSHIP_LABELS: Record<string, string> = {
   writes_to: "writes to",
   exposes: "exposes",
   deployed_from: "deployed from",
+  triggers: "triggers",
 };
 
 const NETWORK_TYPES = new Set([
@@ -615,6 +616,11 @@ function explain(
   };
   for (const evidence of detail.edge.evidence) {
     const a = evidence.attributes;
+    const specific = explainInteraction(evidence, detail);
+    if (specific) {
+      reasons.push(specific);
+      continue;
+    }
     const target = group(a.target_security_group);
     const source = group(a.source_security_group);
     if (evidence.kind === "permitted" && source && target) {
@@ -711,6 +717,67 @@ function explain(
     });
   }
   return reasons;
+}
+
+function formatBytes(value: number) {
+  if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GB`;
+  if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(1)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${value} B`;
+}
+
+/** Sentences for runtime-interaction evidence (configuration, IAM, X-Ray,
+ *  flow logs, AI); `null` for evidence the generic rules explain. */
+function explainInteraction(
+  evidence: CoreGraphEvidence,
+  detail: CoreConnectionDetail,
+): { kind: CoreEvidenceKind; text: string } | null {
+  const a = evidence.attributes;
+  if (evidence.kind === "configured" && typeof a.variable === "string") {
+    const container =
+      typeof a.container === "string" && a.container
+        ? ` (container ${a.container})`
+        : "";
+    return {
+      kind: "configured",
+      text: `Environment variable ${a.variable}${container} of ${name(detail.source)} references ${name(detail.target)}.`,
+    };
+  }
+  if (
+    evidence.kind === "configured" &&
+    detail.edge.relationship_type === "triggers"
+  ) {
+    return {
+      kind: "configured",
+      text: `An event source mapping makes ${name(detail.source)} trigger ${name(detail.target)}${a.state ? ` (${String(a.state)})` : ""}.`,
+    };
+  }
+  if (evidence.kind === "permitted" && typeof a.role === "string") {
+    const actions = Array.isArray(a.actions) ? a.actions.join(", ") : "";
+    return {
+      kind: "permitted",
+      text: `IAM policy ${String(a.policy)} on role ${a.role} allows ${actions} on ${name(detail.target)}${a.has_conditions ? " (with conditions)" : ""}. Permission is not proof of use.`,
+    };
+  }
+  if (evidence.kind === "observed" && a.source === "xray") {
+    return {
+      kind: "observed",
+      text: `AWS X-Ray traced ${Number(a.requests ?? 0).toLocaleString("en-US")} calls (${Number(a.errors ?? 0)} errors), last ${relative(evidence.last_observed_at)}.`,
+    };
+  }
+  if (evidence.kind === "observed" && a.source === "vpc_flow_logs") {
+    return {
+      kind: "observed",
+      text: `VPC Flow Logs recorded ${formatBytes(Number(a.bytes ?? 0))} over ${Number(a.flows ?? 0)} flows on ${ruleLabel(a)}, last ${relative(evidence.last_observed_at)}.`,
+    };
+  }
+  if (evidence.kind === "inferred" && typeof a.rationale === "string") {
+    return {
+      kind: "inferred",
+      text: `AI (${Math.round((evidence.confidence ?? 0) * 100)}% confidence): ${a.rationale}`,
+    };
+  }
+  return null;
 }
 
 type ConnectionTab = "overview" | "path" | "evidence" | "raw";

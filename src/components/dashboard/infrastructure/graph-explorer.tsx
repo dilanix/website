@@ -36,18 +36,22 @@ import {
 import { cn } from "@/lib/utils";
 import type {
   CoreConnectionDetail,
+  CoreEvidenceKind,
   CoreGraphNodeDetail,
   CoreResourceNeighborhood,
   CoreScopeGraph,
 } from "@/lib/core/api";
 import {
+  GRAPH_MODES,
   GRAPH_VIEWS,
   INTERNET_NODE_ID,
   buildGraphModel,
   searchResources,
+  type GraphMode,
   type GraphView,
   type ModelEdge,
 } from "@/lib/infrastructure/graph-model";
+import { InteractionSources } from "./interaction-sources";
 import {
   layoutGraph,
   type GraphLayout,
@@ -154,7 +158,11 @@ function Legend() {
 
 function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
   const flow = useReactFlow();
+  const [mode, setMode] = useState<GraphMode>("provisioned");
   const [view, setView] = useState<GraphView>("architecture");
+  const [evidenceKinds, setEvidenceKinds] = useState<
+    ReadonlySet<CoreEvidenceKind>
+  >(new Set(Object.keys(EVIDENCE_STYLES) as CoreEvidenceKind[]));
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(
     new Set(),
@@ -185,25 +193,46 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
   const model = useMemo(
     () =>
       buildGraphModel(graph, {
+        mode,
+        evidenceKinds,
         view,
         expanded,
         collapsedGroups,
         hiddenCategories,
         query,
       }),
-    [graph, view, expanded, collapsedGroups, hiddenCategories, query],
+    [
+      graph,
+      mode,
+      evidenceKinds,
+      view,
+      expanded,
+      collapsedGroups,
+      hiddenCategories,
+      query,
+    ],
   );
   // Layout depends on structure only: search dims nodes without moving them.
   const layoutModel = useMemo(
     () =>
       buildGraphModel(graph, {
+        mode,
+        evidenceKinds,
         view,
         expanded,
         collapsedGroups,
         hiddenCategories,
         query: "",
       }),
-    [graph, view, expanded, collapsedGroups, hiddenCategories],
+    [
+      graph,
+      mode,
+      evidenceKinds,
+      view,
+      expanded,
+      collapsedGroups,
+      hiddenCategories,
+    ],
   );
 
   useEffect(() => {
@@ -344,6 +373,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
       const color = kind ? EVIDENCE_STYLES[kind].color : "#64748b";
       const data: GraphEdgeData = {
         model: edge,
+        showVerb: mode === "runtime",
         dimmed:
           query_active &&
           !(matching.has(edge.source) || matching.has(edge.target)),
@@ -367,7 +397,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
         },
       } satisfies Edge;
     });
-  }, [model, query, selectedEdgeHops]);
+  }, [model, mode, query, selectedEdgeHops]);
 
   const categories = useMemo(
     () => [...new Set(graph.nodes.map((item) => item.node.category))].sort(),
@@ -498,6 +528,83 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
 
         <div
           className="border-border-soft bg-dashboard-panel-strong/90 pointer-events-auto flex rounded-xl border p-1 shadow-[0_10px_28px_var(--shadow-card)] backdrop-blur"
+          role="tablist"
+          aria-label="Graph mode"
+        >
+          {GRAPH_MODES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={mode === item.id}
+              title={item.hint}
+              onClick={() => {
+                setMode(item.id);
+                setExpanded(new Set());
+                setCollapsedGroups(new Set());
+              }}
+              className={cn(
+                "rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors",
+                mode === item.id
+                  ? "bg-accent text-accent-foreground shadow-[0_6px_18px_var(--shadow-brand)]"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {mode === "runtime" ? (
+          <div
+            className="border-border-soft bg-dashboard-panel-strong/90 pointer-events-auto flex flex-wrap items-center gap-1 rounded-xl border p-1 shadow-[0_10px_28px_var(--shadow-card)] backdrop-blur"
+            aria-label="Evidence shown"
+          >
+            {(Object.keys(EVIDENCE_STYLES) as CoreEvidenceKind[]).map(
+              (kind) => {
+                const active = evidenceKinds.has(kind);
+                const style = EVIDENCE_STYLES[kind];
+                return (
+                  <button
+                    key={kind}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() =>
+                      setEvidenceKinds((current) => {
+                        const next = new Set(current);
+                        if (next.has(kind)) next.delete(kind);
+                        else next.add(kind);
+                        return next;
+                      })
+                    }
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-opacity",
+                      active ? "opacity-100" : "opacity-40",
+                    )}
+                    style={
+                      active
+                        ? { color: style.color, background: `${style.color}1a` }
+                        : undefined
+                    }
+                  >
+                    <span
+                      className="size-1.5 rounded-full"
+                      style={{ background: style.color }}
+                    />
+                    {style.label}
+                  </button>
+                );
+              },
+            )}
+            <InteractionSources sources={graph.sources} />
+          </div>
+        ) : null}
+
+        <div
+          className={cn(
+            "border-border-soft bg-dashboard-panel-strong/90 pointer-events-auto flex rounded-xl border p-1 shadow-[0_10px_28px_var(--shadow-card)] backdrop-blur",
+            mode === "runtime" && "hidden",
+          )}
           role="tablist"
           aria-label="Graph view"
         >

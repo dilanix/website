@@ -16,7 +16,18 @@ import { EVIDENCE_STYLES } from "./resource-visuals";
 export interface GraphEdgeData extends Record<string, unknown> {
   model: ModelEdge;
   dimmed: boolean;
+  /** Runtime mode labels edges with their interaction ("writes", "triggers"). */
+  showVerb?: boolean;
 }
+
+const VERBS: Record<string, string> = {
+  writes_to: "writes",
+  reads_from: "reads",
+  triggers: "triggers",
+  uses: "uses",
+  depends_on: "depends on",
+  connects_to: "connects",
+};
 
 /** Strongest evidence first: what we saw beats what configuration allows. */
 const EVIDENCE_PRIORITY: CoreEvidenceKind[] = [
@@ -36,6 +47,9 @@ const TRAFFIC_TYPES = new Set([
   "exposes",
   "routes_to",
   "targets",
+  "writes_to",
+  "reads_from",
+  "triggers",
 ]);
 
 export const RelationshipEdge = memo(function RelationshipEdge({
@@ -67,7 +81,9 @@ export const RelationshipEdge = memo(function RelationshipEdge({
   const style = kind ? EVIDENCE_STYLES[kind] : null;
   const color = style?.color ?? "#64748b";
   const traffic = TRAFFIC_TYPES.has(model.relationshipType);
-  const label = formatPorts(model.ports);
+  const ports = formatPorts(model.ports);
+  const verb = data?.showVerb ? VERBS[model.relationshipType] : undefined;
+  const label = [verb, ports].filter(Boolean).join(" · ");
   const showLabel = Boolean(label) && (selected || zoom >= 0.7);
 
   return (

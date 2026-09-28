@@ -46,6 +46,9 @@ function edge(
     evidence_kinds: kinds,
     ports,
     last_seen_at: "2026-09-28T00:00:00Z",
+    last_observed_at: kinds.includes("observed")
+      ? "2026-09-28T01:00:00Z"
+      : null,
   };
 }
 
@@ -55,6 +58,7 @@ const graph: CoreScopeGraph = {
   total_nodes: 9,
   truncated: false,
   resolution: null,
+  sources: [],
   nodes: [
     node("vpc", "network.vpc", "network"),
     node("subnet", "network.subnet", "network"),
@@ -197,6 +201,65 @@ describe("buildGraphModel", () => {
     expect(model.nodes.find((item) => item.id === "db")?.matches).toBe(true);
     expect(model.nodes.find((item) => item.id === "alb")?.matches).toBe(false);
     expect(ids(model)).not.toContain("api");
+  });
+});
+
+describe("buildGraphModel in Runtime mode", () => {
+  const runtimeGraph: CoreScopeGraph = {
+    ...graph,
+    nodes: [
+      ...graph.nodes,
+      node("queue", "messaging.queue", "service"),
+      node("worker", "compute.function", "service"),
+    ],
+    edges: [
+      ...graph.edges,
+      edge("api", "writes_to", "queue", ["permitted"]),
+      edge("queue", "triggers", "worker"),
+      edge("worker", "connects_to", "db", ["observed"], tcp5432),
+      edge("api", "reads_from", "db", ["inferred"]),
+    ],
+  };
+
+  it("draws a flat service data-flow without network-only edges or containers", () => {
+    const model = buildGraphModel(
+      runtimeGraph,
+      options("architecture", { mode: "runtime" }),
+    );
+
+    expect(model.nodes.some((item) => item.kind === "group")).toBe(false);
+    expect(model.nodes.every((item) => item.parentId === null)).toBe(true);
+    expect(edgeKeys(model)).toEqual(
+      [
+        "alb>api",
+        "api>db",
+        "api>queue",
+        "queue>worker",
+        "worker>db",
+        `${INTERNET_NODE_ID}>alb`,
+      ].sort(),
+    );
+    // The security-group "can reach" edge api -> db is not an interaction;
+    // the api -> db edge drawn here is the inferred `reads_from`.
+    expect(
+      model.edges.find((item) => item.source === "api" && item.target === "db")
+        ?.relationshipType,
+    ).toBe("reads_from");
+    expect(
+      model.edges.find((item) => item.source === "worker")?.lastObservedAt,
+    ).toBe("2026-09-28T01:00:00Z");
+  });
+
+  it("filters interactions by evidence kind", () => {
+    const model = buildGraphModel(
+      runtimeGraph,
+      options("architecture", {
+        mode: "runtime",
+        evidenceKinds: new Set(["observed"]),
+      }),
+    );
+
+    expect(edgeKeys(model)).toEqual(["worker>db"]);
   });
 });
 

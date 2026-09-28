@@ -16,6 +16,7 @@ describe("eligibleSyncDatasets", () => {
 
     expect(result.map((dataset) => dataset.slug)).toEqual([
       "inventory.resources",
+      "graph.interactions",
     ]);
   });
 
@@ -28,6 +29,7 @@ describe("eligibleSyncDatasets", () => {
 
     expect(result.map((dataset) => dataset.slug).sort()).toEqual([
       "billing.cost_summary",
+      "graph.interactions",
       "inventory.resources",
     ]);
   });
@@ -84,6 +86,7 @@ describe("eligibleSyncDatasets", () => {
     expect(SYNC_DATASETS.map((dataset) => dataset.slug).sort()).toEqual([
       "billing.cost_summary",
       "billing.cost_usage",
+      "graph.interactions",
       "inventory.resources",
       "metrics.utilization",
     ]);

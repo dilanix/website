@@ -31,6 +31,12 @@ export const SYNC_DATASETS = [
     requiredCapability: "metrics.read",
     additionalOrganizationCapabilities: [],
   },
+  {
+    slug: "graph.interactions",
+    label: "Runtime Interactions (config, IAM, X-Ray, Flow Logs, AI)",
+    requiredCapability: "inventory.read",
+    additionalOrganizationCapabilities: [],
+  },
 ] as const;
 
 export type SyncDataset = (typeof SYNC_DATASETS)[number];
