@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 1000;
 
-export function isReviewActive(review: CoreRecommendationReview | null) {
+function isReviewActive(review: CoreRecommendationReview | null) {
   return review?.status === "queued" || review?.status === "running";
 }
 

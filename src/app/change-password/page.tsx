@@ -4,10 +4,8 @@ import { redirect } from "next/navigation";
 import { Container } from "@/components/ui/container";
 import { ChangePasswordForm } from "@/components/auth/change-password-form";
 import { cancelChangePasswordAction } from "./actions";
-import {
-  getAccessToken,
-  MUST_CHANGE_PASSWORD_COOKIE,
-} from "@/lib/auth/session";
+import { getAccessToken } from "@/lib/auth/session";
+import { MUST_CHANGE_PASSWORD_COOKIE } from "@/lib/auth/constants";
 
 export const metadata: Metadata = {
   title: "Change password",

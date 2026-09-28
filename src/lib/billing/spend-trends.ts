@@ -17,7 +17,7 @@ export const SPEND_TREND_RANGES: readonly SpendTrendRange[] = [
   { id: "12m", label: "12 months", granularity: "monthly" },
 ];
 
-export const DEFAULT_SPEND_TREND_RANGE: SpendTrendRangeId = "30d";
+const DEFAULT_SPEND_TREND_RANGE: SpendTrendRangeId = "30d";
 
 export function parseSpendTrendRange(
   value: string | undefined,

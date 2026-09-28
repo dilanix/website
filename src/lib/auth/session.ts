@@ -15,14 +15,6 @@ import {
 } from "./constants";
 import { authCookieOptions } from "./cookie-options";
 
-export {
-  ACCESS_TOKEN_COOKIE,
-  ACCESS_TOKEN_EXPIRES_AT_COOKIE,
-  REFRESH_TOKEN_COOKIE,
-  REMEMBER_ME_COOKIE,
-  MUST_CHANGE_PASSWORD_COOKIE,
-};
-
 export interface SessionTokens {
   access_token: string;
   refresh_token: string;

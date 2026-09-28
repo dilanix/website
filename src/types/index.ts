@@ -128,13 +128,6 @@ export interface ProductFaqItem {
   answer: string;
 }
 
-export interface CompanyPage {
-  headline: string;
-  body: string;
-  ctaLabel: string;
-  ctaHref: string;
-}
-
 export interface SiteSocialLinks {
   linkedin?: string;
   github?: string;

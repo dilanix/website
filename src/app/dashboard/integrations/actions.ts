@@ -26,8 +26,6 @@ import {
   getSyncJobAttempts,
   cancelSync,
   setSyncPolicy,
-  listSyncPolicies,
-  deleteSyncPolicy,
   listResources,
   listResourceFilters,
   listMetricDatapoints,
@@ -45,7 +43,6 @@ import {
   type CoreSyncRunListResponse,
   type CoreSyncJobAttempt,
   type CoreSyncPolicy,
-  type CoreSyncPolicyListResponse,
   type SetSyncPolicyInput,
   type CoreResourceListResponse,
   type CoreResourceFilterOptions,
@@ -459,32 +456,6 @@ export async function setSyncPolicyAction(
     );
     revalidatePath(`/dashboard/integrations/${connectionId}`);
     return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function listSyncPoliciesAction(
-  connectionId: string,
-): Promise<ActionResult<CoreSyncPolicyListResponse>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await listSyncPolicies(organizationId, connectionId, token);
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function deleteSyncPolicyAction(
-  connectionId: string,
-  syncPolicyId: string,
-): Promise<ActionResult> {
-  try {
-    const { token, organizationId } = await context();
-    await deleteSyncPolicy(organizationId, connectionId, syncPolicyId, token);
-    revalidatePath(`/dashboard/integrations/${connectionId}`);
-    return {};
   } catch (error) {
     return { error: message(error) };
   }

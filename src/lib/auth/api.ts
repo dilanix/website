@@ -100,26 +100,6 @@ export async function login(
   return response.json() as Promise<TokenResponse>;
 }
 
-export async function refreshTokens(
-  refreshToken: string,
-): Promise<TokenResponse> {
-  const response = await fetch(`${env.NEXT_PUBLIC_API_URL}/v1/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new AuthApiError(
-      await readErrorMessage(response, "Unable to refresh your session."),
-      response.status,
-    );
-  }
-
-  return response.json() as Promise<TokenResponse>;
-}
-
 /** Revokes a single session (the refresh token tied to this device/browser). */
 export async function logout(
   accessToken: string,

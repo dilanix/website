@@ -10,5 +10,3 @@ export const siteConfig = {
   description:
     "Dilanix is a cross-platform Technology Intelligence & Cost Management Platform that connects infrastructure context, resources, and cost data in one operating view.",
 } as const;
-
-export type SiteConfig = typeof siteConfig;

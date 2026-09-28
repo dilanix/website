@@ -962,19 +962,6 @@ export function listSyncPolicies(
   );
 }
 
-export function deleteSyncPolicy(
-  organizationId: string,
-  connectionId: string,
-  syncPolicyId: string,
-  token: string,
-) {
-  return coreRequest<void>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync-policies/${syncPolicyId}`,
-    token,
-    { method: "DELETE" },
-  );
-}
-
 /**
  * Mirrors Dilanix Core's `ResourceSpecificationRead` (`modules/catalog/schemas.py`)
  * — a platform-global, provider-owned technical specification, never tenant data.
@@ -1629,17 +1616,6 @@ export function listBudgets(organizationId: string, token: string) {
   );
 }
 
-export function getBudget(
-  organizationId: string,
-  budgetId: string,
-  token: string,
-) {
-  return coreRequest<CoreBudget>(
-    `/v1/organizations/${organizationId}/cost/budgets/${budgetId}`,
-    token,
-  );
-}
-
 export function createBudget(
   organizationId: string,
   token: string,
@@ -1759,17 +1735,6 @@ export function getAllocationBreakdown(
   );
 }
 
-export function getAllocation(
-  organizationId: string,
-  allocationId: string,
-  token: string,
-) {
-  return coreRequest<CoreAllocation>(
-    `/v1/organizations/${organizationId}/cost/allocations/${allocationId}`,
-    token,
-  );
-}
-
 export function createAllocation(
   organizationId: string,
   token: string,
@@ -1858,17 +1823,6 @@ export function listAnomalies(
   );
 }
 
-export function getAnomaly(
-  organizationId: string,
-  anomalyId: string,
-  token: string,
-) {
-  return coreRequest<CoreAnomaly>(
-    `/v1/organizations/${organizationId}/cost/anomalies/${anomalyId}`,
-    token,
-  );
-}
-
 /** `status` must not be `"open"` — only the detection job may set that. */
 export function updateAnomalyStatus(
   organizationId: string,
@@ -1889,7 +1843,6 @@ export function updateAnomalyStatus(
 
 export type RecommendationStatus = "active" | "dismissed" | "resolved";
 export type RecommendationPriority = "low" | "medium" | "high";
-export type RecommendationRunStatus = "running" | "succeeded" | "failed";
 
 export interface CoreRecommendationTarget {
   target_type: string;
@@ -1996,13 +1949,6 @@ export interface CoreRecommendation {
   evidence: CoreRecommendationEvidence[];
   impacts: CoreRecommendationImpact[];
   ai_review: CoreRecommendationAIReview | null;
-}
-
-export interface CoreRecommendationListResponse {
-  items: CoreRecommendation[];
-  total: number;
-  limit: number;
-  offset: number;
 }
 
 /**
@@ -2162,43 +2108,6 @@ export function answerRecommendationReview(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ answers }),
     },
-  );
-}
-
-export interface CoreRecommendationRun {
-  id: string;
-  analyzer_key: string;
-  analyzer_version: string;
-  scope_key: string;
-  status: RecommendationRunStatus;
-  started_at: string;
-  finished_at: string | null;
-  candidate_count: number | null;
-  created_count: number | null;
-  updated_count: number | null;
-  resolved_count: number | null;
-  error_code: string | null;
-}
-
-export interface CoreRecommendationRunListResponse {
-  items: CoreRecommendationRun[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
-export function listRecommendationRuns(
-  organizationId: string,
-  token: string,
-  options?: { analyzerKey?: string | null; limit?: number; offset?: number },
-) {
-  const params = new URLSearchParams();
-  if (options?.analyzerKey) params.set("analyzer_key", options.analyzerKey);
-  params.set("limit", String(options?.limit ?? 50));
-  params.set("offset", String(options?.offset ?? 0));
-  return coreRequest<CoreRecommendationRunListResponse>(
-    `/v1/organizations/${organizationId}/cost/recommendation-runs?${params.toString()}`,
-    token,
   );
 }
 
@@ -2585,17 +2494,6 @@ export function listSavedViews(organizationId: string, token: string) {
   );
 }
 
-export function getSavedView(
-  organizationId: string,
-  savedViewId: string,
-  token: string,
-) {
-  return coreRequest<CoreSavedView>(
-    `/v1/organizations/${organizationId}/cost/saved-views/${savedViewId}`,
-    token,
-  );
-}
-
 export function createSavedView(
   organizationId: string,
   token: string,
@@ -2707,17 +2605,6 @@ export interface UpdateReportInput {
 export function listReports(organizationId: string, token: string) {
   return coreRequest<CoreReportListResponse>(
     `/v1/organizations/${organizationId}/cost/reports`,
-    token,
-  );
-}
-
-export function getReport(
-  organizationId: string,
-  reportId: string,
-  token: string,
-) {
-  return coreRequest<CoreReport>(
-    `/v1/organizations/${organizationId}/cost/reports/${reportId}`,
     token,
   );
 }
@@ -3142,19 +3029,6 @@ export function listTelemetrySources(
 ) {
   return coreRequest<CoreTelemetrySource[]>(
     telemetrySourcesPath(organizationId, applicationId, environmentId),
-    token,
-  );
-}
-
-export function getTelemetrySource(
-  organizationId: string,
-  applicationId: string,
-  environmentId: string,
-  sourceId: string,
-  token: string,
-) {
-  return coreRequest<CoreTelemetrySource>(
-    `${telemetrySourcesPath(organizationId, applicationId, environmentId)}/${sourceId}`,
     token,
   );
 }
@@ -3665,33 +3539,6 @@ export function getNotificationAttachmentDownloadUrl(
 ) {
   return coreRequest<NotificationAttachmentDownloadResult>(
     `/v1/organizations/${organizationId}/notifications/${notificationId}/attachments/${attachmentId}/download`,
-    token,
-  );
-}
-
-/**
- * One well-known `Notification.event_type` a producer somewhere on the
- * platform actually publishes (e.g. `cost.report.generated`) — purely
- * descriptive catalog data for a destination's event-type picker. A
- * destination is never restricted to these values; the dashboard still lets
- * someone type a custom event type alongside picking from this list.
- */
-export interface CoreNotificationEventType {
-  code: string;
-  label: string;
-  description: string;
-}
-
-export interface CoreNotificationEventTypeListResponse {
-  items: CoreNotificationEventType[];
-}
-
-export function listNotificationEventTypes(
-  organizationId: string,
-  token: string,
-) {
-  return coreRequest<CoreNotificationEventTypeListResponse>(
-    `/v1/organizations/${organizationId}/notifications/event-types`,
     token,
   );
 }

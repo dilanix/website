@@ -538,27 +538,6 @@ describe("sync", () => {
     );
     expect(result).toEqual(mockRun);
   });
-
-  it("deletes a sync policy by id", async () => {
-    const response = new Response(null, { status: 204 });
-    const fetchMock = vi.fn().mockResolvedValue(response);
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { deleteSyncPolicy } = await import("./api");
-    await deleteSyncPolicy("org-123", "conn-1", "policy-1", "test-token");
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "/v1/organizations/org-123/integrations/connections/conn-1/sync-policies/policy-1",
-      ),
-      expect.objectContaining({
-        method: "DELETE",
-        headers: expect.objectContaining({
-          Authorization: "Bearer test-token",
-        }),
-      }),
-    );
-  });
 });
 
 describe("targets", () => {

@@ -53,7 +53,7 @@ function fromConditions(conditions: CoreScopeCondition[]): ScopeRow[] {
   }));
 }
 
-export function toScopeConditions(rows: ScopeRow[]): CoreScopeCondition[] {
+function toScopeConditions(rows: ScopeRow[]): CoreScopeCondition[] {
   return rows.map((row) => {
     const value =
       row.operator === "eq"
