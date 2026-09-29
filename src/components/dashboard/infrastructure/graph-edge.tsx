@@ -1,26 +1,25 @@
 "use client";
 
 import { memo } from "react";
-import {
-  BaseEdge,
-  EdgeLabelRenderer,
-  getSmoothStepPath,
-  useStore,
-  type EdgeProps,
-} from "@xyflow/react";
-import { cn } from "@/lib/utils";
+import { getSmoothStepPath, type EdgeProps } from "@xyflow/react";
 import type { CoreEvidenceKind } from "@/lib/core/api";
-import { formatPorts, type ModelEdge } from "@/lib/infrastructure/graph-model";
-import { EVIDENCE_STYLES } from "./resource-visuals";
+import type { ModelEdge } from "@/lib/infrastructure/graph-model";
+import type { Point } from "@/lib/infrastructure/graph-layout";
+import { roundedPath, routeMidpoint } from "@/lib/infrastructure/edge-path";
 
 export interface GraphEdgeData extends Record<string, unknown> {
   model: ModelEdge;
-  dimmed: boolean;
-  /** Runtime mode labels edges with their interaction ("writes", "triggers"). */
-  showVerb?: boolean;
+  /** ELK's orthogonal route; `null` once an endpoint was dragged away from it. */
+  route: Point[] | null;
+  color: string;
+  dash: string | undefined;
+  /** Protocol/port (and, in Runtime, the interaction verb). */
+  label: string;
+  /** Traffic-carrying edges animate their direction while highlighted. */
+  flow: boolean;
 }
 
-const VERBS: Record<string, string> = {
+export const VERBS: Record<string, string> = {
   writes_to: "writes",
   reads_from: "reads",
   triggers: "triggers",
@@ -42,7 +41,7 @@ export function dominantEvidence(kinds: CoreEvidenceKind[]) {
   return EVIDENCE_PRIORITY.find((kind) => kinds.includes(kind)) ?? null;
 }
 
-const TRAFFIC_TYPES = new Set([
+export const TRAFFIC_TYPES = new Set([
   "connects_to",
   "exposes",
   "routes_to",
@@ -52,8 +51,12 @@ const TRAFFIC_TYPES = new Set([
   "triggers",
 ]);
 
+/**
+ * One relationship, drawn along its routed path. Emphasis (highlight, dim,
+ * labels, level of detail) is pure CSS driven by classes on the edge and the
+ * workspace's zoom level, so zooming and hovering never re-render edges.
+ */
 export const RelationshipEdge = memo(function RelationshipEdge({
-  id,
   sourceX,
   sourceY,
   targetX,
@@ -61,77 +64,74 @@ export const RelationshipEdge = memo(function RelationshipEdge({
   sourcePosition,
   targetPosition,
   data,
-  selected,
   markerEnd,
 }: EdgeProps & { data?: GraphEdgeData }) {
-  const zoom = useStore((state) => state.transform[2]);
-  const model = data?.model;
-  const [path, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
-    borderRadius: 14,
-  });
-  if (!model) return null;
-
-  const kind = dominantEvidence(model.kinds);
-  const style = kind ? EVIDENCE_STYLES[kind] : null;
-  const color = style?.color ?? "#64748b";
-  const traffic = TRAFFIC_TYPES.has(model.relationshipType);
-  const ports = formatPorts(model.ports);
-  const verb = data?.showVerb ? VERBS[model.relationshipType] : undefined;
-  const label = [verb, ports].filter(Boolean).join(" · ");
-  const showLabel = Boolean(label) && (selected || zoom >= 0.7);
+  if (!data) return null;
+  let path: string;
+  let labelAt: Point;
+  if (data.route) {
+    path = roundedPath(data.route, 16);
+    labelAt = routeMidpoint(data.route);
+  } else {
+    const [smooth, labelX, labelY] = getSmoothStepPath({
+      sourceX,
+      sourceY,
+      targetX,
+      targetY,
+      sourcePosition,
+      targetPosition,
+      borderRadius: 10,
+    });
+    path = smooth;
+    labelAt = { x: labelX, y: labelY };
+  }
+  const labelWidth = data.label.length * 6.1 + 12;
 
   return (
     <>
-      <BaseEdge
-        id={id}
-        path={path}
-        markerEnd={markerEnd}
-        interactionWidth={18}
-        style={{
-          stroke: color,
-          strokeWidth: selected ? 2.6 : 1.6,
-          strokeDasharray: style?.dash,
-          opacity: data?.dimmed ? 0.15 : selected ? 1 : 0.8,
-          filter: selected ? `drop-shadow(0 0 6px ${color})` : undefined,
-          transition: "opacity 200ms, stroke-width 150ms",
-        }}
+      <path
+        d={path}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={16}
+        className="react-flow__edge-interaction"
       />
-      {traffic &&
-      !data?.dimmed &&
-      kind !== "permitted" &&
-      kind !== "inferred" ? (
+      <path
+        d={path}
+        fill="none"
+        stroke={data.color}
+        strokeDasharray={data.dash}
+        markerEnd={markerEnd}
+        className="graph-edge-path"
+        style={{ color: data.color }}
+      />
+      {data.flow ? (
         <path
           d={path}
           fill="none"
-          stroke={color}
-          strokeWidth={selected ? 2.6 : 1.8}
+          stroke={data.color}
           strokeDasharray="3 14"
           strokeLinecap="round"
-          className="graph-edge-flow pointer-events-none"
-          style={{ opacity: 0.9 }}
+          className="graph-edge-flow"
         />
       ) : null}
-      {showLabel ? (
-        <EdgeLabelRenderer>
-          <div
-            style={{
-              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              borderColor: `${color}66`,
-            }}
-            className={cn(
-              "bg-dashboard-panel-strong/95 text-foreground pointer-events-none absolute rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium shadow-sm backdrop-blur",
-              data?.dimmed && "opacity-20",
-            )}
-          >
-            {label}
-          </div>
-        </EdgeLabelRenderer>
+      {data.label ? (
+        <g
+          className="graph-edge-label"
+          transform={`translate(${labelAt.x} ${labelAt.y})`}
+        >
+          <rect
+            x={-labelWidth / 2}
+            y={-9}
+            width={labelWidth}
+            height={18}
+            rx={5}
+            stroke={data.color}
+          />
+          <text textAnchor="middle" dominantBaseline="central">
+            {data.label}
+          </text>
+        </g>
       ) : null}
     </>
   );

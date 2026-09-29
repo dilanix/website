@@ -462,22 +462,13 @@ body {
   }
 }
 
-/* Infrastructure → Graph: traffic-flow animation along configured/observed edges. */
-@keyframes graph-edge-flow {
-  to {
-    stroke-dashoffset: -34;
-  }
-}
-
-.graph-edge-flow {
-  animation: graph-edge-flow 1.4s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .graph-edge-flow {
-    animation: none;
-  }
-}
+/* Infrastructure → Graph.
+   Performance: nodes and edges never subscribe to the zoom level. The
+   workspace carries `data-lod="far|mid|near"` (changes only when a zoom
+   threshold is crossed) and highlight state is a class on each node/edge
+   wrapper, so level of detail and emphasis are resolved here in CSS. No
+   backdrop filters, large shadows or idle animations on graph elements —
+   they repaint on every pan frame. */
 
 .infrastructure-graph {
   --xy-background-color: transparent;
@@ -492,4 +483,166 @@ body {
   background: transparent;
   padding: 0;
   box-shadow: none;
+}
+
+/* Graph controls sit on the canvas; the global hover filter would repaint
+   under every pointer move. */
+.graph-workspace :where(button):hover {
+  filter: none;
+}
+
+/* Cards */
+.graph-card {
+  border-color: var(--border-soft);
+  background: color-mix(
+    in oklab,
+    var(--dashboard-panel-strong) 95%,
+    transparent
+  );
+  box-shadow: 0 14px 36px var(--shadow-card);
+  transition:
+    border-color 200ms,
+    box-shadow 200ms;
+}
+
+.graph-card-group {
+  border-color: rgba(34, 211, 238, 0.5);
+  background: rgba(6, 182, 212, 0.07);
+}
+
+.graph-card-selected {
+  border-color: color-mix(in oklab, var(--accent) 70%, transparent);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 18px 48px var(--shadow-brand);
+}
+
+.react-flow__node.graph-hl .graph-card:not(.graph-card-selected) {
+  border-color: color-mix(in oklab, var(--accent) 55%, transparent);
+}
+
+/* Emphasis: hover/selection traces paths; search dims non-matches. */
+.graph-workspace .react-flow__node {
+  transition: opacity 160ms ease-out;
+}
+
+.graph-workspace .react-flow__node.graph-dim,
+.graph-workspace .react-flow__node.graph-miss {
+  opacity: 0.25;
+}
+
+.graph-workspace .react-flow__node-group.graph-dim {
+  opacity: 0.55;
+}
+
+/* Edges */
+.graph-edge-path {
+  stroke-width: 1.6;
+  opacity: 0.8;
+  transition: opacity 160ms ease-out;
+}
+
+.react-flow__edge.graph-hl .graph-edge-path,
+.react-flow__edge.selected .graph-edge-path {
+  stroke-width: 2.6;
+  opacity: 1;
+}
+
+.react-flow__edge.selected .graph-edge-path {
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.react-flow__edge.graph-dim .graph-edge-path,
+.react-flow__edge.graph-dim .graph-edge-flow {
+  opacity: 0.12;
+}
+
+.react-flow__edge.graph-dim .graph-edge-label {
+  display: none;
+}
+
+@keyframes graph-edge-flow {
+  to {
+    stroke-dashoffset: -34;
+  }
+}
+
+/* Direction of traffic along configured/observed edges. Paused while the
+   canvas moves so panning and zooming never repaint animated paths. */
+.graph-edge-flow {
+  stroke-width: 1.8;
+  opacity: 0.9;
+  pointer-events: none;
+  animation: graph-edge-flow 1.4s linear infinite;
+}
+
+.react-flow__edge.graph-hl .graph-edge-flow,
+.react-flow__edge.selected .graph-edge-flow {
+  stroke-width: 2.6;
+}
+
+.graph-workspace[data-moving] .graph-edge-flow,
+.graph-workspace[data-moving] .graph-ambient {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .graph-edge-flow {
+    animation: none;
+  }
+}
+
+.graph-edge-label {
+  display: none;
+  pointer-events: none;
+}
+
+.graph-edge-label rect {
+  fill: var(--dashboard-panel-strong);
+  stroke-opacity: 0.4;
+}
+
+.graph-edge-label text {
+  fill: var(--foreground);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* Semantic zoom. Near: full cards, every label and technical detail. */
+.graph-workspace[data-lod="near"] .graph-edge-label,
+.react-flow__edge.graph-hl .graph-edge-label,
+.react-flow__edge.selected .graph-edge-label {
+  display: inline;
+}
+
+.graph-workspace:not([data-lod="near"]) .graph-lod-near,
+.graph-workspace:not([data-lod="near"]) .graph-node-sub {
+  display: none;
+}
+
+/* Far: icons only; detail-layer resources (security groups, interfaces,
+   target groups…) and their edges step back. */
+.graph-workspace[data-lod="far"] .react-flow__node.graph-lod-detail,
+.graph-workspace[data-lod="far"] .react-flow__edge.graph-lod-detail {
+  visibility: hidden;
+}
+
+.graph-workspace[data-lod="far"] .graph-card > span:not(.graph-node-icon),
+.graph-workspace[data-lod="far"] .graph-expand {
+  display: none;
+}
+
+.graph-workspace[data-lod="far"] .graph-card {
+  justify-content: center;
+}
+
+/* Fullscreen fallback (no Fullscreen API): the workspace is fixed to the
+   viewport; product chrome is taken out of the way. */
+html[data-graph-fullscreen] {
+  overflow: hidden;
+}
+
+html[data-graph-fullscreen] [data-dashboard-chrome] {
+  display: none;
 }

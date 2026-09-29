@@ -369,7 +369,10 @@ export function DashboardShell({
 
   return (
     <div className="dashboard-canvas flex min-h-dvh flex-1">
-      <aside className="border-border-soft bg-dashboard-sidebar sticky top-0 hidden h-dvh w-72 shrink-0 flex-col border-r px-4 py-5 shadow-[18px_0_60px_var(--shadow-card)] backdrop-blur-xl md:flex">
+      <aside
+        data-dashboard-chrome
+        className="border-border-soft bg-dashboard-sidebar sticky top-0 hidden h-dvh w-72 shrink-0 flex-col border-r px-4 py-5 shadow-[18px_0_60px_var(--shadow-card)] backdrop-blur-xl md:flex"
+      >
         <div className="flex items-center justify-between px-2">
           <BrandLogo href="/dashboard" className="h-7 w-auto" priority />
           <span className="border-accent/15 bg-accent/7 text-accent flex size-7 items-center justify-center rounded-lg border">
@@ -415,7 +418,10 @@ export function DashboardShell({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="border-border-soft bg-dashboard-header sticky top-0 z-30 flex h-[4.5rem] shrink-0 items-center justify-between border-b px-4 backdrop-blur-xl sm:px-6 lg:px-8">
+        <header
+          data-dashboard-chrome
+          className="border-border-soft bg-dashboard-header sticky top-0 z-30 flex h-[4.5rem] shrink-0 items-center justify-between border-b px-4 backdrop-blur-xl sm:px-6 lg:px-8"
+        >
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"

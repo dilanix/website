@@ -109,6 +109,39 @@ export interface GraphModelOptions {
   collapsedGroups: ReadonlySet<string>;
   hiddenCategories: ReadonlySet<string>;
   query: string;
+  /** Resources drawn in any view (e.g. a search result the user focused). */
+  revealed?: ReadonlySet<string>;
+}
+
+/**
+ * Traffic tier by normalized type/category: edge entry points first, then
+ * workloads, then data stores. Used only to order siblings for a stable,
+ * top-down layout — never to hide anything.
+ */
+export function nodeTier(node: CoreGraphNode | null): number {
+  if (!node) return 0;
+  switch (node.resource_type) {
+    case INTERNET_GATEWAY_TYPE:
+    case "network.load_balancer":
+    case "network.nat_gateway":
+      return 1;
+    case "network.target_group":
+      return 2;
+  }
+  switch (node.category) {
+    case "compute":
+    case "container":
+    case "orchestration":
+      return 3;
+    case "messaging":
+      return 4;
+    case "database":
+    case "cache":
+    case "storage":
+      return 5;
+    default:
+      return 6;
+  }
 }
 
 export function nodeMatches(node: CoreGraphNode, query: string) {
@@ -158,18 +191,35 @@ export function buildGraphModel(
       edge.target_resource_id,
     ]);
   }
+  // Memoized: every node asks for its container chain several times.
+  const vpcCache = new Map<string, string | null>();
   const vpcOf = (id: string): string | null => {
+    if (vpcCache.has(id)) return vpcCache.get(id)!;
+    vpcCache.set(id, null); // guards against placement cycles
+    let result: string | null = null;
     for (const parent of placement.get(id) ?? []) {
       const parentNode = resources.get(parent)?.node;
-      if (parentNode?.resource_type === VPC_TYPE) return parent;
+      if (parentNode?.resource_type === VPC_TYPE) {
+        result = parent;
+        break;
+      }
       if (parentNode?.resource_type === SUBNET_TYPE) {
         const vpc = vpcOf(parent);
-        if (vpc) return vpc;
+        if (vpc) {
+          result = vpc;
+          break;
+        }
       }
     }
-    return null;
+    vpcCache.set(id, result);
+    return result;
   };
+  const containerCache = new Map<string, string | null>();
   const containerOf = (id: string): string | null => {
+    if (!containerCache.has(id)) containerCache.set(id, resolveContainer(id));
+    return containerCache.get(id)!;
+  };
+  const resolveContainer = (id: string): string | null => {
     if (runtime) return null;
     const resourceType = resources.get(id)?.node.resource_type;
     if (resourceType === VPC_TYPE || resourceType === INTERNET_GATEWAY_TYPE)
@@ -205,6 +255,10 @@ export function buildGraphModel(
   for (const item of graph.nodes) {
     if (baseVisible(item.node.id)) visible.add(item.node.id);
   }
+  for (const id of options.revealed ?? []) {
+    const item = resources.get(id);
+    if (item && !hiddenCategories.has(item.node.category)) visible.add(id);
+  }
   for (const id of expanded) {
     if (!visible.has(id)) continue;
     for (const neighbor of neighbors.get(id) ?? []) {
@@ -216,16 +270,20 @@ export function buildGraphModel(
 
   // Containers: drawn as groups when they hold at least one visible resource.
   const groupIds = new Set<string>();
+  /** Lowest member tier per container: subnets holding entry points first. */
+  const groupTier = new Map<string, number>();
   const members: string[] = [];
   for (const id of visible) {
     if (isContainer(resources.get(id)!.node.resource_type)) continue;
     members.push(id);
+    const tier = nodeTier(resources.get(id)!.node);
     for (
       let current = containerOf(id);
       current;
       current = containerOf(current)
     ) {
       groupIds.add(current);
+      groupTier.set(current, Math.min(groupTier.get(current) ?? tier, tier));
     }
   }
   /** Outermost collapsed container strictly above `id`, if any. */
@@ -303,9 +361,25 @@ export function buildGraphModel(
     });
   };
   // Containers precede their children (outer before inner) for the renderer.
-  for (const id of drawnGroups.sort((a, b) => depth(a) - depth(b)))
+  // Deterministic order (the layout honours model order): tier, then name.
+  const label = (id: string) => {
+    const node = resources.get(id)!.node;
+    return node.name ?? node.external_id;
+  };
+  const byTierThenName = (a: string, b: string) =>
+    nodeTier(resources.get(a)!.node) - nodeTier(resources.get(b)!.node) ||
+    label(a).localeCompare(label(b)) ||
+    a.localeCompare(b);
+  for (const id of drawnGroups.sort(
+    (a, b) =>
+      depth(a) - depth(b) ||
+      (groupTier.get(a) ?? 6) - (groupTier.get(b) ?? 6) ||
+      label(a).localeCompare(label(b)) ||
+      a.localeCompare(b),
+  ))
     pushNode(id, "group");
-  for (const id of drawnResources) pushNode(id, "resource");
+  for (const id of drawnResources.sort(byTierThenName))
+    pushNode(id, "resource");
 
   // Edges between drawn nodes; containment is shown by nesting, not lines.
   const edges = new Map<string, ModelEdge>();
