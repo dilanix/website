@@ -26,7 +26,6 @@ import type {
   CoreCostExplorerPoint,
   CoreCostForecast,
   CoreCostOverview,
-  ScopeDimension,
 } from "@/lib/core/api";
 import {
   PERIOD_PRESETS,
@@ -41,7 +40,8 @@ import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 import { formatAmount } from "@/components/dashboard/cost/format";
-import { SCOPE_DIMENSION_LABELS } from "@/components/dashboard/cost/scope-editor";
+import { CostAttentionStrip } from "@/components/dashboard/cost/cost-attention-strip";
+import { CostBreakdownPanel } from "@/components/dashboard/cost/cost-breakdown-panel";
 import {
   buildPacingSeries,
   resolveBudgetPeriod,
@@ -158,15 +158,6 @@ function toCumulative(points: CoreCostExplorerPoint[]): SpendTrajectoryPoint[] {
     return { date: point.bucket_start, cumulative };
   });
 }
-
-/** The three `ScopeDimension`s most useful as an at-a-glance Overview
- * breakdown — the rest (resource-level, tags, ...) stay Explorer-only, where
- * there's room for the full scope editor. */
-const BREAKDOWN_DIMENSIONS: ScopeDimension[] = [
-  "provider_name",
-  "billing_account_id",
-  "region_id",
-];
 
 function groupDriversByCurrency(drivers: CoreCostDriver[]) {
   const map = new Map<string, CoreCostDriver[]>();
@@ -385,66 +376,6 @@ export function SpendOverviewClient({
       : null;
 
   // ---------------------------------------------------------------------
-  // Breakdown by dimension (provider / billing account / region)
-  // ---------------------------------------------------------------------
-  const [dimension, setDimension] = useState<ScopeDimension>("provider_name");
-  const [dimensionPoints, setDimensionPoints] = useState<
-    CoreCostExplorerPoint[]
-  >([]);
-  const [dimensionPending, setDimensionPending] = useState(false);
-  const [dimensionError, setDimensionError] = useState(false);
-  const dimensionCacheRef = useRef(new Map<string, CoreCostExplorerPoint[]>());
-
-  useEffect(() => {
-    if (!focusPeriodStart || !focusPeriodEnd) return;
-    const cacheKey = `${focusPeriodStart}:${focusPeriodEnd}:${dataScopeKey}:${dimension}`;
-    const cached = dimensionCacheRef.current.get(cacheKey);
-    if (cached) {
-      setDimensionPoints(cached);
-      setDimensionPending(false);
-      setDimensionError(false);
-      return;
-    }
-    let cancelled = false;
-    setDimensionPending(true);
-    setDimensionError(false);
-    queryCostExplorerAction({
-      period_start: focusPeriodStart,
-      period_end: focusPeriodEnd,
-      metric: CANONICAL_METRIC,
-      connection_id: connectionId,
-      target_id: targetId,
-      granularity: null,
-      group_by: [{ dimension }],
-      scope: [],
-    }).then((response) => {
-      if (cancelled) return;
-      const items = response.data?.items ?? [];
-      if (response.data) dimensionCacheRef.current.set(cacheKey, items);
-      setDimensionPoints(items);
-      setDimensionError(Boolean(response.error) || !response.data);
-      setDimensionPending(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    focusPeriodStart,
-    focusPeriodEnd,
-    dataScopeKey,
-    dimension,
-    connectionId,
-    targetId,
-  ]);
-
-  const dimensionByCurrency = new Map<string, CoreCostExplorerPoint[]>();
-  for (const point of dimensionPoints) {
-    const list = dimensionByCurrency.get(point.currency) ?? [];
-    list.push(point);
-    dimensionByCurrency.set(point.currency, list);
-  }
-
-  // ---------------------------------------------------------------------
   // Cost Drivers — why did spend change? (service-level current-vs-previous
   // deltas, ranked). Queried over the same disclosed complete-FOCUS range as
   // the dimension breakdown above, mirroring that effect's caching/guard.
@@ -658,6 +589,12 @@ export function SpendOverviewClient({
           Open Explorer <ArrowRight size={13} />
         </Link>
       </div>
+
+      <CostAttentionStrip
+        periodStart={displayedPeriodStart}
+        periodEnd={displayedPeriodEnd}
+        scopeSuffix={scopeSuffix}
+      />
 
       <div className="border-border-soft bg-dashboard-panel mt-4 flex flex-wrap items-center gap-3 rounded-2xl border p-3 shadow-[0_16px_44px_var(--shadow-card)]">
         <div className="flex flex-wrap gap-1.5">
@@ -942,136 +879,14 @@ export function SpendOverviewClient({
             },
           )}
 
-          <div className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold">
-                  Breakdown by dimension
-                </h3>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  {focusCoverageLabel
-                    ? `${focusCoverageLabel}.`
-                    : resultMatchesDisplayedRange
-                      ? "Complete FOCUS coverage is unavailable for this period."
-                      : "Resolving FOCUS coverage…"}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {BREAKDOWN_DIMENSIONS.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    disabled={!hasCompleteFocusCoverage || dimensionPending}
-                    onClick={() => setDimension(option)}
-                    className={
-                      option === dimension
-                        ? "border-accent/30 bg-accent/10 text-accent rounded-full border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                        : "border-foreground/10 text-muted-foreground hover:text-foreground rounded-full border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                    }
-                  >
-                    {SCOPE_DIMENSION_LABELS[option]}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {!resultMatchesDisplayedRange ? (
-              <p className="text-muted-foreground mt-3 text-sm">Loading…</p>
-            ) : !hasCompleteFocusCoverage ? (
-              <p className="text-muted-foreground mt-3 text-sm">
-                This FOCUS-only breakdown is unavailable until the selected
-                period has complete coverage.
-              </p>
-            ) : dimensionPending ? (
-              <p className="text-muted-foreground mt-3 text-sm">Loading…</p>
-            ) : dimensionError ? (
-              <p className="text-muted-foreground mt-3 text-sm">
-                The FOCUS breakdown could not be loaded. Try again.
-              </p>
-            ) : (
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                {overview.by_currency.map((currency) => {
-                  const points =
-                    dimensionByCurrency.get(currency.currency) ?? [];
-                  const grouped = new Map<string, number>();
-                  for (const point of points) {
-                    const label = point.group[dimension] ?? "Unassigned";
-                    grouped.set(
-                      label,
-                      (grouped.get(label) ?? 0) + Number(point.amount),
-                    );
-                  }
-                  const sorted = [...grouped.entries()].sort(
-                    (a, b) => Math.abs(b[1]) - Math.abs(a[1]),
-                  );
-                  const top = sorted.slice(0, 6);
-                  const otherAmount = sorted
-                    .slice(6)
-                    .reduce((sum, [, amount]) => sum + amount, 0);
-                  const maxAmount = Math.max(
-                    ...top.map(([, amount]) => Math.abs(amount)),
-                    Math.abs(otherAmount),
-                    1,
-                  );
-                  return (
-                    <div key={currency.currency}>
-                      <h4 className="text-muted-foreground text-xs font-semibold">
-                        {currency.currency}
-                      </h4>
-                      {top.length === 0 ? (
-                        <p className="text-muted-foreground mt-2 text-sm">
-                          No breakdown is available.
-                        </p>
-                      ) : (
-                        <div className="mt-2 space-y-3">
-                          {top.map(([label, amount], index) => (
-                            <div
-                              key={label}
-                              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
-                            >
-                              <span className="truncate text-xs font-medium">
-                                {label}
-                              </span>
-                              <span className="font-mono text-xs">
-                                {formatAmount(amount, currency.currency)}
-                              </span>
-                              <span className="bg-foreground/5 col-span-2 h-1.5 overflow-hidden rounded-full">
-                                <span
-                                  className="bg-accent block h-full origin-left animate-[demo-bar_.5s_ease-out_both] rounded-full motion-reduce:animate-none"
-                                  style={{
-                                    width: `${(Math.abs(amount) / maxAmount) * 100}%`,
-                                    opacity: 1 - index * 0.12,
-                                    animationDelay: `${index * 60}ms`,
-                                  }}
-                                />
-                              </span>
-                            </div>
-                          ))}
-                          {otherAmount !== 0 ? (
-                            <div className="border-foreground/10 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t pt-3">
-                              <span className="text-muted-foreground truncate text-xs font-medium">
-                                Other
-                              </span>
-                              <span className="text-muted-foreground font-mono text-xs">
-                                {formatAmount(otherAmount, currency.currency)}
-                              </span>
-                              <span className="bg-foreground/5 col-span-2 h-1.5 overflow-hidden rounded-full">
-                                <span
-                                  className="bg-foreground/30 block h-full origin-left animate-[demo-bar_.5s_ease-out_both] rounded-full motion-reduce:animate-none"
-                                  style={{
-                                    width: `${(Math.abs(otherAmount) / maxAmount) * 100}%`,
-                                  }}
-                                />
-                              </span>
-                            </div>
-                          ) : null}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {resultMatchesDisplayedRange ? (
+            <CostBreakdownPanel
+              periodStart={overview.period_start}
+              periodEnd={overview.period_end}
+              connectionId={connectionId}
+              targetId={targetId}
+            />
+          ) : null}
 
           <div className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
             <div>
@@ -1377,19 +1192,21 @@ export function SpendOverviewClient({
                         <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
                           {(
                             [
-                              [
-                                "Gross usage",
-                                currency.financial_breakdown.gross_usage,
-                              ],
-                              ["Tax", currency.financial_breakdown.tax],
-                              ["Credits", currency.financial_breakdown.credits],
-                              [
-                                "Other adjustments",
-                                currency.financial_breakdown.other_adjustments,
-                              ],
+                              ["Gross usage", "gross_usage"],
+                              ["Tax", "tax"],
+                              ["Credits", "credits"],
+                              ["Other adjustments", "other_adjustments"],
                             ] as const
-                          ).map(([label, amount]) => {
-                            const value = Number(amount);
+                          ).map(([label, field]) => {
+                            const value = Number(
+                              currency.financial_breakdown![field],
+                            );
+                            const previous =
+                              currency.previous_financial_breakdown?.[field];
+                            const delta =
+                              previous === undefined
+                                ? null
+                                : value - Number(previous);
                             return (
                               <div key={label}>
                                 <span className="text-muted-foreground block text-xs">
@@ -1400,6 +1217,18 @@ export function SpendOverviewClient({
                                 >
                                   {formatAmount(value, currency.currency)}
                                 </span>
+                                {delta !== null && previous !== undefined ? (
+                                  <span className="text-muted-foreground block font-mono text-[11px]">
+                                    prev{" "}
+                                    {formatAmount(
+                                      Number(previous),
+                                      currency.currency,
+                                    )}
+                                    {Math.round(delta * 100) !== 0
+                                      ? ` (${delta > 0 ? "+" : ""}${formatAmount(delta, currency.currency)})`
+                                      : ""}
+                                  </span>
+                                ) : null}
                               </div>
                             );
                           })}

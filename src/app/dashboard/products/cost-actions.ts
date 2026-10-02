@@ -19,6 +19,9 @@ import {
   generateReport,
   getAllocationBreakdown,
   getCostDrivers,
+  getCostOverviewHighlights,
+  listBudgetStatuses,
+  queryCostBreakdown,
   getCostForecast,
   getCostOverview,
   getCostSummaryTotals,
@@ -41,6 +44,9 @@ import {
   type CoreAllocationBreakdown,
   type CoreAnomaly,
   type CoreBudget,
+  type CoreBudgetStatus,
+  type CoreCostBreakdown,
+  type CoreCostOverviewHighlights,
   type CoreCostDrivers,
   type CoreCostExplorerResponse,
   type CoreCostForecast,
@@ -365,6 +371,98 @@ export async function getCostDriversAction(
       topN: parsed.data.topN,
     });
     return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const breakdownQuerySchema = z
+  .object({
+    period_start: z.iso.datetime(),
+    period_end: z.iso.datetime(),
+    dimension: scopeConditionSchema.shape.dimension,
+    tag_key: z.string().trim().min(1).max(200).nullable().optional(),
+    connection_id: idSchema.nullable().optional(),
+    target_id: idSchema.nullable().optional(),
+    scope: scopeSchema,
+    top_n: z.number().int().min(1).max(100).optional(),
+  })
+  .refine(
+    (input) => Date.parse(input.period_end) > Date.parse(input.period_start),
+    {
+      message: "The period end must be after its start.",
+      path: ["period_end"],
+    },
+  )
+  .refine(
+    (input) =>
+      input.dimension === "tag" ? Boolean(input.tag_key) : !input.tag_key,
+    {
+      message: "A tag key is required for a tag breakdown.",
+      path: ["tag_key"],
+    },
+  );
+
+export async function queryCostBreakdownAction(
+  input: z.infer<typeof breakdownQuerySchema>,
+): Promise<
+  CostActionResult<CoreCostBreakdown> & {
+    /** Core's 409: this breakdown needs complete FOCUS coverage. */
+    coverageRequired?: boolean;
+  }
+> {
+  const parsed = breakdownQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await queryCostBreakdown(organizationId, token, {
+      ...parsed.data,
+      tag_key: parsed.data.dimension === "tag" ? parsed.data.tag_key : null,
+      scope: toScopeInput(parsed.data.scope),
+    });
+    return { data };
+  } catch (error) {
+    if (error instanceof CoreApiError && error.status === 409) {
+      return { error: message(error), coverageRequired: true };
+    }
+    return { error: message(error) };
+  }
+}
+
+const highlightsQuerySchema = z
+  .object({ periodStart: z.iso.datetime(), periodEnd: z.iso.datetime() })
+  .refine(
+    (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
+    { message: "The period end must be after its start.", path: ["periodEnd"] },
+  );
+
+export async function getCostOverviewHighlightsAction(
+  input: z.infer<typeof highlightsQuerySchema>,
+): Promise<CostActionResult<CoreCostOverviewHighlights>> {
+  const parsed = highlightsQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getCostOverviewHighlights(
+      organizationId,
+      token,
+      parsed.data,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function listBudgetStatusesAction(): Promise<
+  CostActionResult<CoreBudgetStatus[]>
+> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await listBudgetStatuses(organizationId, token);
+    return { data: data.items };
   } catch (error) {
     return { error: message(error) };
   }

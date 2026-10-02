@@ -1616,6 +1616,46 @@ export function listBudgets(organizationId: string, token: string) {
   );
 }
 
+export type BudgetHealth = "on_track" | "at_risk" | "over_budget" | "no_data";
+export type BudgetPeriodState = "upcoming" | "active" | "ended";
+
+/** Read-time budget visibility — mirrors Core's `BudgetStatusRead`. Spend is
+ * the same read the hourly evaluation uses; `remaining` goes negative after
+ * an overrun; `forecast_amount` is the period-to-date run-rate projection
+ * (`null` before the first complete day or for an upcoming period). */
+export interface CoreBudgetStatus {
+  budget_id: string;
+  name: string;
+  enabled: boolean;
+  currency: string;
+  limit: string;
+  period_start: string;
+  period_end: string;
+  period_state: BudgetPeriodState;
+  spent: string;
+  remaining: string;
+  usage_percent: number;
+  forecast_amount: string | null;
+  forecast_usage_percent: number | null;
+  forecasted_overrun: string | null;
+  health: BudgetHealth;
+  crossed_thresholds: number[];
+  notified_thresholds: number[];
+  source: CostDataSource;
+  data_through: string | null;
+  /** Currencies with spend in the budget's scope other than its own —
+   * surfaced, never converted. */
+  other_currencies: string[];
+  evaluated_at: string;
+}
+
+export function listBudgetStatuses(organizationId: string, token: string) {
+  return coreRequest<{ items: CoreBudgetStatus[] }>(
+    `/v1/organizations/${organizationId}/cost/budgets/status`,
+    token,
+  );
+}
+
 export function createBudget(
   organizationId: string,
   token: string,
@@ -2294,6 +2334,9 @@ export interface CoreCostOverviewCurrency {
   /** `null` only when `CoreCostOverview.source` is `"cost_summary"` — Cost
    * Explorer data has no FOCUS `charge_category` to reconcile from. */
   financial_breakdown: CoreCostOverviewFinancialBreakdown | null;
+  /** The same reconciled split for the previous period (`net_cost` equals
+   * `previous_total`); `null` under the same condition as above. */
+  previous_financial_breakdown?: CoreCostOverviewFinancialBreakdown | null;
 }
 
 export interface CoreCostOverview {
@@ -2386,6 +2429,113 @@ export function getCostDrivers(
   if (params.topN !== undefined) query.set("top_n", String(params.topN));
   return coreRequest<CoreCostDrivers>(
     `/v1/organizations/${organizationId}/cost/drivers?${query.toString()}`,
+    token,
+  );
+}
+
+export type CostBreakdownChangeStatus =
+  "new" | "removed" | "increased" | "decreased" | "unchanged";
+
+export interface CoreCostBreakdownItem {
+  /** `null` is the explicit unattributed bucket (e.g. shared charges with no
+   * resource id) — never dropped. */
+  value: string | null;
+  current_amount: string;
+  previous_amount: string;
+  absolute_delta: string;
+  /** `null` when `previous_amount` is zero. */
+  change_percent: number | null;
+  status: CostBreakdownChangeStatus;
+  share_percent: number | null;
+}
+
+export interface CoreCostBreakdownCurrency {
+  currency: string;
+  current_total: string;
+  previous_total: string;
+  absolute_delta: string;
+  change_percent: number | null;
+  items: CoreCostBreakdownItem[];
+  /** Everything outside `top_n`, so `items` + `other` reconcile to the totals. */
+  other: {
+    count: number;
+    current_amount: string;
+    previous_amount: string;
+    absolute_delta: string;
+  } | null;
+}
+
+export interface CoreCostBreakdown {
+  period_start: string;
+  period_end: string;
+  previous_period_start: string;
+  previous_period_end: string;
+  metric: string;
+  dimension: ScopeDimension;
+  tag_key: string | null;
+  source: CostDataSource;
+  by_currency: CoreCostBreakdownCurrency[];
+}
+
+export interface CostBreakdownQueryInput {
+  period_start: string;
+  period_end: string;
+  dimension: ScopeDimension;
+  tag_key?: string | null;
+  connection_id?: string | null;
+  target_id?: string | null;
+  scope: CoreScopeCondition[];
+  top_n?: number;
+}
+
+/** Comparison-ready breakdown of one dimension (current vs. previous period,
+ * delta, new/removed status). Drill down by passing the selected value back
+ * as a `scope` condition with the next `dimension`. Core answers 409 when
+ * complete FOCUS coverage is required and missing. */
+export function queryCostBreakdown(
+  organizationId: string,
+  token: string,
+  input: CostBreakdownQueryInput,
+) {
+  return coreRequest<CoreCostBreakdown>(
+    `/v1/organizations/${organizationId}/cost/breakdown/query`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export interface CoreCostOverviewHighlights {
+  period_start: string;
+  period_end: string;
+  /** Only while the period is in progress. */
+  forecast: CoreCostForecast | null;
+  budgets: {
+    total: number;
+    on_track: number;
+    at_risk: number;
+    over_budget: number;
+    no_data: number;
+    /** Over or forecast-to-overrun budgets, worst first (at most 5). */
+    attention: CoreBudgetStatus[];
+  };
+  anomalies: { open: number; acknowledged: number };
+}
+
+export function getCostOverviewHighlights(
+  organizationId: string,
+  token: string,
+  params: { periodStart: string; periodEnd: string },
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  return coreRequest<CoreCostOverviewHighlights>(
+    `/v1/organizations/${organizationId}/cost/overview/highlights?${query.toString()}`,
     token,
   );
 }

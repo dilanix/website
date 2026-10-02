@@ -94,15 +94,32 @@ function resourceIdentity(recommendation: CoreUnifiedRecommendation) {
     (item) => item.evidence_key === "resource_identity",
   );
   const externalId = evidence?.value.external_id;
-  if (typeof externalId !== "string") return null;
+  if (typeof externalId !== "string") return commitmentScope(recommendation);
   const name = evidence?.value.name;
   return typeof name === "string" && name.length > 0
     ? `${name} (${externalId})`
     : externalId;
 }
 
+/** Account-level recommendations (e.g. a Savings Plan purchase) carry
+ * `commitment_scope` instead of one resource. */
+function commitmentScope(recommendation: CoreUnifiedRecommendation) {
+  const scope = recommendation.evidence.find(
+    (item) => item.evidence_key === "commitment_scope",
+  )?.value;
+  if (!scope) return null;
+  const count = scope.instance_count;
+  return typeof count === "number"
+    ? `AWS account · ${count} instance${count === 1 ? "" : "s"}`
+    : "AWS account";
+}
+
 const EVIDENCE_LABELS: Record<string, string> = {
   resource_identity: "Resource",
+  commitment_scope: "Commitment scope",
+  savings_plan: "Savings Plan",
+  steady_usage: "Steady on-demand usage",
+  instance_savings_plan_alternative: "Alternative: EC2 Instance Savings Plan",
   cpu_utilization: "CPU utilization",
   volume_state: "Volume state",
   pricing_quote: "Pricing",
@@ -118,6 +135,19 @@ function formatEvidenceFieldValue(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "boolean") return value ? "yes" : "no";
   if (typeof value === "number") return value.toLocaleString("en-US");
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "—";
+    // One line per item; objects collapse to "field: value" pairs.
+    return value.map(formatEvidenceFieldValue).join("\n");
+  }
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(
+        ([field, nested]) =>
+          `${evidenceFieldLabel(field)}: ${formatEvidenceFieldValue(nested)}`,
+      )
+      .join(", ");
+  }
   return String(value);
 }
 
@@ -290,7 +320,9 @@ function RecommendationRow({
                     <dt className="text-muted-foreground">
                       {evidenceFieldLabel(field)}
                     </dt>
-                    <dd>{formatEvidenceFieldValue(value)}</dd>
+                    <dd className="whitespace-pre-line">
+                      {formatEvidenceFieldValue(value)}
+                    </dd>
                   </div>
                 ))}
               </dl>

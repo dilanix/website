@@ -10,6 +10,7 @@ import {
   getCostDriversAction,
   getCostForecastAction,
   getCostOverviewAction,
+  queryCostBreakdownAction,
   queryCostExplorerAction,
 } from "@/app/dashboard/products/cost-actions";
 import type { CoreCostOverview } from "@/lib/core/api";
@@ -21,9 +22,25 @@ vi.mock("@/app/dashboard/products/cost-actions", () => ({
   queryCostExplorerAction: vi.fn(),
   getCostDriversAction: vi.fn(),
   getCostForecastAction: vi.fn(),
+  queryCostBreakdownAction: vi.fn(),
+  getCostOverviewHighlightsAction: vi.fn().mockResolvedValue({}),
 }));
 
 beforeEach(() => {
+  // The breakdown panel queries Core's comparison breakdown on mount.
+  vi.mocked(queryCostBreakdownAction).mockResolvedValue({
+    data: {
+      period_start: "",
+      period_end: "",
+      previous_period_start: "",
+      previous_period_end: "",
+      metric: "effective_cost",
+      dimension: "service_name",
+      tag_key: null,
+      source: "cost_usage",
+      by_currency: [],
+    },
+  });
   // The "Breakdown by dimension" panel queries Cost Explorer on mount,
   // independent of the preset/custom-range interactions each test exercises
   // — give it a harmless default so tests that don't care about it don't
@@ -130,11 +147,12 @@ describe("SpendOverviewClient", () => {
     renderClient();
 
     expect(screen.getByRole("button", { name: "Month to date" })).toBeTruthy();
-    expect(queryCostExplorerAction).toHaveBeenCalledWith(
+    expect(queryCostBreakdownAction).toHaveBeenCalledWith(
       expect.objectContaining({
         period_start: overview.period_start,
         period_end: overview.period_end,
-        group_by: [{ dimension: "provider_name" }],
+        dimension: "service_name",
+        scope: [],
       }),
     );
 
@@ -174,12 +192,11 @@ describe("SpendOverviewClient", () => {
 
     expect(
       screen.getAllByText("FOCUS coverage: Sep 1 – Sep 14, 2026.").length,
-    ).toBe(2);
-    expect(queryCostExplorerAction).toHaveBeenCalledWith(
+    ).toBeGreaterThan(0);
+    expect(queryCostBreakdownAction).toHaveBeenCalledWith(
       expect.objectContaining({
         period_start: resolvedOverview.period_start,
         period_end: resolvedOverview.period_end,
-        group_by: [{ dimension: "provider_name" }],
       }),
     );
   });
@@ -192,12 +209,12 @@ describe("SpendOverviewClient", () => {
     });
 
     expect(screen.getAllByText("Unavailable").length).toBeGreaterThan(0);
-    expect(
-      screen.getByText(
-        "This FOCUS-only breakdown is unavailable until the selected period has complete coverage.",
-      ),
-    ).toBeTruthy();
     expect(queryCostExplorerAction).not.toHaveBeenCalled();
+    // Core decides whether the breakdown can be answered from the fallback
+    // (an unscoped service breakdown can; anything else returns 409).
+    expect(queryCostBreakdownAction).toHaveBeenCalledWith(
+      expect.objectContaining({ dimension: "service_name" }),
+    );
   });
 
   it("renders the initial overview's totals and breakdowns", () => {

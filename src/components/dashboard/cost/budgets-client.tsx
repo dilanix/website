@@ -5,13 +5,17 @@ import { BellRing, Pencil, Plus, Trash2, Wallet, X } from "lucide-react";
 import {
   createBudgetAction,
   deleteBudgetAction,
+  listBudgetStatusesAction,
   updateBudgetAction,
 } from "@/app/dashboard/products/cost-actions";
 import type {
+  BudgetHealth,
   BudgetPeriod,
   CoreBudget,
+  CoreBudgetStatus,
   CoreScopeCondition,
 } from "@/lib/core/api";
+import { formatAmount } from "@/components/dashboard/cost/format";
 import { DestructiveActionDialog } from "@/components/dashboard/destructive-action-dialog";
 import { ModalOverlay } from "@/components/dashboard/modal-overlay";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
@@ -23,6 +27,97 @@ const PERIOD_LABELS: Record<BudgetPeriod, string> = {
   annual: "Annual",
   custom: "Custom range",
 };
+
+const HEALTH_LABELS: Record<BudgetHealth, string> = {
+  on_track: "On track",
+  at_risk: "Forecast to overrun",
+  over_budget: "Over budget",
+  no_data: "No data yet",
+};
+
+function formatDay(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** Core's read-time status for one budget: spent vs. limit, the run-rate
+ * forecast marker, and health — never recomputed in the browser. */
+function BudgetStatusMeter({ status }: { status: CoreBudgetStatus }) {
+  const spent = Number(status.spent);
+  const limit = Number(status.limit);
+  const forecast =
+    status.forecast_amount === null ? null : Number(status.forecast_amount);
+  const scale = Math.max(limit, spent, forecast ?? 0, 1);
+  const barTone =
+    status.health === "over_budget"
+      ? "bg-red-500"
+      : status.health === "at_risk"
+        ? "bg-amber-500"
+        : "bg-accent";
+  return (
+    <div className="mt-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
+        <span className="font-mono">
+          {formatAmount(spent, status.currency)}{" "}
+          <span className="text-muted-foreground">
+            of {formatAmount(limit, status.currency)} ·{" "}
+            {Math.round(status.usage_percent)}%
+          </span>
+        </span>
+        <StatusBadge
+          status={
+            status.health === "on_track"
+              ? "success"
+              : status.health === "no_data"
+                ? "neutral"
+                : "warning"
+          }
+        >
+          {HEALTH_LABELS[status.health]}
+        </StatusBadge>
+      </div>
+      <div className="bg-foreground/5 relative mt-2 h-2 overflow-hidden rounded-full">
+        <span
+          className={`absolute inset-y-0 left-0 rounded-full ${barTone}`}
+          style={{ width: `${Math.min(spent / scale, 1) * 100}%` }}
+        />
+        <span
+          className="bg-foreground/50 absolute inset-y-0 w-px"
+          style={{ left: `${(limit / scale) * 100}%` }}
+          title="Limit"
+        />
+        {forecast !== null ? (
+          <span
+            className="absolute inset-y-0 w-0.5 bg-amber-500"
+            style={{ left: `${Math.min(forecast / scale, 1) * 100}%` }}
+            title="Forecast"
+          />
+        ) : null}
+      </div>
+      <p className="text-muted-foreground mt-2 text-xs">
+        {formatDay(status.period_start)} – {formatDay(status.period_end)} ·
+        remaining {formatAmount(Number(status.remaining), status.currency)}
+        {forecast !== null
+          ? ` · forecast ${formatAmount(forecast, status.currency)}`
+          : ""}
+        {status.forecasted_overrun !== null &&
+        Number(status.forecasted_overrun) > 0
+          ? ` (overrun ${formatAmount(Number(status.forecasted_overrun), status.currency)})`
+          : ""}
+        {status.source === "cost_summary" ? " · Cost Explorer data" : ""}
+      </p>
+      {status.other_currencies.length > 0 ? (
+        <p className="mt-1 text-xs text-amber-600 dark:text-amber-300">
+          Spend in {status.other_currencies.join(", ")} is in this scope but not
+          counted against a {status.currency} budget.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function sortBudgets(budgets: CoreBudget[]) {
   return [...budgets].sort((left, right) => {
@@ -311,10 +406,29 @@ function BudgetDialog({
 
 export function BudgetsClient({
   initialBudgets,
+  initialStatuses = [],
 }: {
   initialBudgets: CoreBudget[];
+  initialStatuses?: CoreBudgetStatus[];
 }) {
   const [budgets, setBudgets] = useState(() => sortBudgets(initialBudgets));
+  const [statuses, setStatuses] = useState<Record<string, CoreBudgetStatus>>(
+    () =>
+      Object.fromEntries(
+        initialStatuses.map((status) => [status.budget_id, status]),
+      ),
+  );
+
+  async function refreshStatuses() {
+    const result = await listBudgetStatusesAction();
+    if (result.data) {
+      setStatuses(
+        Object.fromEntries(
+          result.data.map((status) => [status.budget_id, status]),
+        ),
+      );
+    }
+  }
   const [dialogState, setDialogState] = useState<
     "closed" | "create" | CoreBudget
   >("closed");
@@ -338,6 +452,7 @@ export function BudgetsClient({
           ),
         );
       }
+      await refreshStatuses();
     });
   }
 
@@ -423,6 +538,9 @@ export function BudgetsClient({
                     · {PERIOD_LABELS[budget.period]}
                   </span>
                 </div>
+                {statuses[budget.id] ? (
+                  <BudgetStatusMeter status={statuses[budget.id]!} />
+                ) : null}
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {budget.alert_thresholds.map((threshold) => {
                     const crossed =
@@ -505,6 +623,7 @@ export function BudgetsClient({
               );
             });
             setDialogState("closed");
+            void refreshStatuses();
           }}
         />
       ) : null}

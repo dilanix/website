@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { listBudgets } from "@/lib/core/api";
+import { listBudgetStatuses, listBudgets } from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { BudgetsClient } from "@/components/dashboard/cost/budgets-client";
 
@@ -16,7 +16,15 @@ export default async function CostBudgetsPage({
   if (slug !== "cost") notFound();
 
   const { token, organization } = await requireDashboardOrganization();
-  const { items } = await listBudgets(organization.organization_id, token);
+  const [{ items }, statuses] = await Promise.all([
+    listBudgets(organization.organization_id, token),
+    // Status is a read-time projection; a failure here must not hide the budgets.
+    listBudgetStatuses(organization.organization_id, token).catch(() => ({
+      items: [],
+    })),
+  ]);
 
-  return <BudgetsClient initialBudgets={items} />;
+  return (
+    <BudgetsClient initialBudgets={items} initialStatuses={statuses.items} />
+  );
 }
