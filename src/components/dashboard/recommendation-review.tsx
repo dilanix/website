@@ -171,13 +171,24 @@ export function visibleQuestions(
 export function ReviewQuestions({
   questions,
   pending,
+  currency,
   onSubmit,
 }: {
   questions: CoreRecommendationQuestion[];
   pending?: boolean;
+  currency?: string | null;
   onSubmit: (answers: Record<string, string>) => void;
 }) {
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  // Answers the evidence points to start selected; confirming is one click.
+  const [answers, setAnswers] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      questions.flatMap((question) =>
+        question.suggested_value
+          ? [[question.fact_key, question.suggested_value]]
+          : [],
+      ),
+    ),
+  );
   const visible = visibleQuestions(questions, answers);
   const complete = visible.every(
     (question) => answers[question.fact_key] !== undefined,
@@ -208,6 +219,12 @@ export function ReviewQuestions({
         {visible.map((question) => (
           <fieldset key={question.fact_key} className="animate-toast-in">
             <legend className="mb-1.5 font-medium">{question.prompt}</legend>
+            {question.suggestion_reason &&
+            answers[question.fact_key] === question.suggested_value ? (
+              <p className="text-muted-foreground mb-1.5">
+                Suggested — {question.suggestion_reason}
+              </p>
+            ) : null}
             <div
               role="radiogroup"
               aria-label={question.prompt}
@@ -215,11 +232,13 @@ export function ReviewQuestions({
             >
               {question.options.map((option) => {
                 const selected = answers[question.fact_key] === option.value;
+                const consequence = optionConsequence(option, currency);
                 return (
                   <button
                     key={option.value}
                     type="button"
                     role="radio"
+                    aria-label={option.label}
                     aria-checked={selected}
                     disabled={pending}
                     onClick={() =>
@@ -235,7 +254,12 @@ export function ReviewQuestions({
                         : "border-border-soft bg-card-strong/60 text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {option.label}
+                    <span className="block">{option.label}</span>
+                    {consequence ? (
+                      <span className="text-muted-foreground block text-[11px]">
+                        {consequence}
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
@@ -253,6 +277,20 @@ export function ReviewQuestions({
       </button>
     </div>
   );
+}
+
+/** What picking an answer leads to, e.g. "Run it on a schedule · saves
+ * 231.87 USD / month". */
+export function optionConsequence(
+  option: CoreRecommendationQuestion["options"][number],
+  currency?: string | null,
+) {
+  if (!option.outcome) return null;
+  const savings =
+    option.monthly_savings && Number(option.monthly_savings) > 0
+      ? formatSavings(option.monthly_savings, currency ?? null)
+      : null;
+  return savings ? `${option.outcome} · saves ${savings}` : option.outcome;
 }
 
 function formatSavings(amount: string | null, currency: string | null) {

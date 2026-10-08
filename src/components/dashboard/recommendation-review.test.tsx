@@ -224,6 +224,52 @@ describe("ReviewQuestions", () => {
     });
   });
 
+  it("preselects the suggested answer and shows what each answer leads to", () => {
+    const onSubmit = vi.fn();
+    render(
+      <ReviewQuestions
+        currency="USD"
+        onSubmit={onSubmit}
+        questions={[
+          {
+            fact_key: "environment.stage",
+            prompt: "What is the demo environment for?",
+            context: "Your answers apply to all 37 resources in demo.",
+            applies_when: null,
+            suggested_value: "demo",
+            suggestion_reason: "Its Env tag says 'demo'.",
+            options: [
+              {
+                value: "demo",
+                label: "Demos",
+                outcome: null,
+                monthly_savings: null,
+              },
+              {
+                value: "no_longer_used",
+                label: "No longer used",
+                outcome: "Remove it, keeping a final snapshot",
+                monthly_savings: "480.70",
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByText("Suggested — Its Env tag says 'demo'."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Remove it, keeping a final snapshot · saves 480.70 USD / month",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue analysis" }));
+
+    expect(onSubmit).toHaveBeenCalledWith({ "environment.stage": "demo" });
+  });
+
   it("shows a follow-up whose condition was answered earlier", () => {
     expect(
       visibleQuestions([questions[1]], {}).map((question) => question.fact_key),

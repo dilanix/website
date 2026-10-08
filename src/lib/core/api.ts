@@ -1927,9 +1927,14 @@ export interface CoreRecommendationOption {
   rollback: string[];
 }
 
+/** `outcome`/`monthly_savings` preview what picking this answer leads to
+ * (e.g. "Run it on a schedule", "231.87") — `null` when another question
+ * decides first. */
 export interface CoreRecommendationQuestionOption {
   value: string;
   label: string;
+  outcome?: string | null;
+  monthly_savings?: string | null;
 }
 
 /** A targeted question a paused review asks. `applies_when` makes it a
@@ -1941,6 +1946,10 @@ export interface CoreRecommendationQuestion {
   options: CoreRecommendationQuestionOption[];
   context: string | null;
   applies_when: Record<string, string[]> | null;
+  /** The answer the evidence points to (e.g. an environment tag) — shown
+   * preselected; the user still confirms it. */
+  suggested_value?: string | null;
+  suggestion_reason?: string | null;
 }
 
 export interface CoreRecommendationReviewFact {

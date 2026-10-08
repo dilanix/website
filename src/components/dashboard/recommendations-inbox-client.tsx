@@ -94,11 +94,25 @@ function resourceIdentity(recommendation: CoreUnifiedRecommendation) {
     (item) => item.evidence_key === "resource_identity",
   );
   const externalId = evidence?.value.external_id;
-  if (typeof externalId !== "string") return commitmentScope(recommendation);
+  if (typeof externalId !== "string")
+    return environmentScope(recommendation) ?? commitmentScope(recommendation);
   const name = evidence?.value.name;
   return typeof name === "string" && name.length > 0
     ? `${name} (${externalId})`
     : externalId;
+}
+
+/** A whole-environment recommendation carries `environment` evidence instead
+ * of one resource. */
+function environmentScope(recommendation: CoreUnifiedRecommendation) {
+  const environment = recommendation.evidence.find(
+    (item) => item.evidence_key === "environment",
+  )?.value;
+  if (!environment || typeof environment.name !== "string") return null;
+  const count = environment.member_count;
+  return typeof count === "number"
+    ? `Environment ${environment.name} · ${count} resources`
+    : `Environment ${environment.name}`;
 }
 
 /** Account-level recommendations (e.g. a Savings Plan purchase) carry
@@ -123,7 +137,14 @@ const EVIDENCE_LABELS: Record<string, string> = {
   cpu_utilization: "CPU utilization",
   volume_state: "Volume state",
   pricing_quote: "Pricing",
+  environment: "Environment",
+  environment_plan: "Savings by action",
+  environment_traffic: "Client traffic",
+  consumer_traffic: "Client traffic",
 };
+
+// Internal identifiers that mean nothing to a reader.
+const HIDDEN_EVIDENCE_FIELDS = new Set(["resource_id"]);
 
 function evidenceFieldLabel(key: string) {
   return key
@@ -142,6 +163,7 @@ function formatEvidenceFieldValue(value: unknown): string {
   }
   if (typeof value === "object") {
     return Object.entries(value as Record<string, unknown>)
+      .filter(([field]) => !HIDDEN_EVIDENCE_FIELDS.has(field))
       .map(
         ([field, nested]) =>
           `${evidenceFieldLabel(field)}: ${formatEvidenceFieldValue(nested)}`,
@@ -350,6 +372,7 @@ function RecommendationRow({
           key={guidance.questions.map((question) => question.fact_key).join()}
           questions={guidance.questions}
           pending={busy}
+          currency={currency}
           onSubmit={(answers) => void review.answer(answers)}
         />
       ) : guidance?.outcome === "completed" ? (
