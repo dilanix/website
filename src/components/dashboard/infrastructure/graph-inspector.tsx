@@ -561,10 +561,12 @@ function StatusChip({
   label,
   value,
   tone,
+  note,
 }: {
   label: string;
   value: boolean | null;
   tone: string;
+  note?: string;
 }) {
   const Icon = value ? CircleCheck : CircleDashed;
   return (
@@ -583,7 +585,11 @@ function StatusChip({
       {label}
       {value === null ? (
         <span className="text-[10px]">n/a</span>
-      ) : value ? null : (
+      ) : value ? (
+        note ? (
+          <span className="text-[10px]">{note}</span>
+        ) : null
+      ) : (
         <span className="text-[10px]">No</span>
       )}
     </span>
@@ -796,7 +802,7 @@ function explainInteraction(
       .join(", ");
     return {
       kind: "observed",
-      text: `VPC Flow Logs recorded ${formatBytes(Number(a.bytes ?? 0))} over ${Number(a.flows ?? 0)} ${String(a.protocol ?? "").toUpperCase()} flows between these resources${ports ? ` (${ports})` : ""}, last ${relative(evidence.last_observed_at)}. Flow logs do not show which side opens the connection.`,
+      text: `VPC Flow Logs recorded ${formatBytes(Number(a.bytes ?? 0))} over ${Number(a.flows ?? 0)} ${String(a.protocol ?? "").toUpperCase()} flows between these resources${ports ? ` (${ports})` : ""}, last ${relative(evidence.last_observed_at)}. Flow logs do not show which side opens the connection.${evidence.endpoint_identity === "heuristic" ? " One side's network interface was matched to its resource by security groups and subnet, not stated by AWS, so it may belong to another resource." : ""}`,
     };
   }
   if (evidence.kind === "inferred" && typeof a.rationale === "string") {
@@ -891,6 +897,11 @@ export function ConnectionInspector({
             label="Observed"
             value={status.observed}
             tone={EVIDENCE_STYLES.observed.color}
+            note={
+              status.observed_identity === "heuristic"
+                ? "resource guessed"
+                : undefined
+            }
           />
           <span
             className={cn(

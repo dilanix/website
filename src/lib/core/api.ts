@@ -3787,6 +3787,9 @@ export interface CoreGraphEvidence {
   producer: string;
   attributes: Record<string, unknown>;
   confidence: number | null;
+  /** `heuristic`: one resource was matched by a rule that is not proof
+   *  (e.g. a flow-log interface by security groups and subnet). */
+  endpoint_identity: "exact" | "heuristic";
   first_observed_at: string;
   last_observed_at: string;
 }
@@ -3831,6 +3834,8 @@ export interface CoreConnectionDetail {
     /** `null` when the relationship type is not about traffic. */
     reachable: boolean | null;
     observed: boolean;
+    /** `heuristic` when every observation names a resource only by a guess. */
+    observed_identity: "exact" | "heuristic" | null;
     inferred: boolean;
     user_confirmed: boolean;
     internet_exposed: boolean;

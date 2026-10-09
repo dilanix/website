@@ -43,6 +43,7 @@ const connection: CoreConnectionDetail = {
         kind: "permitted",
         producer: "aws.configuration",
         confidence: null,
+        endpoint_identity: "exact",
         first_observed_at: "2026-09-28T10:00:00Z",
         last_observed_at: "2026-09-28T10:00:00Z",
         attributes: {
@@ -73,6 +74,7 @@ const connection: CoreConnectionDetail = {
     permitted: true,
     reachable: true,
     observed: false,
+    observed_identity: null,
     inferred: false,
     user_confirmed: false,
     internet_exposed: false,
@@ -141,6 +143,7 @@ describe("ConnectionInspector for a flow observation", () => {
             kind: "observed",
             producer: "aws.vpc_flow_logs",
             confidence: null,
+            endpoint_identity: "exact",
             first_observed_at: "2026-09-28T10:00:00Z",
             last_observed_at: "2026-09-28T10:00:00Z",
             attributes: {
@@ -171,7 +174,12 @@ describe("ConnectionInspector for a flow observation", () => {
         ],
       },
       path: [api, db],
-      status: { ...connection.status, permitted: false, observed: true },
+      status: {
+        ...connection.status,
+        permitted: false,
+        observed: true,
+        observed_identity: "exact",
+      },
     };
 
     render(
@@ -188,6 +196,60 @@ describe("ConnectionInspector for a flow observation", () => {
     expect(
       screen.getByText(
         /recorded 2\.0 KB over 4 TCP flows between these resources \(adverse-media-api on ports 32768-60999, production-db on port 5432\).*do not show which side opens the connection/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/matched to its resource by security groups/),
+    ).toBeNull();
+  });
+
+  it("says when a side's resource is only matched by security groups", () => {
+    const [evidence] = connection.edge.evidence;
+    const flow: CoreConnectionDetail = {
+      ...connection,
+      edge: {
+        ...connection.edge,
+        relationship_type: "communicates_with",
+        evidence: [
+          {
+            ...evidence,
+            kind: "observed",
+            producer: "aws.vpc_flow_logs",
+            endpoint_identity: "heuristic",
+            attributes: {
+              source: "vpc_flow_logs",
+              protocol: "tcp",
+              bytes: 100,
+              flows: 1,
+              endpoints: [],
+            },
+          },
+        ],
+      },
+      path: [api, db],
+      status: {
+        ...connection.status,
+        permitted: false,
+        observed: true,
+        observed_identity: "heuristic",
+      },
+    };
+
+    render(
+      <ConnectionInspector
+        detail={flow}
+        hops={["edge-1"]}
+        activeHop="edge-1"
+        onSelectHop={vi.fn()}
+        onClose={vi.fn()}
+        onSelectResource={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("resource guessed")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /matched to its resource by security groups and subnet, not stated by AWS/,
       ),
     ).toBeTruthy();
   });
