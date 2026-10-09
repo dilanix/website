@@ -216,6 +216,7 @@ export function SpendOverviewClient({
   const [customEnd, setCustomEnd, { restored: customEndRestored }] =
     useDashboardFilterState("cost.overview.custom-end", "", isDateString);
   const [error, setError] = useState("");
+  const [requestError, setRequestError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const dataScopeKey = `${connectionId ?? "all"}:${targetId ?? "all"}`;
   const [result, setResult] = useState<OverviewResult>({
@@ -264,9 +265,12 @@ export function SpendOverviewClient({
   function runQuery(rangeOverride?: DateRange) {
     const range = rangeOverride ?? activeRange();
     if (!range) {
+      setRequestError(null);
       setError("Choose a valid start and end date.");
       return;
     }
+
+    setRequestError(null);
     setError("");
     const { periodStart, periodEnd } = rangeToIso(range);
     const rangeKey = `${periodStart}:${periodEnd}`;
@@ -278,8 +282,12 @@ export function SpendOverviewClient({
         targetId,
         topN: 5,
       });
-      if (overviewResult.error) return setError(overviewResult.error);
+      if (overviewResult.error) {
+        setRequestError(overviewResult.error);
+        return;
+      }
 
+      setRequestError(null);
       const nextOverview = overviewResult.data ?? null;
       if (nextOverview?.source !== "cost_usage") {
         setResult({
@@ -664,7 +672,30 @@ export function SpendOverviewClient({
         </p>
       ) : null}
 
-      {overview === null ? (
+      {requestError ? (
+        <div className="mt-4" role="alert">
+          <EmptyState
+            title="Cost data unavailable"
+            description={
+              requestError.toLowerCase().includes("fetch failed") ||
+              requestError.toLowerCase().includes("failed to fetch") ||
+              requestError.toLowerCase().includes("did not respond within")
+                ? "Unable to reach Dilanix Core. Please try again."
+                : requestError
+            }
+            actions={
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => runQuery()}
+                className="bg-accent text-accent-foreground rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+              >
+                {pending ? "Retrying?" : "Retry"}
+              </button>
+            }
+          />
+        </div>
+      ) : overview === null ? (
         <div className="mt-4">
           <EmptyState
             title="Cost analytics is unavailable"

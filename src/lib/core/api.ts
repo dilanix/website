@@ -9,6 +9,32 @@ export class CoreApiError extends Error {
   }
 }
 
+const COST_REQUEST_TIMEOUT_MS = 10_000;
+
+async function withCoreRequestTimeout<T>(
+  request: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      request,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(
+            new Error(
+              "Dilanix Core did not respond within 10 seconds. Please try again.",
+            ),
+          );
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
 async function extractErrorMessage(
   response: Response,
   fallback: string,
@@ -34,8 +60,9 @@ export async function coreRequest<T>(
   path: string,
   accessToken: string,
   init?: RequestInit,
+  options?: { timeoutMs?: number },
 ): Promise<T> {
-  const response = await fetch(`${env.NEXT_PUBLIC_API_URL}${path}`, {
+  const request = fetch(`${env.NEXT_PUBLIC_API_URL}${path}`, {
     ...init,
     headers: {
       Accept: "application/json",
@@ -44,6 +71,10 @@ export async function coreRequest<T>(
     },
     cache: "no-store",
   });
+
+  const response = options?.timeoutMs
+    ? await withCoreRequestTimeout(request, options.timeoutMs)
+    : await request;
   if (!response.ok) {
     const message = await extractErrorMessage(
       response,
@@ -53,6 +84,16 @@ export async function coreRequest<T>(
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+}
+
+function costReadRequest<T>(
+  path: string,
+  accessToken: string,
+  init?: RequestInit,
+): Promise<T> {
+  return coreRequest<T>(path, accessToken, init, {
+    timeoutMs: COST_REQUEST_TIMEOUT_MS,
+  });
 }
 
 export interface CoreProduct {
@@ -1259,7 +1300,7 @@ export function listCostSummaries(
   if (params.serviceName) query.set("service_name", params.serviceName);
   if (params.costBasis) query.set("cost_basis", params.costBasis);
   if (params.includeCredits) query.set("include_credits", "true");
-  return coreRequest<CoreCostSummaryListResponse>(
+  return costReadRequest<CoreCostSummaryListResponse>(
     `/v1/organizations/${organizationId}/cost/data/connections/${connectionId}/summaries?${query.toString()}`,
     token,
   );
@@ -1326,7 +1367,7 @@ export function getCostSummaryTotals(
   if (params.targetId) query.set("target_id", params.targetId);
   if (params.serviceName) query.set("service_name", params.serviceName);
   if (params.includeCredits) query.set("include_credits", "true");
-  return coreRequest<CoreCostSummaryTotals>(
+  return costReadRequest<CoreCostSummaryTotals>(
     `/v1/organizations/${organizationId}/cost/data/connections/${connectionId}/summaries/totals?${query.toString()}`,
     token,
   );
@@ -1455,7 +1496,7 @@ export function listCostUsage(
   if (params.serviceName) query.set("service_name", params.serviceName);
   if (params.billingAccountId)
     query.set("billing_account_id", params.billingAccountId);
-  return coreRequest<CoreCostUsageListResponse>(
+  return costReadRequest<CoreCostUsageListResponse>(
     `/v1/organizations/${organizationId}/cost/data/connections/${connectionId}/usage?${query.toString()}`,
     token,
   );
@@ -1610,7 +1651,7 @@ export interface UpdateBudgetInput {
 }
 
 export function listBudgets(organizationId: string, token: string) {
-  return coreRequest<CoreBudgetListResponse>(
+  return costReadRequest<CoreBudgetListResponse>(
     `/v1/organizations/${organizationId}/cost/budgets`,
     token,
   );
@@ -1650,7 +1691,7 @@ export interface CoreBudgetStatus {
 }
 
 export function listBudgetStatuses(organizationId: string, token: string) {
-  return coreRequest<{ items: CoreBudgetStatus[] }>(
+  return costReadRequest<{ items: CoreBudgetStatus[] }>(
     `/v1/organizations/${organizationId}/cost/budgets/status`,
     token,
   );
@@ -1733,7 +1774,7 @@ export interface UpdateAllocationInput {
 }
 
 export function listAllocations(organizationId: string, token: string) {
-  return coreRequest<CoreAllocationListResponse>(
+  return costReadRequest<CoreAllocationListResponse>(
     `/v1/organizations/${organizationId}/cost/allocations`,
     token,
   );
@@ -1769,7 +1810,7 @@ export function getAllocationBreakdown(
   if (params.metric) query.set("metric", params.metric);
   if (params.connectionId) query.set("connection_id", params.connectionId);
   if (params.targetId) query.set("target_id", params.targetId);
-  return coreRequest<CoreAllocationBreakdown>(
+  return costReadRequest<CoreAllocationBreakdown>(
     `/v1/organizations/${organizationId}/cost/allocations/breakdown?${query.toString()}`,
     token,
   );
@@ -1857,7 +1898,7 @@ export function listAnomalies(
   const query = statusFilter
     ? `?${new URLSearchParams({ status_filter: statusFilter }).toString()}`
     : "";
-  return coreRequest<CoreAnomalyListResponse>(
+  return costReadRequest<CoreAnomalyListResponse>(
     `/v1/organizations/${organizationId}/cost/anomalies${query}`,
     token,
   );
@@ -2195,7 +2236,7 @@ export function queryCostExplorer(
   token: string,
   input: CostExplorerQueryInput,
 ) {
-  return coreRequest<CoreCostExplorerResponse>(
+  return costReadRequest<CoreCostExplorerResponse>(
     `/v1/organizations/${organizationId}/cost/explorer/query`,
     token,
     {
@@ -2265,7 +2306,7 @@ export function querySpendTrends(
   token: string,
   input: SpendTrendsQueryInput,
 ) {
-  return coreRequest<CoreSpendTrends>(
+  return costReadRequest<CoreSpendTrends>(
     `/v1/organizations/${organizationId}/cost/spend-trends/query`,
     token,
     {
@@ -2293,7 +2334,7 @@ export function runCostExplorerSavedView(
   });
   if (params.connectionId) query.set("connection_id", params.connectionId);
   if (params.targetId) query.set("target_id", params.targetId);
-  return coreRequest<CoreCostExplorerResponse>(
+  return costReadRequest<CoreCostExplorerResponse>(
     `/v1/organizations/${organizationId}/cost/explorer/saved-views/${savedViewId}?${query.toString()}`,
     token,
   );
@@ -2385,7 +2426,7 @@ export function getCostOverview(
   if (params.connectionId) query.set("connection_id", params.connectionId);
   if (params.targetId) query.set("target_id", params.targetId);
   if (params.topN !== undefined) query.set("top_n", String(params.topN));
-  return coreRequest<CoreCostOverview>(
+  return costReadRequest<CoreCostOverview>(
     `/v1/organizations/${organizationId}/cost/overview?${query.toString()}`,
     token,
   );
@@ -2436,7 +2477,7 @@ export function getCostDrivers(
   if (params.connectionId) query.set("connection_id", params.connectionId);
   if (params.targetId) query.set("target_id", params.targetId);
   if (params.topN !== undefined) query.set("top_n", String(params.topN));
-  return coreRequest<CoreCostDrivers>(
+  return costReadRequest<CoreCostDrivers>(
     `/v1/organizations/${organizationId}/cost/drivers?${query.toString()}`,
     token,
   );
@@ -2506,7 +2547,7 @@ export function queryCostBreakdown(
   token: string,
   input: CostBreakdownQueryInput,
 ) {
-  return coreRequest<CoreCostBreakdown>(
+  return costReadRequest<CoreCostBreakdown>(
     `/v1/organizations/${organizationId}/cost/breakdown/query`,
     token,
     {
@@ -2543,7 +2584,7 @@ export function getCostOverviewHighlights(
     period_start: params.periodStart,
     period_end: params.periodEnd,
   });
-  return coreRequest<CoreCostOverviewHighlights>(
+  return costReadRequest<CoreCostOverviewHighlights>(
     `/v1/organizations/${organizationId}/cost/overview/highlights?${query.toString()}`,
     token,
   );
@@ -2601,7 +2642,7 @@ export function getCostForecast(
   });
   if (params.connectionId) query.set("connection_id", params.connectionId);
   if (params.targetId) query.set("target_id", params.targetId);
-  return coreRequest<CoreCostForecast>(
+  return costReadRequest<CoreCostForecast>(
     `/v1/organizations/${organizationId}/cost/forecast?${query.toString()}`,
     token,
   );
@@ -2647,7 +2688,7 @@ export interface UpdateSavedViewInput {
 }
 
 export function listSavedViews(organizationId: string, token: string) {
-  return coreRequest<CoreSavedViewListResponse>(
+  return costReadRequest<CoreSavedViewListResponse>(
     `/v1/organizations/${organizationId}/cost/saved-views`,
     token,
   );
@@ -2762,7 +2803,7 @@ export interface UpdateReportInput {
 }
 
 export function listReports(organizationId: string, token: string) {
-  return coreRequest<CoreReportListResponse>(
+  return costReadRequest<CoreReportListResponse>(
     `/v1/organizations/${organizationId}/cost/reports`,
     token,
   );

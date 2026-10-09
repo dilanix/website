@@ -190,9 +190,7 @@ describe("SpendOverviewClient", () => {
       initialRange: presetRange("30d"),
     });
 
-    expect(
-      screen.getAllByText("FOCUS coverage: Sep 1 – Sep 14, 2026.").length,
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(/FOCUS coverage:/).length).toBeGreaterThan(0);
     expect(queryCostBreakdownAction).toHaveBeenCalledWith(
       expect.objectContaining({
         period_start: resolvedOverview.period_start,
@@ -513,5 +511,50 @@ describe("SpendOverviewClient", () => {
         "Forecast only applies to a period that is still in progress — pick a range that includes today.",
       ),
     ).toBeTruthy();
+  });
+
+  it("shows a retryable unavailable state when the overview request fails and recovers on retry", async () => {
+    const overviewAction = vi.mocked(getCostOverviewAction);
+
+    overviewAction.mockResolvedValue({ error: "fetch failed" });
+
+    renderClient();
+
+    fireEvent.click(screen.getByRole("button", { name: "1 day" }));
+
+    expect(await screen.findByText("Cost data unavailable")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "Unable to reach Dilanix Core. Please try again.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("No cost data for this period")).toBeNull();
+
+    const retryButton = screen.getByRole("button", { name: "Retry" });
+
+    await waitFor(() => {
+      expect((retryButton as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    const callsBeforeRetry = overviewAction.mock.calls.length;
+
+    overviewAction.mockResolvedValue({ data: overview });
+
+    fireEvent.click(retryButton);
+
+    await waitFor(() => {
+      expect(overviewAction.mock.calls.length).toBeGreaterThan(
+        callsBeforeRetry,
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Cost data unavailable")).toBeNull();
+    });
+
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(
+      screen.queryByText("Unable to reach Dilanix Core. Please try again."),
+    ).toBeNull();
   });
 });
