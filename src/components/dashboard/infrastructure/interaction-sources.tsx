@@ -122,6 +122,15 @@ export function InteractionSources({
                       {source.region} · {source.evidence_count} facts ·{" "}
                       {new Date(source.collected_at).toLocaleString("en")}
                     </p>
+                    {source.stale && source.last_succeeded_at ? (
+                      <p className="mt-1 text-[11px] leading-4 text-amber-400">
+                        Showing facts from the last successful run,{" "}
+                        {new Date(source.last_succeeded_at).toLocaleString(
+                          "en",
+                        )}
+                        .
+                      </p>
+                    ) : null}
                     <p className="text-muted-foreground mt-1 text-[11px] leading-4">
                       {source.detail ?? info.description}
                     </p>

@@ -16,6 +16,8 @@ describe("InteractionSources", () => {
         coverage: { queries: 32, unscanned_windows: 1 },
         evidence_count: 4,
         collected_at: "2026-10-09T10:00:00Z",
+        last_succeeded_at: "2026-10-09T10:00:00Z",
+        stale: false,
       },
       {
         source: "xray",
@@ -25,6 +27,8 @@ describe("InteractionSources", () => {
         coverage: null,
         evidence_count: 0,
         collected_at: "2026-10-09T10:00:00Z",
+        last_succeeded_at: null,
+        stale: false,
       },
     ];
 
@@ -37,6 +41,31 @@ describe("InteractionSources", () => {
       screen.getByText(
         "1 window(s) not read: the budget of 32 queries was reached",
       ),
+    ).toBeTruthy();
+  });
+
+  it("says when the facts shown come from an earlier successful run", () => {
+    render(
+      <InteractionSources
+        sources={[
+          {
+            source: "xray",
+            region: "eu-west-1",
+            state: "failed",
+            detail: "Reading the X-Ray service graph failed (Throttling).",
+            coverage: null,
+            evidence_count: 3,
+            collected_at: "2026-10-09T10:00:00Z",
+            last_succeeded_at: "2026-10-08T10:00:00Z",
+            stale: true,
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Sources/ }));
+
+    expect(
+      screen.getByText(/Showing facts from the last successful run/),
     ).toBeTruthy();
   });
 });

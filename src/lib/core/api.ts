@@ -3762,8 +3762,14 @@ export interface CoreInteractionSourceStatus {
   detail: string | null;
   /** What a source that ran read and missed, e.g. flow-log windows not read. */
   coverage: Record<string, number> | null;
+  /** Facts written by the last successful run (`last_succeeded_at`). */
   evidence_count: number;
+  /** The latest attempt, whatever its outcome. */
   collected_at: string;
+  /** The latest run that wrote evidence; null if none has. */
+  last_succeeded_at: string | null;
+  /** The latest attempt did not run: the facts shown are from an earlier run. */
+  stale: boolean;
 }
 
 export interface CoreGraphResolution {
