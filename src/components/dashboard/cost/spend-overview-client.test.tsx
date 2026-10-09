@@ -533,7 +533,7 @@ describe("SpendOverviewClient", () => {
     const retryButton = screen.getByRole("button", { name: "Retry" });
 
     await waitFor(() => {
-      expect(retryButton).not.toBeDisabled();
+      expect((retryButton as HTMLButtonElement).disabled).toBe(false);
     });
 
     const callsBeforeRetry = overviewAction.mock.calls.length;
