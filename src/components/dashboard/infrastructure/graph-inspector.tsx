@@ -8,6 +8,9 @@ import {
   ArrowRight,
   CircleCheck,
   CircleDashed,
+  CircleHelp,
+  CircleMinus,
+  CircleX,
   ExternalLink,
   Globe,
   Loader2,
@@ -21,6 +24,8 @@ import type {
   CoreGraphEvidence,
   CoreGraphNode,
   CoreGraphNodeDetail,
+  CoreReachability,
+  CoreReachabilityCheck,
   CoreResourceNeighborhood,
 } from "@/lib/core/api";
 import { formatPorts } from "@/lib/infrastructure/graph-model";
@@ -596,6 +601,64 @@ function StatusChip({
   );
 }
 
+const REACHABILITY_LABELS: Record<CoreReachability["state"], string> = {
+  reachable: "Reachable",
+  blocked: "Blocked",
+  unknown: "Reachability unknown",
+  not_applicable: "Reachability n/a",
+};
+
+function ReachabilityChip({
+  reachability,
+  tone,
+}: {
+  reachability: CoreReachability;
+  tone: string;
+}) {
+  const { state } = reachability;
+  const Icon =
+    state === "reachable"
+      ? CircleCheck
+      : state === "blocked"
+        ? CircleX
+        : CircleDashed;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+        state === "blocked"
+          ? "border-rose-400/40 bg-rose-400/10 text-rose-300"
+          : state === "reachable"
+            ? ""
+            : "border-border-soft text-muted-foreground",
+      )}
+      style={
+        state === "reachable"
+          ? { color: tone, borderColor: `${tone}55`, background: `${tone}14` }
+          : undefined
+      }
+    >
+      <Icon size={13} />
+      {REACHABILITY_LABELS[state]}
+    </span>
+  );
+}
+
+const CHECK_ICONS: Record<CoreReachabilityCheck["result"], typeof CircleCheck> =
+  {
+    pass: CircleCheck,
+    fail: CircleX,
+    unknown: CircleHelp,
+    not_evaluated: CircleMinus,
+  };
+
+const CHECK_TONES: Record<CoreReachabilityCheck["result"], string> = {
+  pass: "text-emerald-400",
+  fail: "text-rose-400",
+  unknown: "text-amber-400",
+  not_evaluated: "text-muted-foreground",
+};
+
 function name(node: { name: string | null; external_id: string } | undefined) {
   return node ? (node.name ?? node.external_id) : "a resource";
 }
@@ -888,9 +951,8 @@ export function ConnectionInspector({
             value={status.configured}
             tone={EVIDENCE_STYLES.configured.color}
           />
-          <StatusChip
-            label="Reachable"
-            value={status.reachable}
+          <ReachabilityChip
+            reachability={status.reachability}
             tone={EVIDENCE_STYLES.permitted.color}
           />
           <StatusChip
@@ -1020,6 +1082,34 @@ export function ConnectionInspector({
                 ))}
               </ul>
             </div>
+            {status.reachability.checks.length ? (
+              <div>
+                <p className="mb-2 text-sm font-semibold">
+                  {REACHABILITY_LABELS[status.reachability.state]}
+                </p>
+                <ul className="flex flex-col gap-2">
+                  {status.reachability.checks.map((check) => {
+                    const Icon = CHECK_ICONS[check.result];
+                    return (
+                      <li
+                        key={check.name}
+                        className="flex gap-2 text-xs leading-5"
+                      >
+                        <Icon
+                          size={14}
+                          className={cn(
+                            "mt-0.5 shrink-0",
+                            CHECK_TONES[check.result],
+                          )}
+                          aria-label={check.result}
+                        />
+                        <span>{check.detail}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
           </div>
         ) : null}
         {tab === "path" ? (

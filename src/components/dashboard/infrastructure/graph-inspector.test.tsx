@@ -72,7 +72,22 @@ const connection: CoreConnectionDetail = {
   status: {
     configured: false,
     permitted: true,
-    reachable: true,
+    reachability: {
+      state: "reachable",
+      checks: [
+        {
+          name: "ingress_rule",
+          result: "pass",
+          detail:
+            "The target's security group admits the source's security group.",
+        },
+        {
+          name: "network_acl",
+          result: "not_evaluated",
+          detail: "Network ACLs are not evaluated.",
+        },
+      ],
+    },
     observed: false,
     observed_identity: null,
     inferred: false,
@@ -128,6 +143,43 @@ describe("ConnectionInspector", () => {
     expect(names[1]).toContain("sg-api");
     expect(names[2]).toContain("sg-db");
     expect(names[3]).toContain("production-db");
+  });
+
+  it("never shows a blocked or undecided path as reachable, and says why", () => {
+    render(
+      <ConnectionInspector
+        detail={{
+          ...connection,
+          status: {
+            ...connection.status,
+            reachability: {
+              state: "unknown",
+              checks: [
+                {
+                  name: "egress_rule",
+                  result: "unknown",
+                  detail:
+                    "The source's egress is limited to address ranges, which are not evaluated.",
+                },
+              ],
+            },
+          },
+        }}
+        hops={["edge-1"]}
+        activeHop="edge-1"
+        onSelectHop={vi.fn()}
+        onClose={vi.fn()}
+        onSelectResource={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText("Reachability unknown").length).toBe(2);
+    expect(screen.queryByText("Reachable")).toBeNull();
+    expect(
+      screen.getByText(
+        "The source's egress is limited to address ranges, which are not evaluated.",
+      ),
+    ).toBeTruthy();
   });
 });
 

@@ -3782,6 +3782,27 @@ export interface CoreScopeGraph {
   sources: CoreInteractionSourceStatus[];
 }
 
+/** One layer of a reachability verdict; `not_evaluated` layers (e.g. network
+ *  ACLs) are listed but never decide it. */
+export interface CoreReachabilityCheck {
+  name:
+    | "ingress_rule"
+    | "egress_rule"
+    | "network_path"
+    | "network_acl"
+    | "internet_path"
+    | "observed_traffic";
+  result: "pass" | "fail" | "unknown" | "not_evaluated";
+  detail: string;
+}
+
+/** Whether traffic can get across an edge, from evidence that exists only —
+ *  a missing fact is `unknown`, never reachable. */
+export interface CoreReachability {
+  state: "reachable" | "blocked" | "unknown" | "not_applicable";
+  checks: CoreReachabilityCheck[];
+}
+
 export interface CoreGraphEvidence {
   kind: CoreEvidenceKind;
   producer: string;
@@ -3831,8 +3852,7 @@ export interface CoreConnectionDetail {
   status: {
     configured: boolean;
     permitted: boolean;
-    /** `null` when the relationship type is not about traffic. */
-    reachable: boolean | null;
+    reachability: CoreReachability;
     observed: boolean;
     /** `heuristic` when every observation names a resource only by a guess. */
     observed_identity: "exact" | "heuristic" | null;
