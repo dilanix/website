@@ -39,6 +39,10 @@ const STATE_STYLES: Record<
     label: "Nothing found",
     className: "border-border-soft text-muted-foreground",
   },
+  partial: {
+    label: "Partial",
+    className: "border-orange-400/30 bg-orange-400/10 text-orange-400",
+  },
   not_enabled: {
     label: "Not enabled",
     className: "border-sky-400/30 bg-sky-400/10 text-sky-400",
@@ -61,7 +65,7 @@ export function InteractionSources({
 }) {
   const [open, setOpen] = useState(false);
   const collected = sources.filter(
-    (source) => source.state === "collected",
+    (source) => source.state === "collected" || source.state === "partial",
   ).length;
 
   return (

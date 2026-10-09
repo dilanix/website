@@ -3752,8 +3752,16 @@ export interface CoreGraphEdgeSummary {
 export interface CoreInteractionSourceStatus {
   source: string;
   region: string;
-  state: "collected" | "empty" | "not_enabled" | "not_permitted" | "failed";
+  state:
+    | "collected"
+    | "empty"
+    | "partial"
+    | "not_enabled"
+    | "not_permitted"
+    | "failed";
   detail: string | null;
+  /** What a source that ran read and missed, e.g. flow-log windows not read. */
+  coverage: Record<string, number> | null;
   evidence_count: number;
   collected_at: string;
 }
