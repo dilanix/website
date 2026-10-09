@@ -41,6 +41,29 @@ export class AuthApiError extends Error {
   }
 }
 
+const AUTH_REQUEST_TIMEOUT_MS = 10_000;
+
+async function withAuthRequestTimeout<T>(request: Promise<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      request,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(
+            new Error(
+              "Dilanix Core did not respond within 10 seconds. Please try again.",
+            ),
+          );
+        }, AUTH_REQUEST_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
 /**
  * `/v1/auth/me` and `/v1/auth/change-password` require `current_active_verified_user`
  * on the API, but newly invited accounts are created with `is_verified: false` and
@@ -144,13 +167,15 @@ export async function logoutAll(accessToken: string): Promise<void> {
 }
 
 export async function getMe(accessToken: string): Promise<MeResponse> {
-  const response = await fetch(`${env.NEXT_PUBLIC_API_URL}/v1/auth/me`, {
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    cache: "no-store",
-  });
+  const response = await withAuthRequestTimeout(
+    fetch(`${env.NEXT_PUBLIC_API_URL}/v1/auth/me`, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: "no-store",
+    }),
+  );
 
   if (!response.ok) {
     throw new AuthApiError(
