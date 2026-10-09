@@ -53,6 +53,7 @@ import {
   formatPorts,
   nodeMatches,
   searchResources,
+  UNDIRECTED_TYPES,
   type GraphMode,
   type GraphModel,
   type GraphView,
@@ -642,6 +643,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
         label: [verb, formatPorts(edge.ports)].filter(Boolean).join(" · "),
         flow:
           TRAFFIC_TYPES.has(edge.relationshipType) &&
+          !UNDIRECTED_TYPES.has(edge.relationshipType) &&
           kind !== "permitted" &&
           kind !== "inferred",
       };
@@ -652,12 +654,14 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
         type: "relationship",
         data,
         zIndex: Z_EDGE,
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color,
-          width: 14,
-          height: 14,
-        },
+        markerEnd: UNDIRECTED_TYPES.has(edge.relationshipType)
+          ? undefined
+          : {
+              type: MarkerType.ArrowClosed,
+              color,
+              width: 14,
+              height: 14,
+            },
       } satisfies Edge;
     });
   }, [rendered, mode]);

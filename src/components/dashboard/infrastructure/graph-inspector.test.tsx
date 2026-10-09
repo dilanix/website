@@ -129,6 +129,70 @@ describe("ConnectionInspector", () => {
   });
 });
 
+describe("ConnectionInspector for a flow observation", () => {
+  it("states the traffic and that flow logs cannot tell who initiates", () => {
+    const flow: CoreConnectionDetail = {
+      ...connection,
+      edge: {
+        ...connection.edge,
+        relationship_type: "communicates_with",
+        evidence: [
+          {
+            kind: "observed",
+            producer: "aws.vpc_flow_logs",
+            confidence: null,
+            first_observed_at: "2026-09-28T10:00:00Z",
+            last_observed_at: "2026-09-28T10:00:00Z",
+            attributes: {
+              source: "vpc_flow_logs",
+              protocol: "tcp",
+              direction: "unknown",
+              bytes: 2048,
+              packets: 20,
+              flows: 4,
+              endpoints: [
+                {
+                  resource_id: "api",
+                  identity: "attachment",
+                  fixed_ports: [],
+                  port_min: 32768,
+                  port_max: 60999,
+                },
+                {
+                  resource_id: "db",
+                  identity: "attachment",
+                  fixed_ports: [5432],
+                  port_min: 5432,
+                  port_max: 5432,
+                },
+              ],
+            },
+          },
+        ],
+      },
+      path: [api, db],
+      status: { ...connection.status, permitted: false, observed: true },
+    };
+
+    render(
+      <ConnectionInspector
+        detail={flow}
+        hops={["edge-1"]}
+        activeHop="edge-1"
+        onSelectHop={vi.fn()}
+        onClose={vi.fn()}
+        onSelectResource={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        /recorded 2\.0 KB over 4 TCP flows between these resources \(adverse-media-api on ports 32768-60999, production-db on port 5432\).*do not show which side opens the connection/,
+      ),
+    ).toBeTruthy();
+  });
+});
+
 describe("ResourceInspector", () => {
   it("shows security-group rules and links to the Resources page", () => {
     const detail: CoreGraphNodeDetail = {

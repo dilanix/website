@@ -8,6 +8,7 @@ import {
   INTERNET_NODE_ID,
   buildGraphModel,
   formatPorts,
+  UNDIRECTED_TYPES,
   type GraphModelOptions,
   type GraphView,
 } from "./graph-model";
@@ -260,6 +261,30 @@ describe("buildGraphModel in Runtime mode", () => {
     );
 
     expect(edgeKeys(model)).toEqual(["worker>db"]);
+  });
+});
+
+describe("buildGraphModel with undirected traffic", () => {
+  it("draws an observed flow between two services in Runtime mode", () => {
+    const flowGraph: CoreScopeGraph = {
+      ...graph,
+      nodes: [...graph.nodes, node("worker", "compute.function", "service")],
+      edges: [
+        ...graph.edges,
+        edge("db", "communicates_with", "worker", ["observed"]),
+      ],
+    };
+
+    const model = buildGraphModel(
+      flowGraph,
+      options("architecture", {
+        mode: "runtime",
+        evidenceKinds: new Set(["observed"]),
+      }),
+    );
+
+    expect(edgeKeys(model)).toEqual(["db>worker"]);
+    expect(UNDIRECTED_TYPES.has(model.edges[0].relationshipType)).toBe(true);
   });
 });
 

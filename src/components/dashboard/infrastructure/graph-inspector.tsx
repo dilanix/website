@@ -34,6 +34,7 @@ const RELATIONSHIP_LABELS: Record<string, string> = {
   runs: "runs",
   depends_on: "depends on",
   connects_to: "can connect to",
+  communicates_with: "exchanges traffic with",
   attached_to: "attached to",
   protected_by: "protected by",
   uses: "uses",
@@ -593,6 +594,23 @@ function name(node: { name: string | null; external_id: string } | undefined) {
   return node ? (node.name ?? node.external_id) : "a resource";
 }
 
+interface FlowEndpoint {
+  resource_id: string;
+  fixed_ports: number[];
+  port_min: number | null;
+  port_max: number | null;
+}
+
+/** One side's ports as flow logs recorded them: the single ports it used,
+ *  else its range. */
+function flowPorts(side: FlowEndpoint) {
+  if (side.fixed_ports.length) return `port ${side.fixed_ports.join(", ")}`;
+  if (side.port_min === null || side.port_max === null) return "unknown ports";
+  return side.port_min === side.port_max
+    ? `port ${side.port_min}`
+    : `ports ${side.port_min}-${side.port_max}`;
+}
+
 function ruleLabel(attributes: Record<string, unknown>) {
   return formatPorts([
     {
@@ -766,9 +784,19 @@ function explainInteraction(
     };
   }
   if (evidence.kind === "observed" && a.source === "vpc_flow_logs") {
+    const sides = Array.isArray(a.endpoints)
+      ? (a.endpoints as FlowEndpoint[])
+      : [];
+    const ports = sides
+      .map((side) => {
+        const node =
+          side.resource_id === detail.source.id ? detail.source : detail.target;
+        return `${name(node)} on ${flowPorts(side)}`;
+      })
+      .join(", ");
     return {
       kind: "observed",
-      text: `VPC Flow Logs recorded ${formatBytes(Number(a.bytes ?? 0))} over ${Number(a.flows ?? 0)} flows on ${ruleLabel(a)}, last ${relative(evidence.last_observed_at)}.`,
+      text: `VPC Flow Logs recorded ${formatBytes(Number(a.bytes ?? 0))} over ${Number(a.flows ?? 0)} ${String(a.protocol ?? "").toUpperCase()} flows between these resources${ports ? ` (${ports})` : ""}, last ${relative(evidence.last_observed_at)}. Flow logs do not show which side opens the connection.`,
     };
   }
   if (evidence.kind === "inferred" && typeof a.rationale === "string") {

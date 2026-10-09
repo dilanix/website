@@ -35,9 +35,14 @@ export const GRAPH_MODES: { id: GraphMode; label: string; hint: string }[] = [
 
 export const INTERNET_NODE_ID = "internet";
 
+/** Relationship types that state two resources exchange traffic without
+ *  saying who initiates it (a VPC flow): drawn without an arrow. */
+export const UNDIRECTED_TYPES = new Set(["communicates_with"]);
+
 /** Relationship types that describe services working together. */
 const RUNTIME_TYPES = new Set([
   "connects_to",
+  "communicates_with",
   "uses",
   "reads_from",
   "writes_to",
