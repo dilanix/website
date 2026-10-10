@@ -513,6 +513,48 @@ describe("SpendOverviewClient", () => {
     ).toBeTruthy();
   });
 
+  it("re-runs a restored preset after remount instead of leaving the overview loading", async () => {
+    const overviewAction = vi.mocked(getCostOverviewAction);
+    overviewAction.mockResolvedValue({ data: overview });
+
+    const restoredRange = presetRange("30d");
+
+    renderClient();
+
+    fireEvent.click(screen.getByRole("button", { name: "30 days" }));
+
+    await waitFor(() => {
+      expect(overviewAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          periodStart: restoredRange.start.toISOString(),
+          periodEnd: restoredRange.end.toISOString(),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Loading?")).toBeNull();
+    });
+
+    cleanup();
+
+    const callsBeforeRemount = overviewAction.mock.calls.length;
+
+    renderClient();
+
+    await waitFor(() => {
+      expect(overviewAction.mock.calls.length).toBeGreaterThan(
+        callsBeforeRemount,
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Loading?")).toBeNull();
+    });
+
+    expect(screen.getByRole("button", { name: "30 days" })).toBeTruthy();
+  });
+
   it("shows a retryable unavailable state when the overview request fails and recovers on retry", async () => {
     const overviewAction = vi.mocked(getCostOverviewAction);
 
