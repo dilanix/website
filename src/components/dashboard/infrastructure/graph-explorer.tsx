@@ -42,6 +42,7 @@ import type {
   CoreConnectionDetail,
   CoreEvidenceKind,
   CoreGraphNodeDetail,
+  CoreResourceExternalReach,
   CoreResourceNeighborhood,
   CoreScopeGraph,
 } from "@/lib/core/api";
@@ -249,6 +250,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
       Loaded<{
         detail: CoreGraphNodeDetail;
         neighborhood: CoreResourceNeighborhood;
+        external: CoreResourceExternalReach | null;
       }>
     >
   >({});
@@ -1211,6 +1213,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
             key={selection.id}
             detail={resourceState.data.detail}
             neighborhood={resourceState.data.neighborhood}
+            external={resourceState.data.external}
             onClose={clearSelection}
             onSelectResource={focusResource}
             onSelectRelationship={(id) => loadConnection([id], id)}

@@ -26,6 +26,7 @@ import type {
   CoreGraphNodeDetail,
   CoreReachability,
   CoreReachabilityCheck,
+  CoreResourceExternalReach,
   CoreResourceNeighborhood,
 } from "@/lib/core/api";
 import { formatPorts } from "@/lib/infrastructure/graph-model";
@@ -380,17 +381,161 @@ function RuleTable({ title, rules }: { title: string; rules: RuleShape[] }) {
 }
 
 type ResourceTab =
-  "overview" | "network" | "security" | "relationships" | "tags" | "raw";
+  | "overview"
+  | "network"
+  | "security"
+  | "relationships"
+  | "external"
+  | "tags"
+  | "raw";
+
+/** Why the resource is said to call an external endpoint — one line per
+ *  piece of evidence on the final call. */
+function explainExternal(evidence: CoreGraphEvidence, caller: string) {
+  const a = evidence.attributes;
+  if (evidence.kind === "configured" && typeof a.variable === "string") {
+    const container =
+      typeof a.container === "string" && a.container
+        ? ` (container ${a.container})`
+        : "";
+    return `Environment variable ${a.variable}${container} of ${caller} names this host.`;
+  }
+  if (evidence.kind === "observed" && a.source === "xray") {
+    return `AWS X-Ray traced ${Number(a.requests ?? 0).toLocaleString("en-US")} calls from ${caller} (${Number(a.errors ?? 0)} errors), last ${relative(evidence.last_observed_at)}.`;
+  }
+  if (evidence.kind === "inferred" && typeof a.rationale === "string") {
+    return `AI (${Math.round((evidence.confidence ?? 0) * 100)}% confidence): ${a.rationale}`;
+  }
+  return `${EVIDENCE_STYLES[evidence.kind].label} by ${evidence.producer}, last ${relative(evidence.last_observed_at)}.`;
+}
+
+function ExternalList({
+  resource,
+  external,
+  onSelectResource,
+}: {
+  resource: CoreGraphNode;
+  external: CoreResourceExternalReach | null;
+  onSelectResource: (id: string) => void;
+}) {
+  if (external === null) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        External endpoints could not be loaded.
+      </p>
+    );
+  }
+  if (external.items.length === 0) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        No external endpoint is known for this resource. Without tracing or a
+        host in its configuration this does not mean it calls none.
+        {external.truncated
+          ? " The search stopped at 3 hops, so resources further along were not checked."
+          : ""}
+      </p>
+    );
+  }
+  const nodes = new Map(external.nodes.map((node) => [node.id, node]));
+  return (
+    <div className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-2">
+        {external.items.map((item, index) => {
+          const caller =
+            item.hops.length === 0 ? resource : nodes.get(item.via_resource_id);
+          const callerName = name(caller);
+          return (
+            <li
+              key={`${item.endpoint}:${item.via_resource_id}:${index}`}
+              className="border-border-soft flex flex-col gap-1.5 rounded-xl border px-2.5 py-2"
+            >
+              <div className="flex items-center gap-2">
+                <Globe size={14} className="text-muted-foreground shrink-0" />
+                <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                  {item.endpoint}
+                </span>
+                {item.provider ? (
+                  <span className="border-border-soft rounded-md border px-1.5 py-0.5 text-[10px]">
+                    {item.provider}
+                  </span>
+                ) : null}
+                <span
+                  className="text-[10px] font-medium"
+                  style={{
+                    color: item.observed
+                      ? EVIDENCE_STYLES.observed.color
+                      : undefined,
+                  }}
+                >
+                  {item.observed ? "Observed" : "Not observed end to end"}
+                </span>
+              </div>
+              {item.hops.length ? (
+                <p className="text-muted-foreground flex flex-wrap items-center gap-1 text-[11px]">
+                  via
+                  {item.hops.map((hop) => {
+                    const node = nodes.get(hop.resource_id);
+                    return (
+                      <button
+                        key={hop.resource_id}
+                        type="button"
+                        onClick={() => onSelectResource(hop.resource_id)}
+                        title={`${RELATIONSHIP_LABELS[hop.relationship_type] ?? hop.relationship_type} · ${hop.evidence_kinds.map((kind) => EVIDENCE_STYLES[kind].label).join(", ")}${hop.observed ? "" : " (not observed)"}`}
+                        className="text-foreground hover:text-accent inline-flex items-center gap-1 underline-offset-2 hover:underline"
+                      >
+                        <ArrowRight size={10} />
+                        {name(node)}
+                      </button>
+                    );
+                  })}
+                </p>
+              ) : null}
+              <ul className="flex flex-col gap-1">
+                {item.evidence.map((evidence, position) => (
+                  <li
+                    key={`${evidence.producer}:${position}`}
+                    className="flex items-start gap-1.5 text-[11px] leading-4"
+                  >
+                    <span
+                      className="mt-1 size-1.5 shrink-0 rounded-full"
+                      style={{
+                        background: EVIDENCE_STYLES[evidence.kind].color,
+                      }}
+                    />
+                    <span>{explainExternal(evidence, callerName)}</span>
+                  </li>
+                ))}
+              </ul>
+              {item.identity === "heuristic" ? (
+                <p className="text-[11px] text-amber-400">
+                  A resource on this path was matched by a rule that is not
+                  proof, so the chain may belong to another resource.
+                </p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      {external.truncated ? (
+        <p className="text-muted-foreground text-[11px]">
+          More chains exist than are shown (at most 3 hops and 50 chains).
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export function ResourceInspector({
   detail,
   neighborhood,
+  external,
   onClose,
   onSelectResource,
   onSelectRelationship,
 }: {
   detail: CoreGraphNodeDetail;
   neighborhood: CoreResourceNeighborhood;
+  external: CoreResourceExternalReach | null;
   onClose: () => void;
   onSelectResource: (id: string) => void;
   onSelectRelationship: (id: string) => void;
@@ -469,6 +614,7 @@ export function ResourceInspector({
             label: "Relationships",
             count: neighborhood.total_edges,
           },
+          { id: "external", label: "External", count: external?.items.length },
           { id: "tags", label: "Tags", count: tags.length },
           { id: "raw", label: "Raw" },
         ]}
@@ -533,6 +679,13 @@ export function ResourceInspector({
           </div>
         ) : null}
         {tab === "relationships" ? list(() => true) : null}
+        {tab === "external" ? (
+          <ExternalList
+            resource={node}
+            external={external}
+            onSelectResource={onSelectResource}
+          />
+        ) : null}
         {tab === "tags" ? (
           tags.length ? (
             <div className="flex flex-wrap gap-1.5">

@@ -3891,6 +3891,40 @@ export interface CoreResourceNeighborhood {
   total_edges: number;
 }
 
+/** One edge of a chain towards an external endpoint; `resource_id` is the
+ *  resource it leads to. */
+export interface CoreExternalHop {
+  resource_id: string;
+  relationship_type: string;
+  evidence_kinds: CoreEvidenceKind[];
+  exact: boolean;
+  observed: boolean;
+}
+
+/** An external endpoint the resource calls itself (`hops` empty) or through
+ *  the resources `hops` lead to (a proxy, AI gateway, load balancer);
+ *  `via_resource_id` makes the call and `evidence` explains it. `provider`
+ *  only when the provider documents the host; `observed` only when every
+ *  hop and the call were observed. */
+export interface CoreExternalReachItem {
+  endpoint_kind: "host" | "ip_address";
+  endpoint: string;
+  provider: string | null;
+  relationship_type: string;
+  via_resource_id: string;
+  hops: CoreExternalHop[];
+  evidence: CoreGraphEvidence[];
+  observed: boolean;
+  identity: "exact" | "heuristic";
+}
+
+export interface CoreResourceExternalReach {
+  resource: CoreGraphNode;
+  items: CoreExternalReachItem[];
+  nodes: CoreGraphNode[];
+  truncated: boolean;
+}
+
 export interface CoreConnectionDetail {
   edge: CoreGraphEdge;
   source: CoreGraphNode;
@@ -3949,6 +3983,17 @@ export function listInfrastructureRelationships(
   const query = new URLSearchParams({ limit: String(params.limit ?? 200) });
   return coreRequest<CoreResourceNeighborhood>(
     `${infrastructureGraphPath(organizationId)}/resources/${resourceId}/relationships?${query.toString()}`,
+    token,
+  );
+}
+
+export function listInfrastructureExternalEndpoints(
+  organizationId: string,
+  resourceId: string,
+  token: string,
+) {
+  return coreRequest<CoreResourceExternalReach>(
+    `${infrastructureGraphPath(organizationId)}/resources/${resourceId}/external-endpoints`,
     token,
   );
 }

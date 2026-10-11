@@ -7,9 +7,11 @@ import {
   CoreApiError,
   getInfrastructureConnection,
   getInfrastructureResource,
+  listInfrastructureExternalEndpoints,
   listInfrastructureRelationships,
   type CoreConnectionDetail,
   type CoreGraphNodeDetail,
+  type CoreResourceExternalReach,
   type CoreResourceNeighborhood,
 } from "@/lib/core/api";
 
@@ -47,19 +49,26 @@ async function run<T>(
   }
 }
 
-/** Resource inspector: normalized detail plus the resource's relationships. */
+/** Resource inspector: normalized detail plus the resource's relationships
+ *  and the external endpoints it reaches. */
 export async function getGraphResourceAction(resourceId: string): Promise<
   InfrastructureActionResult<{
     detail: CoreGraphNodeDetail;
     neighborhood: CoreResourceNeighborhood;
+    /** `null` when the external endpoints could not be read — the rest of
+     *  the inspector still works. */
+    external: CoreResourceExternalReach | null;
   }>
 > {
   return run(resourceId, async (organizationId, id, token) => {
-    const [detail, neighborhood] = await Promise.all([
+    const [detail, neighborhood, external] = await Promise.all([
       getInfrastructureResource(organizationId, id, token),
       listInfrastructureRelationships(organizationId, id, token),
+      listInfrastructureExternalEndpoints(organizationId, id, token).catch(
+        () => null,
+      ),
     ]);
-    return { detail, neighborhood };
+    return { detail, neighborhood, external };
   });
 }
 

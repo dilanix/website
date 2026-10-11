@@ -334,6 +334,7 @@ describe("ResourceInspector", () => {
       <ResourceInspector
         detail={detail}
         neighborhood={{ resource: sgDb, edges: [], peers: [], total_edges: 0 }}
+        external={null}
         onClose={vi.fn()}
         onSelectResource={vi.fn()}
         onSelectRelationship={vi.fn()}
@@ -350,6 +351,99 @@ describe("ResourceInspector", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Security" }));
     expect(screen.getByText("TCP 5432")).toBeTruthy();
     expect(screen.getByText("sg-api")).toBeTruthy();
+  });
+});
+
+describe("ResourceInspector external endpoints", () => {
+  const gateway = node("litellm", "litellm", "container.service");
+  const detail: CoreGraphNodeDetail = {
+    node: api,
+    connection_id: "conn-1",
+    provider_resource_key: "arn:aws:ecs:eu-west-1:123:service/api",
+    zone: null,
+    tags: {},
+    extra: {},
+    capacity: {},
+    first_seen_at: "2026-09-28T10:00:00Z",
+    last_seen_at: "2026-09-28T10:00:00Z",
+  };
+  const neighborhood = { resource: api, edges: [], peers: [], total_edges: 0 };
+
+  it("shows an endpoint reached through a gateway, its provider and why", () => {
+    const onSelectResource = vi.fn();
+    render(
+      <ResourceInspector
+        detail={detail}
+        neighborhood={neighborhood}
+        external={{
+          resource: api,
+          nodes: [gateway],
+          truncated: false,
+          items: [
+            {
+              endpoint_kind: "host",
+              endpoint: "api.openai.com",
+              provider: "openai",
+              relationship_type: "connects_to",
+              via_resource_id: "litellm",
+              hops: [
+                {
+                  resource_id: "litellm",
+                  relationship_type: "connects_to",
+                  evidence_kinds: ["configured"],
+                  exact: true,
+                  observed: false,
+                },
+              ],
+              evidence: [
+                {
+                  kind: "observed",
+                  producer: "aws.xray",
+                  confidence: null,
+                  endpoint_identity: "exact",
+                  first_observed_at: "2026-09-28T10:00:00Z",
+                  last_observed_at: "2026-09-28T10:00:00Z",
+                  attributes: { source: "xray", requests: 1500, errors: 2 },
+                },
+              ],
+              observed: false,
+              identity: "exact",
+            },
+          ],
+        }}
+        onClose={vi.fn()}
+        onSelectResource={onSelectResource}
+        onSelectRelationship={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /External/ }));
+    expect(screen.getByText("api.openai.com")).toBeTruthy();
+    expect(screen.getByText("openai")).toBeTruthy();
+    expect(screen.getByText("Not observed end to end")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /AWS X-Ray traced 1,500 calls from litellm \(2 errors\)/,
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "litellm" }));
+    expect(onSelectResource).toHaveBeenCalledWith("litellm");
+  });
+
+  it("does not claim a resource calls nothing when none is known", () => {
+    render(
+      <ResourceInspector
+        detail={detail}
+        neighborhood={neighborhood}
+        external={{ resource: api, nodes: [], truncated: false, items: [] }}
+        onClose={vi.fn()}
+        onSelectResource={vi.fn()}
+        onSelectRelationship={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /External/ }));
+    expect(screen.getByText(/does not mean it calls none/)).toBeTruthy();
   });
 });
 
