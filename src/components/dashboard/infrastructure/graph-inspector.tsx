@@ -852,6 +852,15 @@ function explainInteraction(
       text: `AWS X-Ray traced ${Number(a.requests ?? 0).toLocaleString("en-US")} calls (${Number(a.errors ?? 0)} errors), last ${relative(evidence.last_observed_at)}.`,
     };
   }
+  if (evidence.kind === "observed" && a.source === "alb_access_logs") {
+    const ports = Array.isArray(a.target_ports)
+      ? (a.target_ports as number[]).join(", ")
+      : "";
+    return {
+      kind: "observed",
+      text: `ALB access logs recorded ${Number(a.requests ?? 0).toLocaleString("en-US")} requests from ${name(detail.source)} to ${name(detail.target)}${ports ? ` (port ${ports})` : ""}, ${Number(a.server_errors ?? 0)} with a 5xx response, last ${relative(evidence.last_observed_at)}. Access logs are best-effort and show only what passed through the load balancer.${evidence.endpoint_identity === "heuristic" ? " The address was not registered in the logged target group, so it may belong to another resource." : ""}`,
+    };
+  }
   if (evidence.kind === "observed" && a.source === "vpc_flow_logs") {
     const sides = Array.isArray(a.endpoints)
       ? (a.endpoints as FlowEndpoint[])

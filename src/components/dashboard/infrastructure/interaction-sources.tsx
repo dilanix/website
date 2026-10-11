@@ -20,6 +20,11 @@ const SOURCE_LABELS: Record<string, { label: string; description: string }> = {
     label: "VPC Flow Logs",
     description: "Observed network traffic.",
   },
+  alb_access_logs: {
+    label: "ALB access logs",
+    description:
+      "Requests to each load balancer and the targets it sent them to, read from its S3 access logs.",
+  },
   ai_inference: {
     label: "AI inference",
     description:

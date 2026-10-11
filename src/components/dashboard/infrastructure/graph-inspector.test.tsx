@@ -352,3 +352,57 @@ describe("ResourceInspector", () => {
     expect(screen.getByText("sg-api")).toBeTruthy();
   });
 });
+
+describe("ConnectionInspector for logged load balancer requests", () => {
+  it("states the requests, the target port and that access logs are best-effort", () => {
+    const logged: CoreConnectionDetail = {
+      ...connection,
+      edge: {
+        ...connection.edge,
+        relationship_type: "connects_to",
+        evidence: [
+          {
+            kind: "observed",
+            producer: "aws.alb_access_logs",
+            confidence: null,
+            endpoint_identity: "heuristic",
+            first_observed_at: "2026-09-28T10:00:00Z",
+            last_observed_at: "2026-09-28T10:00:00Z",
+            attributes: {
+              source: "alb_access_logs",
+              requests: 1200,
+              client_errors: 3,
+              server_errors: 2,
+              bytes: 4096,
+              target_ports: [8080],
+            },
+          },
+        ],
+      },
+      path: [api, db],
+      status: {
+        ...connection.status,
+        permitted: false,
+        observed: true,
+        observed_identity: "heuristic",
+      },
+    };
+
+    render(
+      <ConnectionInspector
+        detail={logged}
+        hops={["edge-1"]}
+        activeHop="edge-1"
+        onSelectHop={vi.fn()}
+        onClose={vi.fn()}
+        onSelectResource={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        /ALB access logs recorded 1,200 requests from adverse-media-api to production-db \(port 8080\), 2 with a 5xx response.*best-effort.*not registered in the logged target group/,
+      ),
+    ).toBeTruthy();
+  });
+});
