@@ -341,10 +341,11 @@ export function SpendOverviewClient({
   });
 
   useEffect(() => {
-    if (
-      restoredQueryApplied.current ||
-      (!presetRestored && !customStartRestored && !customEndRestored)
-    ) {
+    if (restoredQueryApplied.current || !presetRestored) {
+      return;
+    }
+
+    if (preset === "custom" && (!customStartRestored || !customEndRestored)) {
       return;
     }
     restoredQueryApplied.current = true;
