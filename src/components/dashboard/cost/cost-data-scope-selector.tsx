@@ -100,7 +100,13 @@ export function CostDataScopeSelector({
             item.connection_id === storedScope.connectionId,
         )
       : undefined;
-    if (!connection || (storedScope.targetId && !target)) return;
+    if (!connection || (storedScope.targetId && !target)) {
+      setStoredScope({
+        connectionId: null,
+        targetId: null,
+      });
+      return;
+    }
     const next = new URLSearchParams(searchParams.toString());
     next.set("connection", connection.id);
     if (target) next.set("target", target.id);
