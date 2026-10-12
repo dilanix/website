@@ -125,6 +125,20 @@ function formatCoveragePeriod(periodStart: string, periodEnd: string) {
   return formatCostPeriod(periodStart, inclusiveEnd.toISOString());
 }
 
+interface StoredCostDataScope {
+  connectionId: string | null;
+  targetId: string | null;
+}
+
+function isStoredCostDataScope(value: unknown): value is StoredCostDataScope {
+  if (!value || typeof value !== "object") return false;
+  const scope = value as Record<string, unknown>;
+  return (
+    (scope.connectionId === null || typeof scope.connectionId === "string") &&
+    (scope.targetId === null || typeof scope.targetId === "string")
+  );
+}
+
 interface OverviewResult {
   rangeKey: string;
   dataScopeKey: string;
@@ -215,8 +229,20 @@ export function SpendOverviewClient({
     useDashboardFilterState("cost.overview.custom-start", "", isDateString);
   const [customEnd, setCustomEnd, { restored: customEndRestored }] =
     useDashboardFilterState("cost.overview.custom-end", "", isDateString);
+  const [storedCostScope, , { restored: storedCostScopeRestored }] =
+    useDashboardFilterState<StoredCostDataScope>(
+      "cost.data-scope",
+      { connectionId: null, targetId: null },
+      isStoredCostDataScope,
+    );
+
+  const restoringStoredCostScope =
+    connectionId === null &&
+    storedCostScopeRestored &&
+    storedCostScope.connectionId !== null;
   const [error, setError] = useState("");
   const [requestError, setRequestError] = useState<string | null>(null);
+  const requestSequenceRef = useRef(0);
   const [pending, startTransition] = useTransition();
   const dataScopeKey = `${connectionId ?? "all"}:${targetId ?? "all"}`;
   const [result, setResult] = useState<OverviewResult>({
@@ -228,7 +254,6 @@ export function SpendOverviewClient({
     trendAvailable: initialTrendAvailable,
     previousTrendAvailable: initialPreviousTrendAvailable,
   });
-  const restoredQueryApplied = useRef(false);
   // Falls back to the freshly server-fetched initial props when the connection/
   // target scope changes without this client component remounting — mirrors
   // `CostExplorerClient`'s own `dataScopeKey` guard.
@@ -274,6 +299,8 @@ export function SpendOverviewClient({
     setError("");
     const { periodStart, periodEnd } = rangeToIso(range);
     const rangeKey = `${periodStart}:${periodEnd}`;
+    const requestId = ++requestSequenceRef.current;
+
     startTransition(async () => {
       const overviewResult = await getCostOverviewAction({
         periodStart,
@@ -282,6 +309,8 @@ export function SpendOverviewClient({
         targetId,
         topN: 5,
       });
+      if (requestId !== requestSequenceRef.current) return;
+
       if (overviewResult.error) {
         setRequestError(overviewResult.error);
         return;
@@ -324,6 +353,8 @@ export function SpendOverviewClient({
           scope: [],
         }),
       ]);
+      if (requestId !== requestSequenceRef.current) return;
+
       setResult({
         rangeKey,
         dataScopeKey,
@@ -335,31 +366,6 @@ export function SpendOverviewClient({
       });
     });
   }
-
-  const restoreQuery = useEffectEvent(() => {
-    runQuery();
-  });
-
-  useEffect(() => {
-    if (restoredQueryApplied.current || !presetRestored) {
-      return;
-    }
-
-    if (preset === "custom" && (!customStartRestored || !customEndRestored)) {
-      return;
-    }
-    restoredQueryApplied.current = true;
-    const differsFromInitial =
-      preset !== "mtd" || customStart !== "" || customEnd !== "";
-    if (differsFromInitial) window.setTimeout(restoreQuery, 0);
-  }, [
-    preset,
-    presetRestored,
-    customStart,
-    customStartRestored,
-    customEnd,
-    customEndRestored,
-  ]);
 
   const displayedRange = activeRange() ?? monthToDateRange();
   const periodLabel = formatCostPeriod(
@@ -373,6 +379,37 @@ export function SpendOverviewClient({
     result.dataScopeKey === dataScopeKey ? result.rangeKey : initialRangeKey;
   const resultMatchesDisplayedRange =
     activeResultRangeKey === displayedRangeKey;
+
+  const syncDisplayedRange = useEffectEvent(() => {
+    runQuery(displayedRange);
+  });
+
+  useEffect(() => {
+    if (!presetRestored || restoringStoredCostScope) return;
+
+    if (preset === "custom" && (!customStartRestored || !customEndRestored)) {
+      return;
+    }
+
+    if (pending || requestError || resultMatchesDisplayedRange) return;
+
+    const sync = window.setTimeout(syncDisplayedRange, 0);
+    return () => window.clearTimeout(sync);
+  }, [
+    preset,
+    presetRestored,
+    customStart,
+    customStartRestored,
+    customEnd,
+    customEndRestored,
+    displayedRangeKey,
+    activeResultRangeKey,
+    pending,
+    requestError,
+    resultMatchesDisplayedRange,
+    restoringStoredCostScope,
+  ]);
+
   const hasCompleteFocusCoverage =
     resultMatchesDisplayedRange && overview?.source === "cost_usage";
   const focusPeriodStart = hasCompleteFocusCoverage
@@ -583,7 +620,9 @@ export function SpendOverviewClient({
             <h2 className="text-lg font-semibold tracking-tight">
               Spend overview
             </h2>
-            {overview ? <SourceBadge source={overview.source} /> : null}
+            {overview && !restoringStoredCostScope ? (
+              <SourceBadge source={overview.source} />
+            ) : null}
           </div>
           <p className="text-muted-foreground mt-1 text-xs">
             {periodLabel} vs. the immediately preceding period of equal length.
@@ -694,6 +733,13 @@ export function SpendOverviewClient({
                 {pending ? "Retrying?" : "Retry"}
               </button>
             }
+          />
+        </div>
+      ) : restoringStoredCostScope || !resultMatchesDisplayedRange ? (
+        <div className="mt-4">
+          <EmptyState
+            title="Loading cost data..."
+            description="Refreshing the selected period."
           />
         </div>
       ) : overview === null ? (
