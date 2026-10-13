@@ -25,6 +25,16 @@ const SOURCE_LABELS: Record<string, { label: string; description: string }> = {
     description:
       "Observed network traffic, read from the flow log objects in S3 for VPCs without a CloudWatch Logs flow log.",
   },
+  dns_query_logs: {
+    label: "DNS query logs",
+    description:
+      "Names each resource looked up, read from Route 53 Resolver query logs in CloudWatch Logs; joined with flow logs to name the hosts traffic went to.",
+  },
+  dns_query_logs_s3: {
+    label: "DNS query logs (S3)",
+    description:
+      "The same, read from the query log objects in S3 for VPCs without CloudWatch Logs query logging.",
+  },
   alb_access_logs: {
     label: "ALB access logs",
     description:

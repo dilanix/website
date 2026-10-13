@@ -51,6 +51,7 @@ const RUNTIME_TYPES = new Set([
   "routes_to",
   "targets",
   "exposes",
+  "resolves",
 ]);
 
 const VPC_TYPE = "network.vpc";

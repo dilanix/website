@@ -27,6 +27,7 @@ export const VERBS: Record<string, string> = {
   depends_on: "depends on",
   connects_to: "connects",
   communicates_with: "exchanges traffic",
+  resolves: "looks up",
 };
 
 /** Strongest evidence first: what we saw beats what configuration allows. */

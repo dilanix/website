@@ -49,6 +49,7 @@ const RELATIONSHIP_LABELS: Record<string, string> = {
   exposes: "exposes",
   deployed_from: "deployed from",
   triggers: "triggers",
+  resolves: "looks up",
 };
 
 const NETWORK_TYPES = new Set([
@@ -402,6 +403,9 @@ function explainExternal(evidence: CoreGraphEvidence, caller: string) {
   }
   if (evidence.kind === "observed" && a.source === "xray") {
     return `AWS X-Ray traced ${Number(a.requests ?? 0).toLocaleString("en-US")} calls from ${caller} (${Number(a.errors ?? 0)} errors), last ${relative(evidence.last_observed_at)}.`;
+  }
+  if (evidence.kind === "observed" && a.source === "dns_query_logs") {
+    return `${caller} looked up this host and VPC Flow Logs recorded ${formatBytes(Number(a.bytes ?? 0))} over ${Number(a.flows ?? 0)} flows with an address it was answered, last ${relative(evidence.last_observed_at)}. This shows traffic, not which requests were made.${evidence.endpoint_identity === "heuristic" ? " The address also answered other host names, so the traffic may have been for another of them." : ""}`;
   }
   if (evidence.kind === "inferred" && typeof a.rationale === "string") {
     return `AI (${Math.round((evidence.confidence ?? 0) * 100)}% confidence): ${a.rationale}`;
@@ -1012,6 +1016,12 @@ function explainInteraction(
     return {
       kind: "observed",
       text: `ALB access logs recorded ${Number(a.requests ?? 0).toLocaleString("en-US")} requests from ${name(detail.source)} to ${name(detail.target)}${ports ? ` (port ${ports})` : ""}, ${Number(a.server_errors ?? 0)} with a 5xx response, last ${relative(evidence.last_observed_at)}. Access logs are best-effort and show only what passed through the load balancer.${evidence.endpoint_identity === "heuristic" ? " The address was not registered in the logged target group, so it may belong to another resource." : ""}`,
+    };
+  }
+  if (evidence.kind === "observed" && a.source === "dns_query_logs") {
+    return {
+      kind: "observed",
+      text: `Route 53 Resolver query logs recorded ${name(detail.source)} looking up ${name(detail.target)}'s name ${Number(a.queries ?? 0).toLocaleString("en-US")} times, last ${relative(evidence.last_observed_at)}. A lookup does not show that a connection followed.`,
     };
   }
   if (evidence.kind === "observed" && a.source === "vpc_flow_logs") {
