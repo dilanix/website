@@ -390,6 +390,15 @@ type ResourceTab =
   | "tags"
   | "raw";
 
+/** How a chain's last resource interacts with the external endpoint: a
+ *  call, or only traffic exchanged with it (a DNS answer joined with flows). */
+const EXTERNAL_VERBS: Record<string, string> = {
+  connects_to: "calls",
+  routes_to: "routes to",
+  targets: "targets",
+  communicates_with: "exchanges traffic with",
+};
+
 /** Why the resource is said to call an external endpoint — one line per
  *  piece of evidence on the final call. */
 function explainExternal(evidence: CoreGraphEvidence, caller: string) {
@@ -474,6 +483,15 @@ function ExternalList({
                   {item.observed ? "Observed" : "Not observed end to end"}
                 </span>
               </div>
+              <p className="text-muted-foreground text-[11px]">
+                {callerName}{" "}
+                {EXTERNAL_VERBS[item.relationship_type] ??
+                  item.relationship_type}{" "}
+                this {item.endpoint_kind === "host" ? "host" : "address"}
+                {item.relationship_type === "communicates_with"
+                  ? " — traffic was seen, not which requests were made."
+                  : "."}
+              </p>
               {item.hops.length ? (
                 <p className="text-muted-foreground flex flex-wrap items-center gap-1 text-[11px]">
                   via

@@ -426,8 +426,62 @@ describe("ResourceInspector external endpoints", () => {
         /AWS X-Ray traced 1,500 calls from litellm \(2 errors\)/,
       ),
     ).toBeTruthy();
+    expect(screen.getByText("litellm calls this host.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "litellm" }));
     expect(onSelectResource).toHaveBeenCalledWith("litellm");
+  });
+
+  it("says traffic named by a DNS answer is traffic, not calls", () => {
+    render(
+      <ResourceInspector
+        detail={detail}
+        neighborhood={neighborhood}
+        external={{
+          resource: api,
+          nodes: [],
+          truncated: false,
+          items: [
+            {
+              endpoint_kind: "host",
+              endpoint: "api.openai.com",
+              provider: "openai",
+              relationship_type: "communicates_with",
+              via_resource_id: api.id,
+              hops: [],
+              evidence: [
+                {
+                  kind: "observed",
+                  producer: "aws.dns_query_logs_s3",
+                  confidence: null,
+                  endpoint_identity: "heuristic",
+                  first_observed_at: "2026-10-13T09:00:00Z",
+                  last_observed_at: "2026-10-13T10:00:00Z",
+                  attributes: {
+                    source: "dns_query_logs",
+                    bytes: 2048,
+                    flows: 3,
+                  },
+                },
+              ],
+              observed: false,
+              identity: "heuristic",
+            },
+          ],
+        }}
+        onClose={vi.fn()}
+        onSelectResource={vi.fn()}
+        onSelectRelationship={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /External/ }));
+    expect(
+      screen.getByText(/exchanges traffic with this host — traffic was seen/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/looked up this host and VPC Flow Logs recorded/),
+    ).toBeTruthy();
+    expect(screen.getByText(/also answered other host names/)).toBeTruthy();
   });
 
   it("does not claim a resource calls nothing when none is known", () => {
