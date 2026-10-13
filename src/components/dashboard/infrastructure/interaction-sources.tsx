@@ -18,7 +18,12 @@ const SOURCE_LABELS: Record<string, { label: string; description: string }> = {
   xray: { label: "AWS X-Ray", description: "Traced calls between services." },
   vpc_flow_logs: {
     label: "VPC Flow Logs",
-    description: "Observed network traffic.",
+    description: "Observed network traffic, read from CloudWatch Logs.",
+  },
+  vpc_flow_logs_s3: {
+    label: "VPC Flow Logs (S3)",
+    description:
+      "Observed network traffic, read from the flow log objects in S3 for VPCs without a CloudWatch Logs flow log.",
   },
   alb_access_logs: {
     label: "ALB access logs",
