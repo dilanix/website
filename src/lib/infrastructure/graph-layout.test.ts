@@ -32,6 +32,15 @@ function edge(source: string, target: string, type = "connects_to"): ModelEdge {
     source,
     target,
     relationshipType: type,
+    relationshipTypes: [type],
+    directed: true,
+    facts: [
+      {
+        relationshipType: type,
+        kinds: ["configured"],
+        relationshipIds: [`${source}-${target}-${type}`],
+      },
+    ],
     kinds: ["configured"],
     ports: [],
     relationshipIds: [`${source}-${target}-${type}`],

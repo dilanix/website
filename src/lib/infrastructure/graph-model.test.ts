@@ -231,15 +231,10 @@ describe("buildGraphModel in Runtime mode", () => {
     expect(model.nodes.some((item) => item.kind === "group")).toBe(false);
     expect(model.nodes.every((item) => item.parentId === null)).toBe(true);
     expect(edgeKeys(model)).toEqual(
-      [
-        "alb>api",
-        "api>db",
-        "api>queue",
-        "queue>worker",
-        "worker>db",
-        `${INTERNET_NODE_ID}>alb`,
-      ].sort(),
+      ["alb>api", "api>db", "api>queue", "queue>worker", "worker>db"].sort(),
     );
+    // Addressable from the Internet is how it is built, not an interaction.
+    expect(ids(model)).not.toContain(INTERNET_NODE_ID);
     // The security-group "can reach" edge api -> db is not an interaction;
     // the api -> db edge drawn here is the inferred `reads_from`.
     expect(
@@ -249,6 +244,54 @@ describe("buildGraphModel in Runtime mode", () => {
     expect(
       model.edges.find((item) => item.source === "worker")?.lastObservedAt,
     ).toBe("2026-09-28T01:00:00Z");
+  });
+
+  it("draws the Internet when internet traffic to a resource was observed", () => {
+    const model = buildGraphModel(
+      {
+        ...runtimeGraph,
+        edges: runtimeGraph.edges.map((item) =>
+          item.relationship_type === "exposes"
+            ? { ...item, evidence_kinds: ["configured", "observed"] }
+            : item,
+        ),
+      },
+      options("architecture", { mode: "runtime" }),
+    );
+
+    const internet = model.edges.find(
+      (item) => item.source === INTERNET_NODE_ID,
+    );
+    expect(internet?.target).toBe("alb");
+    expect(internet?.kinds).toEqual(["observed"]);
+  });
+
+  it("draws every relationship between two resources as one line", () => {
+    const model = buildGraphModel(
+      {
+        ...runtimeGraph,
+        edges: [
+          ...runtimeGraph.edges,
+          edge("alb", "connects_to", "api", ["observed", "permitted"]),
+        ],
+      },
+      options("architecture", { mode: "runtime" }),
+    );
+
+    const lines = model.edges.filter(
+      (item) => item.source === "alb" && item.target === "api",
+    );
+    expect(lines).toHaveLength(1);
+    const [line] = lines;
+    // Labelled by the strongest evidence; the target-group chain stays a fact.
+    expect(line.relationshipType).toBe("connects_to");
+    expect(line.relationshipTypes).toEqual(["connects_to", "targets"]);
+    expect(line.kinds).toEqual(["configured", "observed"]);
+    expect(line.facts.map((fact) => fact.relationshipIds)).toEqual([
+      ["alb-connects_to-api"],
+      ["alb-routes_to-tg", "tg-targets-api"],
+    ]);
+    expect(line.directed).toBe(true);
   });
 
   it("filters interactions by evidence kind", () => {
@@ -285,6 +328,32 @@ describe("buildGraphModel with undirected traffic", () => {
 
     expect(edgeKeys(model)).toEqual(["db>worker"]);
     expect(UNDIRECTED_TYPES.has(model.edges[0].relationshipType)).toBe(true);
+    expect(model.edges[0].directed).toBe(false);
+  });
+
+  it("joins undirected traffic to the directed line of the same pair", () => {
+    const model = buildGraphModel(
+      {
+        ...graph,
+        edges: [
+          ...graph.edges,
+          edge("db", "communicates_with", "api", ["observed"]),
+        ],
+      },
+      options("architecture"),
+    );
+
+    const lines = model.edges.filter(
+      (item) =>
+        [item.source, item.target].sort().join() === ["api", "db"].join(),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({
+      source: "api",
+      target: "db",
+      directed: true,
+      relationshipType: "communicates_with",
+    });
   });
 });
 

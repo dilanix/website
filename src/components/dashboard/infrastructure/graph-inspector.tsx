@@ -1072,13 +1072,17 @@ type ConnectionTab = "overview" | "path" | "evidence" | "raw";
 export function ConnectionInspector({
   detail,
   hops,
+  hopLabels,
   activeHop,
   onSelectHop,
   onClose,
   onSelectResource,
 }: {
   detail: CoreConnectionDetail;
+  /** Every relationship behind the selected line (a collapsed chain's hops in order). */
   hops: string[];
+  /** Relationship type of each hop. */
+  hopLabels?: string[];
   activeHop: string;
   onSelectHop: (id: string) => void;
   onClose: () => void;
@@ -1130,7 +1134,9 @@ export function ConnectionInspector({
                     : "border-border-soft text-muted-foreground",
                 )}
               >
-                Hop {index + 1}
+                {hopLabels?.[index]
+                  ? (RELATIONSHIP_LABELS[hopLabels[index]] ?? hopLabels[index])
+                  : `Hop ${index + 1}`}
               </button>
             ))}
           </div>

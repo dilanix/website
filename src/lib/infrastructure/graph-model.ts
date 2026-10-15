@@ -59,6 +59,20 @@ const SUBNET_TYPE = "network.subnet";
 const INTERNET_GATEWAY_TYPE = "network.internet_gateway";
 const SECURITY_GROUP_TYPE = "network.security_group";
 
+/** Strongest evidence first: what was seen beats what configuration allows. */
+const EVIDENCE_STRENGTH: CoreEvidenceKind[] = [
+  "observed",
+  "user_confirmed",
+  "configured",
+  "permitted",
+  "inferred",
+];
+
+function strength(kinds: readonly CoreEvidenceKind[]) {
+  const rank = EVIDENCE_STRENGTH.findIndex((kind) => kinds.includes(kind));
+  return rank === -1 ? EVIDENCE_STRENGTH.length : rank;
+}
+
 /** Relationship types traffic flows along; hidden nodes on such a chain are collapsed. */
 const FLOW_TYPES = new Set(["routes_to", "targets", "exposes"]);
 
@@ -85,11 +99,30 @@ export interface ModelNode {
   matches: boolean;
 }
 
+/** One relationship behind a drawn line: a Core relationship, or a chain of
+ *  them collapsed through hidden resources (`relationshipIds` in hop order). */
+export interface ModelFact {
+  relationshipType: string;
+  kinds: CoreEvidenceKind[];
+  relationshipIds: string[];
+}
+
+/**
+ * One drawn line per pair of drawn nodes: every relationship between them
+ * (e.g. a load balancer that `targets` a service through a target group and
+ * was `observed` connecting to it) is one line, never parallel lines.
+ */
 export interface ModelEdge {
   id: string;
   source: string;
   target: string;
+  /** The strongest-evidence relationship, which labels the line. */
   relationshipType: string;
+  relationshipTypes: string[];
+  /** `false` only when every relationship behind it is undirected traffic. */
+  directed: boolean;
+  /** The relationships behind the line, strongest evidence first. */
+  facts: ModelFact[];
   kinds: CoreEvidenceKind[];
   ports: CoreGraphEdgeSummary["ports"];
   /** Core relationships this drawn edge stands for (several when collapsed). */
@@ -389,24 +422,28 @@ export function buildGraphModel(
 
   // Edges between drawn nodes; containment is shown by nesting, not lines.
   const edges = new Map<string, ModelEdge>();
-  const addEdge = (edge: Omit<ModelEdge, "id">) => {
+  const addEdge = (
+    edge: Omit<ModelEdge, "id" | "relationshipTypes" | "directed" | "facts">,
+  ) => {
     if (edge.source === edge.target) return;
     const key = `${edge.source}->${edge.target}:${edge.relationshipType}`;
+    const fact: ModelFact = {
+      relationshipType: edge.relationshipType,
+      kinds: edge.kinds,
+      relationshipIds: edge.relationshipIds,
+    };
     const existing = edges.get(key);
     if (existing) {
-      existing.kinds = [...new Set([...existing.kinds, ...edge.kinds])].sort();
-      existing.lastObservedAt =
-        [existing.lastObservedAt, edge.lastObservedAt]
-          .filter((value): value is string => Boolean(value))
-          .sort()
-          .at(-1) ?? null;
-      existing.relationshipIds = [
-        ...new Set([...existing.relationshipIds, ...edge.relationshipIds]),
-      ];
-      existing.ports = [...existing.ports, ...edge.ports];
+      merge(existing, { ...edge, facts: [fact] });
       return;
     }
-    edges.set(key, { id: key, ...edge });
+    edges.set(key, {
+      id: key,
+      ...edge,
+      relationshipTypes: [edge.relationshipType],
+      directed: !UNDIRECTED_TYPES.has(edge.relationshipType),
+      facts: [fact],
+    });
   };
   const isWorkloadToWorkloadConnects = (edge: CoreGraphEdgeSummary) =>
     edge.relationship_type === "connects_to" &&
@@ -424,6 +461,12 @@ export function buildGraphModel(
     let kinds = [...edge.evidence_kinds];
     if (edge.relationship_type === "connects_to")
       kinds = kinds.filter((kind) => kind !== "permitted");
+    // Internet-addressable (configured) or open to the world (permitted) is
+    // how it is built; Runtime draws the Internet only for traffic seen.
+    if (edge.relationship_type === "exposes")
+      kinds = kinds.filter(
+        (kind) => kind !== "configured" && kind !== "permitted",
+      );
     const selected = options.evidenceKinds;
     if (selected) kinds = kinds.filter((kind) => selected.has(kind));
     return kinds.length ? kinds.sort() : null;
@@ -541,7 +584,82 @@ export function buildGraphModel(
     });
   }
 
-  return { nodes, edges: [...edges.values()], matchCount };
+  return { nodes, edges: onePerPair([...edges.values()]), matchCount };
+}
+
+function merge(
+  into: ModelEdge,
+  edge: Pick<
+    ModelEdge,
+    "kinds" | "ports" | "relationshipIds" | "via" | "lastObservedAt" | "facts"
+  >,
+) {
+  into.kinds = [...new Set([...into.kinds, ...edge.kinds])].sort();
+  into.lastObservedAt =
+    [into.lastObservedAt, edge.lastObservedAt]
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1) ?? null;
+  into.relationshipIds = [
+    ...new Set([...into.relationshipIds, ...edge.relationshipIds]),
+  ];
+  into.via = [...new Set([...into.via, ...edge.via])];
+  into.ports = [...into.ports, ...edge.ports];
+  into.facts = [...into.facts, ...edge.facts];
+}
+
+/**
+ * Every relationship between two drawn nodes as one line, labelled by its
+ * strongest evidence. Undirected traffic joins the directed line of its pair
+ * when there is exactly one; both directions stay separate lines.
+ */
+function onePerPair(lines: ModelEdge[]): ModelEdge[] {
+  const groups = new Map<string, ModelEdge[]>();
+  const add = (key: string, line: ModelEdge) =>
+    groups.set(key, [...(groups.get(key) ?? []), line]);
+  for (const line of lines)
+    if (line.directed) add(`${line.source}->${line.target}`, line);
+  for (const line of lines) {
+    if (line.directed) continue;
+    const directions = [
+      `${line.source}->${line.target}`,
+      `${line.target}->${line.source}`,
+    ].filter((key) => groups.has(key));
+    add(
+      directions.length === 1
+        ? directions[0]
+        : [line.source, line.target].sort().join("<->"),
+      line,
+    );
+  }
+  return [...groups.entries()].map(([key, members]) => {
+    const ordered = [...members].sort(
+      (a, b) =>
+        strength(a.kinds) - strength(b.kinds) ||
+        a.relationshipType.localeCompare(b.relationshipType),
+    );
+    const anchor = ordered.find((line) => line.directed) ?? ordered[0];
+    const line: ModelEdge = {
+      ...ordered[0],
+      id: key,
+      source: anchor.source,
+      target: anchor.target,
+      relationshipTypes: [],
+      directed: ordered.some((item) => item.directed),
+      facts: [],
+      kinds: [],
+      ports: [],
+      relationshipIds: [],
+      via: [],
+      lastObservedAt: null,
+    };
+    for (const item of ordered) merge(line, item);
+    line.facts.sort((a, b) => strength(a.kinds) - strength(b.kinds));
+    line.relationshipTypes = [
+      ...new Set(line.facts.map((fact) => fact.relationshipType)),
+    ];
+    return line;
+  });
 }
 
 /** Resources every view can offer as expansion/search targets. */

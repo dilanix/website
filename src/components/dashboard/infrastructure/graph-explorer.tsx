@@ -54,7 +54,6 @@ import {
   formatPorts,
   nodeMatches,
   searchResources,
-  UNDIRECTED_TYPES,
   type GraphMode,
   type GraphModel,
   type GraphView,
@@ -228,6 +227,11 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(
     new Set(),
+  );
+  /** Relationship id -> type, to name each relationship behind a line. */
+  const relationshipTypes = useMemo(
+    () => new Map(graph.edges.map((edge) => [edge.id, edge.relationship_type])),
+    [graph.edges],
   );
   const [hiddenCategories, setHiddenCategories] = useState<ReadonlySet<string>>(
     new Set(),
@@ -644,8 +648,8 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
         dash: style?.dash,
         label: [verb, formatPorts(edge.ports)].filter(Boolean).join(" · "),
         flow:
-          TRAFFIC_TYPES.has(edge.relationshipType) &&
-          !UNDIRECTED_TYPES.has(edge.relationshipType) &&
+          edge.directed &&
+          edge.relationshipTypes.some((type) => TRAFFIC_TYPES.has(type)) &&
           kind !== "permitted" &&
           kind !== "inferred",
       };
@@ -656,7 +660,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
         type: "relationship",
         data,
         zIndex: Z_EDGE,
-        markerEnd: UNDIRECTED_TYPES.has(edge.relationshipType)
+        markerEnd: !edge.directed
           ? undefined
           : {
               type: MarkerType.ArrowClosed,
@@ -851,10 +855,10 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
           }}
           onMoveEnd={() => setMoving(false)}
           onEdgeClick={(_, edge) => {
-            const hops =
-              (edge.data as GraphEdgeData | undefined)?.model.relationshipIds ??
-              [];
-            if (hops.length) loadConnection(hops, hops[hops.length - 1]);
+            const model = (edge.data as GraphEdgeData | undefined)?.model;
+            const strongest = model?.facts[0]?.relationshipIds.at(-1);
+            if (model && strongest)
+              loadConnection(model.relationshipIds, strongest);
           }}
           onPaneClick={() => {
             clearSelection();
@@ -1233,6 +1237,9 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
             key={selection.active}
             detail={connectionState.data}
             hops={selection.hops}
+            hopLabels={selection.hops.map(
+              (hop) => relationshipTypes.get(hop) ?? "",
+            )}
             activeHop={selection.active}
             onSelectHop={(hop) => loadConnection(selection.hops, hop)}
             onClose={clearSelection}
