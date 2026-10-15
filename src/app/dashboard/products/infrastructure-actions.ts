@@ -7,12 +7,14 @@ import {
   CoreApiError,
   getInfrastructureConnection,
   getInfrastructureResource,
+  getInfrastructureResourceCoverage,
   listInfrastructureExternalEndpoints,
   listInfrastructureRelationships,
   type CoreConnectionDetail,
   type CoreGraphNodeDetail,
   type CoreResourceExternalReach,
   type CoreResourceNeighborhood,
+  type CoreResourceTrafficCoverage,
 } from "@/lib/core/api";
 
 export type InfrastructureActionResult<T> = { data?: T; error?: string };
@@ -58,17 +60,23 @@ export async function getGraphResourceAction(resourceId: string): Promise<
     /** `null` when the external endpoints could not be read — the rest of
      *  the inspector still works. */
     external: CoreResourceExternalReach | null;
+    /** Whether its traffic could be seen over the last 7 days; `null` when
+     *  it could not be read. */
+    coverage: CoreResourceTrafficCoverage | null;
   }>
 > {
   return run(resourceId, async (organizationId, id, token) => {
-    const [detail, neighborhood, external] = await Promise.all([
+    const [detail, neighborhood, external, coverage] = await Promise.all([
       getInfrastructureResource(organizationId, id, token),
       listInfrastructureRelationships(organizationId, id, token),
       listInfrastructureExternalEndpoints(organizationId, id, token).catch(
         () => null,
       ),
+      getInfrastructureResourceCoverage(organizationId, id, token).catch(
+        () => null,
+      ),
     ]);
-    return { detail, neighborhood, external };
+    return { detail, neighborhood, external, coverage };
   });
 }
 

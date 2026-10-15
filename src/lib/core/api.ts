@@ -3820,13 +3820,78 @@ export interface CoreGraphResolution {
   relationship_count: number;
 }
 
+/**
+ * Whether a resource's traffic could be seen at all: `covered` — every flow /
+ * request of the period was read; `partial` — part of it, or the resource is
+ * only matched heuristically; `none` — nothing that can see it was read;
+ * `not_observable` — no signal Dilanix reads can show it. No observed
+ * traffic means nothing unless `covered`.
+ */
+export type CoreTrafficState =
+  "covered" | "partial" | "none" | "not_observable";
+
+/** A scope resource's own call or traffic with an external endpoint (never a
+ *  lookup alone); `provider` only when its documentation lists the host. */
+export interface CoreScopeExternalInteraction {
+  resource_id: string;
+  endpoint_kind: "host" | "ip_address";
+  endpoint: string;
+  provider: string | null;
+  relationship_type: string;
+  evidence_kinds: CoreEvidenceKind[];
+  exact: boolean;
+  observed: boolean;
+  last_observed_at: string;
+}
+
+/** Addresses/hosts no collected resource held that a scope resource exchanged
+ *  traffic with over the last 7 days (flow and access logs). */
+export interface CoreUnresolvedContacts {
+  resource_id: string;
+  addresses: number;
+  bytes: number;
+  requests: number;
+  last_seen_at: string;
+}
+
 export interface CoreScopeGraph {
-  nodes: { node: CoreGraphNode; layer: CoreGraphLayer }[];
+  nodes: {
+    node: CoreGraphNode;
+    layer: CoreGraphLayer;
+    /** Service-layer nodes only, over the last 7 days. */
+    traffic?: CoreTrafficState | null;
+  }[];
   edges: CoreGraphEdgeSummary[];
   total_nodes: number;
   truncated: boolean;
   resolution: CoreGraphResolution | null;
   sources: CoreInteractionSourceStatus[];
+  external?: CoreScopeExternalInteraction[];
+  unresolved?: CoreUnresolvedContacts[];
+}
+
+/** One signal that could show the resource's traffic (`network_traffic`: VPC
+ *  flow logs; `load_balancer_requests`: access logs) or its name lookups
+ *  (`name_lookups`, never counted as traffic). */
+export interface CoreSignalCoverage {
+  signal: "network_traffic" | "load_balancer_requests" | "name_lookups";
+  state: "covered" | "partial" | "none" | "not_applicable";
+  reasons: string[];
+  source: string | null;
+  visible_from: string | null;
+  visible_until: string | null;
+  read_ratio: number;
+  gaps: number;
+}
+
+export interface CoreResourceTrafficCoverage {
+  resource: CoreGraphNode;
+  coverage: {
+    state: CoreTrafficState;
+    since: string;
+    until: string;
+    signals: CoreSignalCoverage[];
+  };
 }
 
 /** One layer of a reachability verdict; `not_evaluated` layers (e.g. network
@@ -3994,6 +4059,19 @@ export function listInfrastructureExternalEndpoints(
 ) {
   return coreRequest<CoreResourceExternalReach>(
     `${infrastructureGraphPath(organizationId)}/resources/${resourceId}/external-endpoints`,
+    token,
+  );
+}
+
+export function getInfrastructureResourceCoverage(
+  organizationId: string,
+  resourceId: string,
+  token: string,
+  params: { days?: number } = {},
+) {
+  const query = new URLSearchParams({ days: String(params.days ?? 7) });
+  return coreRequest<CoreResourceTrafficCoverage>(
+    `${infrastructureGraphPath(organizationId)}/resources/${resourceId}/coverage?${query.toString()}`,
     token,
   );
 }

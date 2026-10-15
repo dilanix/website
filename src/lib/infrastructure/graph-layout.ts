@@ -9,6 +9,8 @@ import type { GraphModel, ModelNode } from "./graph-model";
 
 export const RESOURCE_NODE_SIZE = { width: 248, height: 68 } as const;
 export const INTERNET_NODE_SIZE = { width: 148, height: 84 } as const;
+/** An external endpoint or the unresolved-addresses node (Runtime). */
+export const OUTSIDE_NODE_SIZE = { width: 232, height: 56 } as const;
 export const COLLAPSED_GROUP_SIZE = { width: 264, height: 68 } as const;
 
 export interface Point {
@@ -75,6 +77,8 @@ const LEAF_OPTIONS: LayoutOptions = {
 
 function nodeSize(node: ModelNode) {
   if (node.kind === "internet") return INTERNET_NODE_SIZE;
+  if (node.kind === "external" || node.kind === "unresolved")
+    return OUTSIDE_NODE_SIZE;
   if (node.kind === "group") return COLLAPSED_GROUP_SIZE;
   return RESOURCE_NODE_SIZE;
 }
@@ -136,7 +140,12 @@ export function toElkGraph(model: GraphModel): ElkNode {
                   ...LEAF_OPTIONS,
                   "elk.layered.layering.layerConstraint": "FIRST",
                 }
-              : LEAF_OPTIONS,
+              : node.kind === "external" || node.kind === "unresolved"
+                ? {
+                    ...LEAF_OPTIONS,
+                    "elk.layered.layering.layerConstraint": "LAST",
+                  }
+                : LEAF_OPTIONS,
         };
     const nodePorts = ports.get(node.id);
     if (nodePorts) elkNode.ports = nodePorts;

@@ -28,9 +28,11 @@ import type {
   CoreReachabilityCheck,
   CoreResourceExternalReach,
   CoreResourceNeighborhood,
+  CoreResourceTrafficCoverage,
 } from "@/lib/core/api";
 import { formatPorts } from "@/lib/infrastructure/graph-model";
 import { EVIDENCE_STYLES, resourceVisual } from "./resource-visuals";
+import { TrafficCoverage } from "./traffic-coverage";
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
   contains: "contains",
@@ -387,6 +389,7 @@ type ResourceTab =
   | "security"
   | "relationships"
   | "external"
+  | "traffic"
   | "tags"
   | "raw";
 
@@ -551,6 +554,7 @@ export function ResourceInspector({
   detail,
   neighborhood,
   external,
+  coverage = null,
   onClose,
   onSelectResource,
   onSelectRelationship,
@@ -558,6 +562,8 @@ export function ResourceInspector({
   detail: CoreGraphNodeDetail;
   neighborhood: CoreResourceNeighborhood;
   external: CoreResourceExternalReach | null;
+  /** Whether its traffic could be seen over the last 7 days. */
+  coverage?: CoreResourceTrafficCoverage | null;
   onClose: () => void;
   onSelectResource: (id: string) => void;
   onSelectRelationship: (id: string) => void;
@@ -637,6 +643,7 @@ export function ResourceInspector({
             count: neighborhood.total_edges,
           },
           { id: "external", label: "External", count: external?.items.length },
+          { id: "traffic", label: "Traffic" },
           { id: "tags", label: "Tags", count: tags.length },
           { id: "raw", label: "Raw" },
         ]}
@@ -701,6 +708,7 @@ export function ResourceInspector({
           </div>
         ) : null}
         {tab === "relationships" ? list(() => true) : null}
+        {tab === "traffic" ? <TrafficCoverage coverage={coverage} /> : null}
         {tab === "external" ? (
           <ExternalList
             resource={node}

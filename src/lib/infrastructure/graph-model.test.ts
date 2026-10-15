@@ -6,6 +6,7 @@ import type {
 } from "@/lib/core/api";
 import {
   INTERNET_NODE_ID,
+  UNRESOLVED_NODE_ID,
   buildGraphModel,
   formatPorts,
   UNDIRECTED_TYPES,
@@ -366,5 +367,119 @@ describe("formatPorts", () => {
         { protocol: "-1", from_port: null, to_port: null },
       ]),
     ).toBe("TCP 5432, TCP 8000-8080, All traffic");
+  });
+});
+
+describe("buildGraphModel outside the collected accounts", () => {
+  const outside: CoreScopeGraph = {
+    ...graph,
+    nodes: graph.nodes.map((item) =>
+      item.node.id === "api" ? { ...item, traffic: "none" as const } : item,
+    ),
+    external: [
+      {
+        resource_id: "api",
+        endpoint_kind: "host",
+        endpoint: "api.openai.com",
+        provider: "openai",
+        relationship_type: "connects_to",
+        evidence_kinds: ["observed"],
+        exact: true,
+        observed: true,
+        last_observed_at: "2026-10-15T10:00:00Z",
+      },
+      {
+        resource_id: "db",
+        endpoint_kind: "host",
+        endpoint: "api.openai.com",
+        provider: "openai",
+        relationship_type: "connects_to",
+        evidence_kinds: ["inferred"],
+        exact: true,
+        observed: false,
+        last_observed_at: "2026-10-15T10:00:00Z",
+      },
+    ],
+    unresolved: [
+      {
+        resource_id: "api",
+        addresses: 14,
+        bytes: 1000,
+        requests: 0,
+        last_seen_at: "2026-10-15T09:00:00Z",
+      },
+    ],
+  };
+
+  it("draws one node per external host and one for every unresolved address, in Runtime only", () => {
+    const runtime = buildGraphModel(
+      outside,
+      options("architecture", { mode: "runtime" }),
+    );
+    const provisioned = buildGraphModel(outside, options("architecture"));
+
+    const host = runtime.nodes.find((item) => item.kind === "external");
+    expect(host?.endpoint).toEqual({
+      value: "api.openai.com",
+      kind: "host",
+      provider: "openai",
+    });
+    expect(
+      runtime.edges
+        .filter((item) => item.target === host?.id)
+        .map((item) => [item.source, item.kinds]),
+    ).toEqual([
+      ["api", ["observed"]],
+      ["db", ["inferred"]],
+    ]);
+    const unresolved = runtime.edges.find(
+      (item) => item.target === UNRESOLVED_NODE_ID,
+    );
+    expect(unresolved).toMatchObject({
+      source: "api",
+      directed: false,
+      note: "14 addresses",
+    });
+    expect(
+      runtime.nodes.find((item) => item.id === UNRESOLVED_NODE_ID)?.unresolved,
+    ).toEqual({ resources: 1 });
+    expect(
+      provisioned.nodes.some(
+        (item) => item.kind === "external" || item.kind === "unresolved",
+      ),
+    ).toBe(false);
+  });
+
+  it("marks whether a resource's traffic was visible in Runtime only", () => {
+    const runtime = buildGraphModel(
+      outside,
+      options("architecture", { mode: "runtime" }),
+    );
+    const provisioned = buildGraphModel(outside, options("architecture"));
+
+    expect(runtime.nodes.find((item) => item.id === "api")?.traffic).toBe(
+      "none",
+    );
+    expect(runtime.nodes.find((item) => item.id === "db")?.traffic).toBeNull();
+    expect(
+      provisioned.nodes.find((item) => item.id === "api")?.traffic,
+    ).toBeUndefined();
+  });
+
+  it("follows the evidence filter", () => {
+    const model = buildGraphModel(
+      outside,
+      options("architecture", {
+        mode: "runtime",
+        evidenceKinds: new Set(["inferred"]),
+      }),
+    );
+
+    expect(
+      model.edges
+        .filter((item) => item.target.startsWith("external:"))
+        .map((item) => item.source),
+    ).toEqual(["db"]);
+    expect(model.nodes.some((item) => item.kind === "unresolved")).toBe(false);
   });
 });

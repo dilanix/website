@@ -2,7 +2,16 @@
 
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { ChevronDown, ChevronRight, Cloud, Minus, Plus } from "lucide-react";
+import {
+  ArrowUpRight,
+  ChevronDown,
+  ChevronRight,
+  CircleHelp,
+  Cloud,
+  EyeOff,
+  Minus,
+  Plus,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ModelNode } from "@/lib/infrastructure/graph-model";
 import { resourceVisual } from "./resource-visuals";
@@ -43,6 +52,22 @@ function status(node: ModelNode["resource"]) {
     return { tone: "bg-amber-400", label: node.status };
   return { tone: "bg-emerald-400", label: node.status };
 }
+
+/** Runtime: why missing connections on this resource may mean nothing. */
+const TRAFFIC_MARKERS = {
+  none: {
+    label: "Traffic not visible",
+    title:
+      "No source read this resource's traffic over the last 7 days — missing connections do not mean it is unused.",
+    className: "border-amber-400/45 bg-amber-400/12 text-amber-300",
+  },
+  partial: {
+    label: "Traffic partly visible",
+    title:
+      "Its traffic was read for only part of the last 7 days, or the resource is matched heuristically.",
+    className: "border-orange-400/40 bg-orange-400/10 text-orange-300",
+  },
+} as const;
 
 function IconTile({
   tile,
@@ -112,6 +137,18 @@ export const ResourceNode = memo(function ResourceNode({
           </span>
         </span>
       </span>
+      {model.traffic === "none" || model.traffic === "partial" ? (
+        <span
+          className={cn(
+            "graph-traffic-marker absolute -top-2 left-3 flex items-center gap-1 rounded-full border px-1.5 py-px text-[9.5px] font-semibold",
+            TRAFFIC_MARKERS[model.traffic].className,
+          )}
+          title={TRAFFIC_MARKERS[model.traffic].title}
+        >
+          <EyeOff size={10} />
+          {TRAFFIC_MARKERS[model.traffic].label}
+        </span>
+      ) : null}
       {model.hiddenNeighbors > 0 || model.expanded ? (
         <button
           type="button"
@@ -261,8 +298,63 @@ export const InternetNode = memo(function InternetNode() {
   );
 });
 
+/** Runtime: an external endpoint scope resources call or exchange traffic with. */
+export const ExternalNode = memo(function ExternalNode({
+  data,
+}: NodeProps & { data: GraphNodeData }) {
+  const endpoint = data.model.endpoint!;
+  return (
+    <div
+      className="graph-card flex h-[56px] w-[232px] items-center gap-2.5 rounded-full border border-dashed px-3"
+      title={`${endpoint.value}${endpoint.provider ? ` · ${endpoint.provider}` : ""} — outside the collected accounts`}
+    >
+      <Handles />
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-400/12 text-violet-300">
+        <ArrowUpRight size={16} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="graph-node-title text-foreground block truncate font-mono text-[12px] leading-5 font-semibold">
+          {endpoint.value}
+        </span>
+        <span className="graph-node-sub text-muted-foreground block truncate text-[11px] leading-4">
+          {endpoint.provider ? `${endpoint.provider} · ` : ""}External
+          {endpoint.kind === "ip_address" ? " address" : " host"}
+        </span>
+      </span>
+    </div>
+  );
+});
+
+/** Runtime: every address/host no collected resource held, as one node. */
+export const UnresolvedNode = memo(function UnresolvedNode({
+  data,
+}: NodeProps & { data: GraphNodeData }) {
+  const resources = data.model.unresolved?.resources ?? 0;
+  return (
+    <div
+      className="graph-card flex h-[56px] w-[232px] items-center gap-2.5 rounded-full border border-dashed px-3"
+      title="Addresses no collected resource held: outside the collected accounts, AWS services, or uncollected interfaces. Never one node per address."
+    >
+      <Handles />
+      <span className="bg-muted-foreground/12 text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full">
+        <CircleHelp size={16} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="graph-node-title text-foreground block truncate text-[12.5px] leading-5 font-semibold">
+          Unresolved addresses
+        </span>
+        <span className="graph-node-sub text-muted-foreground block truncate text-[11px] leading-4">
+          Traffic with {resources} {resources === 1 ? "resource" : "resources"}
+        </span>
+      </span>
+    </div>
+  );
+});
+
 export const graphNodeTypes = {
   resource: ResourceNode,
   group: GroupNode,
   internet: InternetNode,
+  external: ExternalNode,
+  unresolved: UnresolvedNode,
 };

@@ -43,6 +43,7 @@ import type {
   CoreEvidenceKind,
   CoreGraphNodeDetail,
   CoreResourceExternalReach,
+  CoreResourceTrafficCoverage,
   CoreResourceNeighborhood,
   CoreScopeGraph,
 } from "@/lib/core/api";
@@ -255,6 +256,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
         detail: CoreGraphNodeDetail;
         neighborhood: CoreResourceNeighborhood;
         external: CoreResourceExternalReach | null;
+        coverage: CoreResourceTrafficCoverage | null;
       }>
     >
   >({});
@@ -626,7 +628,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
         width: size?.width,
         height: size?.height,
         draggable: !expandedGroup,
-        selectable: node.kind !== "internet",
+        selectable: node.kind === "resource" || node.kind === "group",
         zIndex: expandedGroup ? 0 : Z_RESOURCE,
       } satisfies Node;
     });
@@ -646,7 +648,9 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
         route: layout.routes.get(edge.id) ?? null,
         color,
         dash: style?.dash,
-        label: [verb, formatPorts(edge.ports)].filter(Boolean).join(" · "),
+        label:
+          edge.note ??
+          [verb, formatPorts(edge.ports)].filter(Boolean).join(" · "),
         flow:
           edge.directed &&
           edge.relationshipTypes.some((type) => TRAFFIC_TYPES.has(type)) &&
@@ -828,7 +832,8 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
           elevateEdgesOnSelect={false}
           zoomOnDoubleClick={false}
           onNodeClick={(_, node) => {
-            if (node.id === INTERNET_NODE_ID) return;
+            const kind = (node.data as GraphNodeData).model.kind;
+            if (kind !== "resource" && kind !== "group") return;
             loadResource(node.id);
           }}
           onNodeDoubleClick={(_, node) => {
@@ -1218,6 +1223,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
             detail={resourceState.data.detail}
             neighborhood={resourceState.data.neighborhood}
             external={resourceState.data.external}
+            coverage={resourceState.data.coverage}
             onClose={clearSelection}
             onSelectResource={focusResource}
             onSelectRelationship={(id) => loadConnection([id], id)}

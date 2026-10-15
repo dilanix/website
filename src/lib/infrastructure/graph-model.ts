@@ -4,6 +4,7 @@ import type {
   CoreGraphLayer,
   CoreGraphNode,
   CoreScopeGraph,
+  CoreTrafficState,
 } from "@/lib/core/api";
 
 /**
@@ -34,6 +35,9 @@ export const GRAPH_MODES: { id: GraphMode; label: string; hint: string }[] = [
 ];
 
 export const INTERNET_NODE_ID = "internet";
+/** Runtime only: every address/host no collected resource held, as one node. */
+export const UNRESOLVED_NODE_ID = "unresolved";
+const EXTERNAL_PREFIX = "external:";
 
 /** Relationship types that state two resources exchange traffic without
  *  saying who initiates it (a VPC flow): drawn without an arrow. */
@@ -84,8 +88,14 @@ const VIEW_LAYERS: Record<GraphView, ReadonlySet<CoreGraphLayer>> = {
 
 export interface ModelNode {
   id: string;
-  kind: "resource" | "internet" | "group";
+  kind: "resource" | "internet" | "group" | "external" | "unresolved";
   resource: CoreGraphNode | null;
+  /** Runtime only: whether the resource's traffic could be seen (last 7 days). */
+  traffic?: CoreTrafficState | null;
+  /** An external endpoint node (`kind: "external"`). */
+  endpoint?: { value: string; kind: string; provider: string | null };
+  /** The unresolved node: how many drawn resources talk to such addresses. */
+  unresolved?: { resources: number };
   /** Container this node is drawn inside (a VPC or, in Network view, a subnet). */
   parentId: string | null;
   layer: CoreGraphLayer | null;
@@ -131,6 +141,8 @@ export interface ModelEdge {
   via: string[];
   /** When telemetry last saw this interaction, if ever. */
   lastObservedAt: string | null;
+  /** A label the line carries instead of its verb and ports (e.g. "14 addresses"). */
+  note?: string;
 }
 
 export interface GraphModel {
@@ -214,6 +226,9 @@ export function buildGraphModel(
   const isContainer = (resourceType: string) =>
     !runtime && isContainerType(resourceType, view);
   const resources = new Map(graph.nodes.map((item) => [item.node.id, item]));
+  const traffic = new Map(
+    graph.nodes.map((item) => [item.node.id, item.traffic ?? null]),
+  );
 
   // Placement: resource -> subnet/VPC it belongs to.
   const placement = new Map<string, string[]>();
@@ -373,6 +388,8 @@ export function buildGraphModel(
       id,
       kind,
       resource: item.node,
+      traffic:
+        runtime && kind === "resource" ? (traffic.get(id) ?? null) : undefined,
       parentId:
         parent && drawn.has(parent) && !collapsedGroups.has(parent)
           ? parent
@@ -569,6 +586,10 @@ export function buildGraphModel(
       lastObservedAt: edge.last_observed_at,
     });
   }
+  if (runtime) {
+    addOutside(graph, options, drawnId, nodes, addEdge);
+  }
+
   if (internetUsed) {
     nodes.unshift({
       id: INTERNET_NODE_ID,
@@ -691,4 +712,98 @@ export function formatPorts(ports: CoreGraphEdgeSummary["ports"]) {
     }
   }
   return [...labels].join(", ");
+}
+
+/**
+ * Runtime only: what scope resources talk to outside the collected accounts —
+ * one node per external endpoint they call or exchange traffic with
+ * themselves, and one node for every address/host no collected resource held
+ * (counted, never listed one by one). Drawn only from evidence the evidence
+ * filter keeps.
+ */
+function addOutside(
+  graph: CoreScopeGraph,
+  options: GraphModelOptions,
+  drawnId: (id: string) => string | null,
+  nodes: ModelNode[],
+  addEdge: (
+    edge: Omit<ModelEdge, "id" | "relationshipTypes" | "directed" | "facts">,
+  ) => void,
+) {
+  const selected = options.evidenceKinds;
+  const query = options.query.trim().toLowerCase();
+  const endpoints = new Map<string, ModelNode>();
+  for (const item of graph.external ?? []) {
+    const source = drawnId(item.resource_id);
+    const kinds = item.evidence_kinds.filter(
+      (kind) => !selected || selected.has(kind),
+    );
+    if (!source || !kinds.length) continue;
+    const id = `${EXTERNAL_PREFIX}${item.endpoint}`;
+    if (!endpoints.has(id))
+      endpoints.set(id, {
+        id,
+        kind: "external",
+        resource: null,
+        endpoint: {
+          value: item.endpoint,
+          kind: item.endpoint_kind,
+          provider: item.provider,
+        },
+        parentId: null,
+        layer: null,
+        hiddenNeighbors: 0,
+        expanded: false,
+        memberCount: 0,
+        collapsed: false,
+        matches:
+          !query ||
+          item.endpoint.toLowerCase().includes(query) ||
+          (item.provider ?? "").toLowerCase().includes(query),
+      });
+    addEdge({
+      source,
+      target: id,
+      relationshipType: item.relationship_type,
+      kinds: [...kinds].sort(),
+      ports: [],
+      relationshipIds: [],
+      via: [],
+      lastObservedAt: item.observed ? item.last_observed_at : null,
+    });
+  }
+  nodes.push(...endpoints.values());
+
+  if (selected && !selected.has("observed")) return;
+  const talking = new Set<string>();
+  for (const item of graph.unresolved ?? []) {
+    const source = drawnId(item.resource_id);
+    if (!source) continue;
+    talking.add(source);
+    addEdge({
+      source,
+      target: UNRESOLVED_NODE_ID,
+      relationshipType: "communicates_with",
+      kinds: ["observed"],
+      ports: [],
+      relationshipIds: [],
+      via: [],
+      lastObservedAt: item.last_seen_at,
+      note: `${item.addresses} ${item.addresses === 1 ? "address" : "addresses"}`,
+    });
+  }
+  if (!talking.size) return;
+  nodes.push({
+    id: UNRESOLVED_NODE_ID,
+    kind: "unresolved",
+    resource: null,
+    unresolved: { resources: talking.size },
+    parentId: null,
+    layer: null,
+    hiddenNeighbors: 0,
+    expanded: false,
+    memberCount: 0,
+    collapsed: false,
+    matches: !query,
+  });
 }
