@@ -10,8 +10,8 @@ export interface TryItRequest {
   pathParams: Record<string, string>;
   query: Record<string, string>;
   body: string | null;
-  /** Only for the telemetry ingestion endpoint, which a session cannot call. */
-  ingestionToken?: string;
+  /** The client credential the operation takes (e.g. an ingestion token). */
+  credential?: string;
   /** Non-GET requests change data — the caller must have confirmed them. */
   confirmed: boolean;
 }
@@ -30,10 +30,11 @@ const TIMEOUT_MS = 20_000;
 const SAFE_SEGMENT = /^[A-Za-z0-9._~:-]{1,200}$/;
 
 /**
- * Runs one API reference "Try it" request as the signed-in user. Only an
+ * Runs one API reference "Try it" request for a signed-in user. Only an
  * operation of the client-facing reference can be called (looked up in Core's
- * own OpenAPI, never taken from the browser), `{organization_id}` is always
- * the user's own organization, and the session token never leaves the server.
+ * own OpenAPI, never taken from the browser), it is sent with the credential
+ * the user pasted — never their session — and `{organization_id}` is always
+ * the user's own organization.
  */
 export async function tryApiRequestAction(
   request: TryItRequest,
@@ -52,11 +53,6 @@ export async function tryApiRequestAction(
       .find((item) => item.id === request.operationId);
     if (!operation)
       return { error: "This endpoint is not part of the API reference." };
-    if (operation.auth === "none")
-      return {
-        error:
-          "Sign-in endpoints are shown as code only — you are already signed in.",
-      };
     if (operation.method !== "GET" && !request.confirmed)
       return {
         error:
@@ -105,10 +101,11 @@ export async function tryApiRequestAction(
       }
     }
 
-    const bearer =
-      operation.auth === "ingestion" ? request.ingestionToken?.trim() : token;
+    const bearer = request.credential?.trim();
     if (!bearer)
-      return { error: "Paste an ingestion token to send telemetry." };
+      return {
+        error: `Paste your ${operation.credential.label.toLowerCase()} to send this request.`,
+      };
 
     const started = Date.now();
     const response = await fetch(

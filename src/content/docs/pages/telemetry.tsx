@@ -242,7 +242,6 @@ export function SendLogsPage({ baseUrl }: DocsPageProps) {
 
       <DocSection title="The request">
         <DocTable
-          head={["", ""]}
           rows={[
             ["Endpoint", <InlineCode key="v">POST {url}</InlineCode>],
             [

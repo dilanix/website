@@ -118,39 +118,16 @@ const doc: OpenApiDocument = {
 };
 
 describe("buildApiReference", () => {
-  it("keeps only the client-facing groups, in order, without excluded operations", () => {
+  it("keeps only what a customer's own code can call — never dashboard endpoints", () => {
     const groups = buildApiReference(doc);
 
-    expect(groups.map((group) => group.id)).toEqual([
-      "authentication",
-      "telemetry-ingestion",
-      "applications",
-    ]);
-    expect(groups[0]?.operations.map((operation) => operation.path)).toEqual([
-      "/v1/auth/login",
-    ]);
+    expect(groups.map((group) => group.id)).toEqual(["telemetry-ingestion"]);
     expect(
-      groups
-        .flatMap((group) => group.operations)
-        .some((operation) => operation.path.startsWith("/v1/site")),
-    ).toBe(false);
-  });
-
-  it("marks how each operation authenticates", () => {
-    const operations = buildApiReference(doc).flatMap(
-      (group) => group.operations,
-    );
-
-    expect(
-      operations.find((operation) => operation.path === "/v1/auth/login")?.auth,
-    ).toBe("none");
-    expect(
-      operations.find((operation) => operation.path === "/v1/telemetry/logs")
-        ?.auth,
-    ).toBe("ingestion");
-    expect(
-      operations.find((operation) => operation.method === "GET")?.auth,
-    ).toBe("session");
+      groups.flatMap((group) => group.operations).map((item) => item.path),
+    ).toEqual(["/v1/telemetry/logs"]);
+    expect(groups[0]?.operations[0]?.credential.placeholder).toBe("dtt_…");
+    expect(groups[0]?.operations[0]?.summary).toBe("Send logs");
+    expect(groups[0]?.operations[0]?.description).not.toMatch(/\.md/);
   });
 
   it("resolves references and builds a realistic example body", () => {
@@ -183,28 +160,17 @@ describe("buildApiReference", () => {
 });
 
 describe("codeSamples", () => {
-  it("fills in the organization and the right credential", () => {
-    const operations = buildApiReference(doc).flatMap(
-      (group) => group.operations,
-    );
-    const get = operations.find((operation) => operation.method === "GET")!;
-    const ingest = operations.find(
-      (operation) => operation.path === "/v1/telemetry/logs",
-    )!;
+  it("authorizes with the operation's own credential", () => {
+    const ingest = buildApiReference(doc)[0]!.operations[0]!;
 
     const [curl, javascript, python] = codeSamples(
-      get,
+      ingest,
       "https://api.example.com",
       "org-1",
     );
-    expect(curl?.code).toContain(
-      "https://api.example.com/v1/organizations/org-1/applications/{application_id}",
-    );
-    expect(curl?.code).toContain("$DILANIX_TOKEN");
-    expect(javascript?.code).toContain('method: "GET"');
-    expect(python?.code).toContain("requests.get(");
-    expect(
-      codeSamples(ingest, "https://api.example.com", "org-1")[0]?.code,
-    ).toContain("$DILANIX_INGESTION_TOKEN");
+    expect(curl?.code).toContain("https://api.example.com/v1/telemetry/logs");
+    expect(curl?.code).toContain("$DILANIX_INGESTION_TOKEN");
+    expect(javascript?.code).toContain('method: "POST"');
+    expect(python?.code).toContain("requests.post(");
   });
 });

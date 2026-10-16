@@ -203,22 +203,15 @@ export const DOCS_SECTIONS: DocsSection[] = [
       {
         slug: "api",
         title: "API overview",
-        description: "Base URL, authentication, errors, and conventions.",
+        description: "Ingestion tokens, API keys, errors, and conventions.",
         icon: "code",
-        keywords: [
-          "api",
-          "rest",
-          "authentication",
-          "bearer",
-          "token",
-          "errors",
-        ],
+        keywords: ["api", "rest", "api key", "bearer", "token", "errors"],
       },
       {
         slug: "api-reference",
         title: "API reference",
         description:
-          "Every client endpoint, with schemas, code samples, and Try it.",
+          "The endpoints your own code can call, with schemas, code samples, and Try it.",
         icon: "braces",
         keywords: ["endpoints", "openapi", "try it", "reference"],
       },

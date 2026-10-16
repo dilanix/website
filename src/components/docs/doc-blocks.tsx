@@ -593,24 +593,27 @@ export function DocTable({
   head,
   rows,
 }: {
-  head: string[];
+  /** Omit for a key/value table without a header row. */
+  head?: string[];
   rows: ReactNode[][];
 }) {
   return (
     <div className="border-border-soft overflow-x-auto rounded-2xl border">
       <table className="w-full text-left text-sm">
-        <thead className="bg-foreground/[0.03] text-foreground">
-          <tr>
-            {head.map((cell) => (
-              <th
-                key={cell}
-                className="border-border-soft border-b px-4 py-3 font-semibold whitespace-nowrap"
-              >
-                {cell}
-              </th>
-            ))}
-          </tr>
-        </thead>
+        {head ? (
+          <thead className="bg-foreground/[0.03] text-foreground">
+            <tr>
+              {head.map((cell) => (
+                <th
+                  key={cell}
+                  className="border-border-soft border-b px-4 py-3 font-semibold whitespace-nowrap"
+                >
+                  {cell}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        ) : null}
         <tbody className="divide-border-soft divide-y">
           {rows.map((row, index) => (
             <tr

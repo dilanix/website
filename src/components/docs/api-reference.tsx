@@ -18,6 +18,7 @@ import {
 } from "@/app/dashboard/docs/actions";
 import {
   codeSamples,
+  PLANNED_API_GROUPS,
   typeLabel,
   unwrapNullable,
   type ApiGroup,
@@ -214,7 +215,7 @@ function TryIt({
   const [pathParams, setPathParams] = useState<Record<string, string>>({});
   const [query, setQuery] = useState<Record<string, string>>({});
   const [body, setBody] = useState(initialBody);
-  const [ingestionToken, setIngestionToken] = useState("");
+  const [credential, setCredential] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<TryItResponse | null>(null);
@@ -229,21 +230,11 @@ function TryIt({
         pathParams,
         query,
         body: operation.body ? body : null,
-        ingestionToken,
+        credential,
         confirmed,
       }),
     );
     setPending(false);
-  }
-
-  if (operation.auth === "none") {
-    return (
-      <div className="border-border-soft text-muted-foreground flex gap-2 rounded-2xl border p-4 text-sm">
-        <Lock size={15} className="mt-0.5 shrink-0" /> You are already signed
-        in, so this endpoint is shown as code only. Use it from your own scripts
-        to get a token.
-      </div>
-    );
   }
 
   const field =
@@ -255,10 +246,7 @@ function TryIt({
           <Play size={14} className="text-accent" /> Try it
         </h3>
         <span className="text-muted-foreground flex items-center gap-1 text-[11px]">
-          <ShieldCheck size={12} />{" "}
-          {operation.auth === "ingestion"
-            ? "Uses the token you paste"
-            : "Runs as you"}
+          <ShieldCheck size={12} /> Uses the key you paste, never your session
         </span>
       </div>
       {operation.parameters.map((parameter) => (
@@ -305,21 +293,19 @@ function TryIt({
           )}
         </label>
       ))}
-      {operation.auth === "ingestion" ? (
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="text-muted-foreground flex items-center gap-1">
-            <KeyRound size={12} /> Ingestion token
-          </span>
-          <input
-            type="password"
-            autoComplete="off"
-            className={field}
-            placeholder="dtt_…"
-            value={ingestionToken}
-            onChange={(event) => setIngestionToken(event.target.value)}
-          />
-        </label>
-      ) : null}
+      <label className="flex flex-col gap-1 text-xs">
+        <span className="text-muted-foreground flex items-center gap-1">
+          <KeyRound size={12} /> {operation.credential.label}
+        </span>
+        <input
+          type="password"
+          autoComplete="off"
+          className={field}
+          placeholder={operation.credential.placeholder}
+          value={credential}
+          onChange={(event) => setCredential(event.target.value)}
+        />
+      </label>
       {operation.body ? (
         <label className="flex flex-col gap-1 text-xs">
           <span className="text-muted-foreground flex items-center justify-between">
@@ -455,11 +441,7 @@ function OperationView({
           ) : null}
           <p className="text-muted-foreground mt-3 flex items-center gap-1.5 text-xs">
             <KeyRound size={12} />
-            {operation.auth === "ingestion"
-              ? "Authorization: Bearer <ingestion token> with the telemetry:logs:write scope"
-              : operation.auth === "none"
-                ? "No authorization needed"
-                : "Authorization: Bearer <access token>"}
+            {operation.credential.header}
           </p>
         </div>
         {operation.parameters.length ? (
@@ -647,6 +629,32 @@ export function ApiReference({
               No endpoint matches “{search}”.
             </p>
           ) : null}
+          <div>
+            <p className="text-muted-foreground mb-1 flex items-center gap-2 px-1 text-[10px] font-semibold tracking-[0.16em] uppercase">
+              With an API key
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-px text-[9px] tracking-normal text-amber-600 normal-case dark:text-amber-300">
+                Planned
+              </span>
+            </p>
+            <ul className="flex flex-col gap-0.5">
+              {PLANNED_API_GROUPS.map((item) => (
+                <li
+                  key={item.id}
+                  className="text-muted-foreground flex items-start gap-2 rounded-lg px-1.5 py-1.5 text-[12.5px] opacity-80"
+                >
+                  <MethodBadge method="GET" compact />
+                  <span>
+                    <span className="text-foreground/80 block">
+                      {item.title}
+                    </span>
+                    <span className="text-[11px] leading-4">
+                      {item.description}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </nav>
       </aside>
       <div className="min-w-0">

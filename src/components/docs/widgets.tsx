@@ -188,7 +188,7 @@ export function LogPlayground({ baseUrl }: { baseUrl: string }) {
         pathParams: {},
         query: {},
         body: json,
-        ingestionToken: token,
+        credential: token,
         confirmed: true,
       }),
     );

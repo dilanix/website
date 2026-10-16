@@ -63,7 +63,14 @@ export interface OpenApiDocument {
   components?: { schemas?: Record<string, JsonSchema> };
 }
 
-export type ApiAuth = "session" | "ingestion" | "none";
+/** The credential a client sends with an operation — always one it creates
+ * itself in Dilanix, never a user's session. */
+export interface ApiCredential {
+  label: string;
+  placeholder: string;
+  envVar: string;
+  header: string;
+}
 
 export interface ApiParameter {
   name: string;
@@ -79,7 +86,7 @@ export interface ApiOperation {
   path: string;
   summary: string;
   description: string | null;
-  auth: ApiAuth;
+  credential: ApiCredential;
   parameters: ApiParameter[];
   body: { required: boolean; schema: JsonSchema; example: unknown } | null;
   responses: {
@@ -102,91 +109,59 @@ interface GroupDefinition {
   title: string;
   description: string;
   tags: string[];
-  /** Operations of these tags a client never needs here. */
-  exclude?: RegExp;
-  auth?: ApiAuth;
+  credential: ApiCredential;
+  /** Customer-facing wording by "METHOD /path" — Core's own descriptions are
+   * written for its developers. */
+  text?: Record<string, { summary: string; description: string }>;
 }
 
-/** The customer-facing surface, in reading order. Everything else in Core's
- * OpenAPI (admin, onboarding, site, blog, …) is used only by the dashboard. */
+const INGESTION_TOKEN: ApiCredential = {
+  label: "Ingestion token",
+  placeholder: "dtt_…",
+  envVar: "DILANIX_INGESTION_TOKEN",
+  header:
+    "Authorization: Bearer <ingestion token> with the telemetry:logs:write scope",
+};
+
+/** What a customer's own code can call today. Everything else in Core's
+ * OpenAPI (sign-in, settings, admin, …) is used only by the dashboard. */
 export const API_GROUPS: GroupDefinition[] = [
-  {
-    id: "authentication",
-    title: "Authentication",
-    description:
-      "Exchange your Dilanix email and password for a short-lived access token, refresh it, and read who you are.",
-    tags: ["auth"],
-    exclude: /change-password|logout-all/,
-  },
   {
     id: "telemetry-ingestion",
     title: "Telemetry ingestion",
     description:
       "Send application logs with a source-scoped ingestion token — the endpoint your services call.",
     tags: ["telemetry-ingestion"],
-    auth: "ingestion",
+    credential: INGESTION_TOKEN,
+    text: {
+      "POST /v1/telemetry/logs": {
+        summary: "Send logs",
+        description:
+          "Accepts a batch of 1 to 1,000 log entries for the telemetry source the token belongs to — the token alone decides the organization, application, and environment. Values of secret-looking attributes are redacted before storage. Answers 202 with the number of accepted entries.",
+      },
+    },
   },
-  {
-    id: "applications",
-    title: "Applications",
-    description:
-      "The logical services you run, such as portal-api or payments-worker.",
-    tags: ["applications"],
-  },
-  {
-    id: "environments",
-    title: "Environments",
-    description: "Where an application runs: production, staging, development.",
-    tags: ["application-environments"],
-  },
-  {
-    id: "telemetry-sources",
-    title: "Telemetry sources",
-    description: "How telemetry for one environment enters Dilanix.",
-    tags: ["telemetry-sources"],
-  },
-  {
-    id: "ingestion-tokens",
-    title: "Ingestion tokens",
-    description:
-      "Create, list, revoke, and delete the tokens your services send telemetry with.",
-    tags: ["telemetry-ingestion-tokens"],
-  },
+];
+
+/** Read access with an API key — planned, not callable yet. Shown so
+ * customers know what is coming; never part of the reference or Try it. */
+export const PLANNED_API_GROUPS = [
   {
     id: "recommendations",
     title: "Recommendations",
-    description:
-      "Every product's recommendations for your organization, ranked best first.",
-    tags: ["recommendations"],
+    description: "Read your ranked recommendations and their details.",
   },
   {
     id: "cost",
     title: "Cost",
-    description:
-      "Spend, breakdowns, trends, forecasts, budgets, allocations, anomalies, reports, and Cost recommendations.",
-    tags: ["cost"],
-  },
-  {
-    id: "infrastructure",
-    title: "Infrastructure graph",
-    description:
-      "Your resources and the relationships between them, with evidence and traffic coverage.",
-    tags: ["infrastructure"],
+    description: "Read spend summaries, breakdowns, budgets, and anomalies.",
   },
   {
     id: "inventory",
-    title: "Inventory",
-    description: "The resources discovered in a connection, with filters.",
-    tags: ["inventory"],
+    title: "Inventory and infrastructure",
+    description: "Read your resources and how they connect.",
   },
-  {
-    id: "metrics",
-    title: "Metrics",
-    description:
-      "Utilization datapoints and summaries collected from your cloud.",
-    tags: ["metrics"],
-  },
-];
+] as const;
 
 const METHOD_ORDER = ["get", "post", "put", "patch", "delete"];
 const MAX_DEPTH = 6;
@@ -347,7 +322,7 @@ function buildOperation(
   path: string,
   operation: OpenApiOperation,
   doc: OpenApiDocument,
-  auth: ApiAuth,
+  credential: ApiCredential,
 ): ApiOperation {
   const parameters: ApiParameter[] = (operation.parameters ?? [])
     .filter(
@@ -392,10 +367,7 @@ function buildOperation(
     path,
     summary: operation.summary ?? `${method.toUpperCase()} ${path}`,
     description: operation.description?.trim() || null,
-    auth:
-      path.startsWith("/v1/auth/login") || path.startsWith("/v1/auth/refresh")
-        ? "none"
-        : auth,
+    credential,
     parameters,
     body,
     responses,
@@ -413,10 +385,17 @@ export function buildApiReference(doc: OpenApiDocument): ApiGroup[] {
           !operation.tags?.some((tag) => group.tags.includes(tag))
         )
           continue;
-        if (group.exclude?.test(path)) continue;
-        operations.push(
-          buildOperation(method, path, operation, doc, group.auth ?? "session"),
+        const built = buildOperation(
+          method,
+          path,
+          operation,
+          doc,
+          group.credential,
         );
+        operations.push({
+          ...built,
+          ...group.text?.[`${built.method} ${path}`],
+        });
       }
     }
     return {
@@ -448,19 +427,14 @@ export function codeSamples(
 ) {
   const path = operation.path.replace("{organization_id}", organizationId);
   const url = `${baseUrl}${path}`;
-  const tokenVariable =
-    operation.auth === "ingestion"
-      ? "DILANIX_INGESTION_TOKEN"
-      : "DILANIX_TOKEN";
+  const tokenVariable = operation.credential.envVar;
   const hasBody = operation.body !== null;
   const json = hasBody
     ? JSON.stringify(operation.body?.example ?? {}, null, 2)
     : "";
   const curl = [
     `curl -X ${operation.method} ${shellQuote(url)}`,
-    operation.auth === "none"
-      ? null
-      : `  -H "Authorization: Bearer $${tokenVariable}"`,
+    `  -H "Authorization: Bearer $${tokenVariable}"`,
     hasBody ? `  -H "Content-Type: application/json"` : null,
     hasBody ? `  -d ${shellQuote(json)}` : null,
   ]
@@ -470,9 +444,7 @@ export function codeSamples(
     `const response = await fetch("${url}", {`,
     `  method: "${operation.method}",`,
     `  headers: {`,
-    operation.auth === "none"
-      ? null
-      : `    Authorization: \`Bearer \${process.env.${tokenVariable}}\`,`,
+    `    Authorization: \`Bearer \${process.env.${tokenVariable}}\`,`,
     hasBody ? `    "Content-Type": "application/json",` : null,
     `  },`,
     hasBody ? `  body: JSON.stringify(${json.replace(/\n/g, "\n  ")}),` : null,
@@ -487,9 +459,7 @@ export function codeSamples(
     ``,
     `response = requests.${operation.method.toLowerCase()}(`,
     `    "${url}",`,
-    operation.auth === "none"
-      ? null
-      : `    headers={"Authorization": f"Bearer {os.environ['${tokenVariable}']}"},`,
+    `    headers={"Authorization": f"Bearer {os.environ['${tokenVariable}']}"},`,
     hasBody
       ? `    json=${json
           .replace(/\btrue\b/g, "True")

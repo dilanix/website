@@ -479,14 +479,15 @@ export function OrganizationPage() {
       <DocSection title="API keys">
         <p>
           <strong>API Keys</strong> (when enabled for your organization) creates
-          keys for programmatic access. A key is shown <strong>once</strong>{" "}
-          when you create it — store it in your secret manager. Keys are stored
-          only as a hash, can expire, and can be revoked at any time.
+          keys for programmatic access, with full access or restricted to the
+          products you pick. A key is shown <strong>once</strong> when you
+          create it — store it in your secret manager. Keys are stored only as a
+          hash, can expire, and can be revoked at any time.
         </p>
         <Callout tone="note" title="Which credential should I use?">
           To send telemetry, use an <strong>ingestion token</strong> from the
-          telemetry source — never a personal token. To read data from scripts,
-          use an access token as described in the{" "}
+          telemetry source. Endpoints that accept API keys — read access to
+          Recommendations, Cost, and Inventory — are planned; see the{" "}
           <DocLink
             href="/dashboard/docs/api"
             className="text-accent underline-offset-2 hover:underline"
@@ -503,7 +504,7 @@ export function OrganizationPage() {
             href="/dashboard/docs/api"
             icon="code"
             title="API overview"
-            description="Authenticate and call the API from your own code."
+            description="Credentials, API keys, and conventions."
           />
           <LinkCard
             href="/dashboard/docs/telemetry-sources"

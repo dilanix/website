@@ -103,7 +103,7 @@ describe("widgets", () => {
 
     const call = vi.mocked(tryApiRequestAction).mock.calls[0]![0];
     expect(call.operationId).toBe("post-v1-telemetry-logs");
-    expect(call.ingestionToken).toBe("dtt_test.secret");
+    expect(call.credential).toBe("dtt_test.secret");
     expect(JSON.parse(call.body!).logs[0].message).toBe("Payment captured");
     expect(screen.getByRole("status").textContent).toContain(
       "Accepted in 12 ms",

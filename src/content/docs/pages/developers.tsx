@@ -7,19 +7,20 @@ import {
   DocTable,
   InlineCode,
   LinkCard,
+  Pill,
   Step,
   Steps,
 } from "@/components/docs/doc-blocks";
 import type { DocsPageProps } from "./types";
 
-export function ApiOverviewPage({ baseUrl, organizationId }: DocsPageProps) {
+export function ApiOverviewPage({ baseUrl }: DocsPageProps) {
   return (
     <>
       <DocHero
         eyebrow="Developers"
         icon="code"
         title="API overview"
-        description="Everything in Dilanix is available over a JSON REST API: the same API the dashboard uses. Your services send telemetry with an ingestion token; your scripts read data as a user."
+        description="The Dilanix API is for your own code: your services send telemetry today, and read access with API keys is on the way. Every call uses a key you create in Dilanix — never a person's password."
       />
 
       <DocSection title="Base URL">
@@ -27,58 +28,59 @@ export function ApiOverviewPage({ baseUrl, organizationId }: DocsPageProps) {
           samples={[{ label: "Base URL", language: "text", code: baseUrl }]}
         />
         <p>
-          Every path starts with <InlineCode>/v1</InlineCode>. Your
-          organization&apos;s ID — <InlineCode>{organizationId}</InlineCode> —
-          goes into every{" "}
-          <InlineCode>/v1/organizations/{"{organization_id}"}/…</InlineCode>{" "}
-          path. Examples in this documentation already use it.
+          Every path starts with <InlineCode>/v1</InlineCode>. The key you send
+          decides which organization a request belongs to — nothing in the
+          request can change that.
         </p>
       </DocSection>
 
-      <DocSection title="Two kinds of credentials">
+      <DocSection title="Credentials">
         <DocTable
-          head={["Credential", "Used by", "Can do"]}
+          head={["Credential", "Looks like", "Use it for", "Status"]}
           rows={[
             [
-              "Ingestion token (dtt_…)",
-              "Your services and log shippers",
-              "Only send telemetry for its one source",
+              "Ingestion token",
+              <InlineCode key="f">dtt_…</InlineCode>,
+              "Sending logs from one telemetry source",
+              <Pill key="s" tone="success">
+                Available
+              </Pill>,
             ],
             [
-              "Access token",
-              "Your scripts and integrations, as a Dilanix user",
-              "Whatever that user's role allows",
+              "API key",
+              <InlineCode key="f">dil_live_…</InlineCode>,
+              "Reading Recommendations, Cost, and Inventory data",
+              <Pill key="s" tone="warning">
+                Planned
+              </Pill>,
             ],
           ]}
         />
         <Callout tone="important">
-          Never put a user&apos;s access token or password in an application.
-          Services send telemetry with an ingestion token.
+          Keep keys in a secret manager or environment variable, never in source
+          code. Both are shown only once when you create them and can be revoked
+          at any time.
         </Callout>
       </DocSection>
 
-      <DocSection title="Get an access token">
+      <DocSection title="Ingestion tokens">
         <Steps>
-          <Step title="Sign in">
+          <Step title="Create a telemetry source">
             <p>
-              Exchange email and password for tokens. The access token lasts
-              about an hour; the refresh token gets a new one without the
-              password.
+              In <strong>Applications</strong>, open the environment your
+              service runs in and add a source.
             </p>
           </Step>
-          <Step title="Call the API">
+          <Step title="Create a token">
             <p>
-              Send{" "}
-              <InlineCode>
-                Authorization: Bearer &lt;access_token&gt;
-              </InlineCode>{" "}
-              with every request.
+              The token belongs to that one source and carries the{" "}
+              <InlineCode>telemetry:logs:write</InlineCode> scope.
             </p>
           </Step>
-          <Step title="Refresh before it expires">
+          <Step title="Send logs">
             <p>
-              <InlineCode>expires_in</InlineCode> says when; call{" "}
-              <InlineCode>/v1/auth/refresh</InlineCode> with the refresh token.
+              Send <InlineCode>Authorization: Bearer &lt;token&gt;</InlineCode>{" "}
+              with <InlineCode>POST /v1/telemetry/logs</InlineCode>.
             </p>
           </Step>
         </Steps>
@@ -87,20 +89,34 @@ export function ApiOverviewPage({ baseUrl, organizationId }: DocsPageProps) {
             {
               label: "cURL",
               language: "bash",
-              code: `# 1. Sign in\ncurl -X POST '${baseUrl}/v1/auth/login' \\\n  -H "Content-Type: application/json" \\\n  -d '{"email": "you@company.com", "password": "your-password"}'\n# → {"access_token": "…", "refresh_token": "…", "token_type": "bearer", "expires_in": 3600, …}\n\n# 2. Call the API\ncurl '${baseUrl}/v1/organizations/${organizationId}/recommendations?limit=10' \\\n  -H "Authorization: Bearer $DILANIX_TOKEN"\n\n# 3. Refresh\ncurl -X POST '${baseUrl}/v1/auth/refresh' \\\n  -H "Content-Type: application/json" \\\n  -d '{"refresh_token": "…"}'`,
-            },
-            {
-              label: "Python",
-              language: "python",
-              code: `import os\nimport requests\n\nBASE = "${baseUrl}"\n\ntokens = requests.post(\n    f"{BASE}/v1/auth/login",\n    json={"email": os.environ["DILANIX_EMAIL"], "password": os.environ["DILANIX_PASSWORD"]},\n    timeout=30,\n).json()\nheaders = {"Authorization": f"Bearer {tokens['access_token']}"}\n\nme = requests.get(f"{BASE}/v1/auth/me", headers=headers, timeout=30).json()\norganization_id = me["organizations"][0]["organization_id"]\n\nrecommendations = requests.get(\n    f"{BASE}/v1/organizations/{organization_id}/recommendations",\n    headers=headers,\n    params={"limit": 10},\n    timeout=30,\n).json()\nfor item in recommendations["items"]:\n    print(item["rank"], item["title"])`,
-            },
-            {
-              label: "Node.js",
-              language: "javascript",
-              code: `const BASE = "${baseUrl}";\n\nconst tokens = await fetch(\`\${BASE}/v1/auth/login\`, {\n  method: "POST",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify({ email: process.env.DILANIX_EMAIL, password: process.env.DILANIX_PASSWORD }),\n}).then((response) => response.json());\n\nconst headers = { Authorization: \`Bearer \${tokens.access_token}\` };\nconst me = await fetch(\`\${BASE}/v1/auth/me\`, { headers }).then((response) => response.json());\nconst organizationId = me.organizations[0].organization_id;\n\nconst { items } = await fetch(\n  \`\${BASE}/v1/organizations/\${organizationId}/recommendations?limit=10\`,\n  { headers },\n).then((response) => response.json());\nconsole.log(items.map((item) => item.title));`,
+              code: `curl -X POST '${baseUrl}/v1/telemetry/logs' \\\n  -H "Authorization: Bearer $DILANIX_INGESTION_TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d '{"logs": [{"timestamp": "2026-10-16T09:30:00Z", "severity": "info", "message": "Payment captured"}]}'\n# → 202 {"accepted": 1}`,
             },
           ]}
         />
+      </DocSection>
+
+      <DocSection title="API keys">
+        <p>
+          Create keys on the <strong>API Keys</strong> page (when enabled for
+          your organization). A key looks like{" "}
+          <InlineCode>dil_live_1a2b3c4d.&lt;secret&gt;</InlineCode>: the part
+          before the dot stays visible in the list, the secret is shown once.
+        </p>
+        <DocTable
+          head={["Access", "Means"]}
+          rows={[
+            [
+              "Full",
+              "Every product your organization can use — follows your plan as it changes",
+            ],
+            ["Restricted", "Only the products you pick when creating the key"],
+          ]}
+        />
+        <Callout tone="warning" title="Planned">
+          No endpoint accepts API keys yet. Read access to Recommendations,
+          Cost, and Inventory with an API key is planned; this page and the API
+          reference will list those endpoints when they are available.
+        </Callout>
       </DocSection>
 
       <DocSection title="Conventions">
@@ -109,18 +125,10 @@ export function ApiOverviewPage({ baseUrl, organizationId }: DocsPageProps) {
           rows={[
             ["Format", "JSON in and out; send Content-Type: application/json"],
             ["IDs", "UUIDs"],
-            ["Time", "ISO 8601 in UTC, e.g. 2026-10-16T09:30:00Z"],
-            [
-              "Money",
-              "Decimal strings with a separate currency — never floats, never mixed currencies",
-            ],
-            [
-              "Lists",
-              "limit and offset query parameters; responses carry items and total",
-            ],
+            ["Time", "ISO 8601 with a time zone, e.g. 2026-10-16T09:30:00Z"],
             [
               "Tenancy",
-              "Everything is scoped to your organization; another organization's IDs answer 404",
+              "Your key decides the organization; another organization's data is never visible",
             ],
           ]}
         />
@@ -136,18 +144,12 @@ export function ApiOverviewPage({ baseUrl, organizationId }: DocsPageProps) {
           head={["Status", "Meaning"]}
           rows={[
             ["400", "The request is not valid for this resource"],
-            ["401", "Missing or expired credentials"],
-            ["403", "Your role or plan does not allow this"],
-            ["404", "Not found — or not in your organization"],
+            ["401", "Missing, invalid, expired, or revoked credential"],
             [
-              "409",
-              "Conflicts with the current state (for example, already running)",
+              "403",
+              "The credential does not allow this (for example, a missing scope)",
             ],
             ["422", "The body or parameters do not match the schema"],
-            [
-              "429",
-              "Too many requests, or the AI budget for the month is used up",
-            ],
           ]}
         />
       </DocSection>
@@ -158,7 +160,7 @@ export function ApiOverviewPage({ baseUrl, organizationId }: DocsPageProps) {
             href="/dashboard/docs/api-reference"
             icon="braces"
             title="API reference"
-            description="Schemas, code samples, and Try it for every client endpoint."
+            description="Schemas, code samples, and Try it for every endpoint you can call."
           />
           <LinkCard
             href="/dashboard/docs/send-logs"
