@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ChevronDown, RefreshCw, Search, Undo2 } from "lucide-react";
+import { ChevronDown, ChevronUp, RefreshCw, Search, Undo2 } from "lucide-react";
 import {
   getRecommendationAction,
   listAllRecommendationsAction,
@@ -68,7 +68,22 @@ function savingsLabel(recommendation: CoreUnifiedRecommendation) {
   const amount = Number(impact.amount).toLocaleString("en-US", {
     maximumFractionDigits: 2,
   });
-  return `${amount} ${impact.currency ?? ""} / ${impact.period}`;
+  return {
+    amount: `${amount} ${impact.currency ?? ""}`.trim(),
+    unit: `per ${impact.period}`,
+  };
+}
+
+/** The card's left edge: the priority of a real recommendation, muted for
+ * one that is not (yet) an actionable saving. */
+function accentStripe(recommendation: CoreUnifiedRecommendation) {
+  if (recommendation.status !== "active") return "bg-muted-foreground/40";
+  if (recommendation.ai_review?.outcome === "needs_input")
+    return "bg-amber-500";
+  if (!showsSavings(recommendation)) return "bg-muted-foreground/40";
+  if (recommendation.priority === "high") return "bg-amber-500";
+  if (recommendation.priority === "medium") return "bg-accent";
+  return "bg-success";
 }
 
 function sortRecommendations(items: CoreUnifiedRecommendation[]) {
@@ -199,6 +214,8 @@ function showsSavings(recommendation: CoreUnifiedRecommendation) {
 function RecommendationRow({
   recommendation,
   pending,
+  open,
+  onToggleOpen,
   expanded,
   onToggleDetails,
   onAction,
@@ -206,6 +223,8 @@ function RecommendationRow({
 }: {
   recommendation: CoreUnifiedRecommendation;
   pending: boolean;
+  open: boolean;
+  onToggleOpen: () => void;
   expanded: boolean;
   onToggleDetails: () => void;
   onAction: (
@@ -236,161 +255,243 @@ function RecommendationRow({
       : recommendation.summary;
   const busy = pending || review.active;
 
+  const needsInput =
+    guidance?.outcome === "needs_input" && guidance.questions.length > 0;
+  const bodyId = `recommendation-${recommendation.id}`;
+
   return (
-    <div className="flex flex-col gap-3 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge status="neutral">
-              {recommendation.product_key}
-            </StatusBadge>
-            <p className="text-sm font-semibold">{recommendation.title}</p>
+    <article
+      aria-label={recommendation.title}
+      className={cn(
+        "group/card relative overflow-hidden rounded-2xl border transition-all duration-200",
+        open
+          ? "border-accent/35 bg-card-strong/50 ring-accent/10 shadow-[0_18px_40px_var(--shadow-card)] ring-1"
+          : "border-border-soft bg-card-strong/25 hover:border-foreground/15 hover:bg-card-strong/45",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "absolute inset-y-0 left-0 w-1 transition-opacity",
+          accentStripe(recommendation),
+          open ? "opacity-100" : "opacity-60 group-hover/card:opacity-100",
+        )}
+      />
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={bodyId}
+        onClick={onToggleOpen}
+        className={cn(
+          "flex w-full items-start gap-3 py-3.5 pr-4 pl-5 text-left transition-colors",
+          open && "bg-accent/[0.04] border-border-soft border-b",
+        )}
+      >
+        <span
+          className={cn(
+            "border-border-soft bg-background/60 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border transition-transform duration-200",
+            open && "border-accent/40 text-accent rotate-180",
+          )}
+        >
+          <ChevronDown size={14} aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold">
+              {recommendation.title}
+            </span>
             {identity ? (
-              <code className="border-border-soft bg-card-strong/60 rounded px-1.5 py-0.5 text-[11px]">
+              <code className="border-border-soft bg-card-strong/60 rounded px-1.5 py-0.5 text-[11px] font-normal">
                 {identity}
               </code>
             ) : null}
+          </span>
+          <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <StatusBadge status="neutral">
+              {recommendation.product_key}
+            </StatusBadge>
             {recommendation.priority && showsSavings(recommendation) ? (
               <StatusBadge status={priorityTone(recommendation.priority)}>
-                {recommendation.priority}
+                {recommendation.priority} priority
               </StatusBadge>
             ) : null}
             <StatusBadge status={statusTone(recommendation.status)}>
               {recommendation.status}
             </StatusBadge>
-          </div>
-          {summary ? (
-            <p className="text-muted-foreground mt-1 text-xs">{summary}</p>
+            {needsInput ? (
+              <StatusBadge status="warning">Needs your input</StatusBadge>
+            ) : null}
+            {review.active ? (
+              <StatusBadge status="neutral">
+                <RefreshCw size={11} className="animate-spin" aria-hidden />
+                Re-checking
+              </StatusBadge>
+            ) : null}
+          </span>
+          {!open && summary ? (
+            <span className="text-muted-foreground mt-1.5 line-clamp-1 block text-xs">
+              {summary}
+            </span>
           ) : null}
-          <p className="text-muted-foreground mt-1 text-xs">
-            {savings ? `${savings} · ` : ""}
-            {recommendation.analyzer_key} · first detected{" "}
-            {formatDate(recommendation.first_detected_at)} · last seen{" "}
-            {formatDate(recommendation.last_detected_at)}
-            {recommendation.evidence.length > 0 ? (
-              <>
-                {" · "}
-                <button
-                  type="button"
-                  onClick={onToggleDetails}
-                  className="text-accent underline-offset-2 hover:underline"
-                >
-                  {expanded ? "Hide details" : "Show details"}
-                </button>
-              </>
-            ) : null}
-          </p>
-        </div>
-        {actionable ? (
-          <div className="flex shrink-0 items-center gap-3">
-            {recommendation.status === "active" ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  onAction(recommendation, dismissRecommendationAction)
-                }
-                className="text-muted-foreground hover:text-foreground text-xs disabled:opacity-50"
-              >
-                Dismiss
-              </button>
-            ) : null}
-            {recommendation.status !== "resolved" ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void review.start()}
-                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs disabled:opacity-50"
-              >
-                <RefreshCw
-                  size={13}
-                  className={cn(review.active && "animate-spin")}
-                />
-                {review.active ? "Re-checking…" : "Re-check"}
-              </button>
-            ) : null}
-            {recommendation.status === "dismissed" ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  onAction(recommendation, restoreRecommendationAction)
-                }
-                className="text-success inline-flex items-center gap-1 text-xs disabled:opacity-50"
-              >
-                <Undo2 size={13} /> Restore
-              </button>
+        </span>
+        {savings ? (
+          <span className="shrink-0 text-right">
+            <span className="text-success block font-mono text-sm font-semibold">
+              {savings.amount}
+            </span>
+            <span className="text-muted-foreground block text-[11px]">
+              {savings.unit}
+            </span>
+          </span>
+        ) : null}
+      </button>
+
+      {open ? (
+        <div
+          id={bodyId}
+          className="animate-toast-in flex flex-col gap-3 py-4 pr-4 pl-5"
+        >
+          {summary ? <p className="text-sm leading-6">{summary}</p> : null}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-muted-foreground text-xs">
+              {recommendation.analyzer_key} · first detected{" "}
+              {formatDate(recommendation.first_detected_at)} · last seen{" "}
+              {formatDate(recommendation.last_detected_at)}
+              {recommendation.evidence.length > 0 ? (
+                <>
+                  {" · "}
+                  <button
+                    type="button"
+                    onClick={onToggleDetails}
+                    className="text-accent underline-offset-2 hover:underline"
+                  >
+                    {expanded ? "Hide details" : "Show details"}
+                  </button>
+                </>
+              ) : null}
+            </p>
+            {actionable ? (
+              <div className="flex shrink-0 items-center gap-3">
+                {recommendation.status === "active" ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      onAction(recommendation, dismissRecommendationAction)
+                    }
+                    className="text-muted-foreground hover:text-foreground text-xs disabled:opacity-50"
+                  >
+                    Dismiss
+                  </button>
+                ) : null}
+                {recommendation.status !== "resolved" ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void review.start()}
+                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs disabled:opacity-50"
+                  >
+                    <RefreshCw
+                      size={13}
+                      className={cn(review.active && "animate-spin")}
+                    />
+                    {review.active ? "Re-checking…" : "Re-check"}
+                  </button>
+                ) : null}
+                {recommendation.status === "dismissed" ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      onAction(recommendation, restoreRecommendationAction)
+                    }
+                    className="text-success inline-flex items-center gap-1 text-xs disabled:opacity-50"
+                  >
+                    <Undo2 size={13} /> Restore
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
-        ) : null}
-      </div>
 
-      {expanded ? (
-        <div className="border-border-soft bg-card-strong/30 flex flex-col gap-3 rounded-lg border p-3 text-xs">
-          {recommendation.evidence.map((item, index) => (
-            <div key={index}>
-              <p className="font-medium">
-                {EVIDENCE_LABELS[item.evidence_key] ??
-                  evidenceFieldLabel(item.evidence_key)}
-                <span className="text-muted-foreground ml-2 font-normal">
-                  observed {formatObservedAt(item.observed_at)}
-                </span>
-              </p>
-              <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5">
-                {Object.entries(item.value).map(([field, value]) => (
-                  <div key={field} className="contents">
-                    <dt className="text-muted-foreground">
-                      {evidenceFieldLabel(field)}
-                    </dt>
-                    <dd className="whitespace-pre-line">
-                      {formatEvidenceFieldValue(value)}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+          {expanded ? (
+            <div className="border-border-soft bg-card-strong/30 flex flex-col gap-3 rounded-lg border p-3 text-xs">
+              {recommendation.evidence.map((item, index) => (
+                <div key={index}>
+                  <p className="font-medium">
+                    {EVIDENCE_LABELS[item.evidence_key] ??
+                      evidenceFieldLabel(item.evidence_key)}
+                    <span className="text-muted-foreground ml-2 font-normal">
+                      observed {formatObservedAt(item.observed_at)}
+                    </span>
+                  </p>
+                  <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5">
+                    {Object.entries(item.value).map(([field, value]) => (
+                      <div key={field} className="contents">
+                        <dt className="text-muted-foreground">
+                          {evidenceFieldLabel(field)}
+                        </dt>
+                        <dd className="whitespace-pre-line">
+                          {formatEvidenceFieldValue(value)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              ))}
             </div>
-          ))}
+          ) : null}
+
+          {review.error ? (
+            <p role="alert" className="text-xs text-red-500">
+              {review.error}
+            </p>
+          ) : null}
+
+          {review.active && review.review ? (
+            <ReviewProgress review={review.review} />
+          ) : review.review?.status === "failed" ? (
+            <p className="text-muted-foreground text-xs">
+              The check couldn&apos;t be completed. The recommendation is
+              unchanged — try again later.
+            </p>
+          ) : guidance?.outcome === "needs_input" &&
+            guidance.questions.length > 0 ? (
+            <ReviewQuestions
+              key={guidance.questions
+                .map((question) => question.fact_key)
+                .join()}
+              questions={guidance.questions}
+              pending={busy}
+              currency={currency}
+              onSubmit={(answers) => void review.answer(answers)}
+            />
+          ) : guidance?.outcome === "completed" ? (
+            <FinalRecommendation
+              review={guidance}
+              currency={currency}
+              recommendationId={
+                actionable && recommendation.status !== "resolved"
+                  ? recommendation.id
+                  : undefined
+              }
+            />
+          ) : guidance &&
+            (guidance.outcome === "rejected" ||
+              guidance.outcome === "insufficient_evidence") ? (
+            <NonActionableResult review={guidance} />
+          ) : null}
+
+          <button
+            type="button"
+            onClick={onToggleOpen}
+            className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 self-end text-[11px]"
+          >
+            <ChevronUp size={12} aria-hidden /> Collapse
+          </button>
         </div>
       ) : null}
-
-      {review.error ? (
-        <p role="alert" className="text-xs text-red-500">
-          {review.error}
-        </p>
-      ) : null}
-
-      {review.active && review.review ? (
-        <ReviewProgress review={review.review} />
-      ) : review.review?.status === "failed" ? (
-        <p className="text-muted-foreground text-xs">
-          The check couldn&apos;t be completed. The recommendation is unchanged
-          — try again later.
-        </p>
-      ) : guidance?.outcome === "needs_input" &&
-        guidance.questions.length > 0 ? (
-        <ReviewQuestions
-          key={guidance.questions.map((question) => question.fact_key).join()}
-          questions={guidance.questions}
-          pending={busy}
-          currency={currency}
-          onSubmit={(answers) => void review.answer(answers)}
-        />
-      ) : guidance?.outcome === "completed" ? (
-        <FinalRecommendation
-          review={guidance}
-          currency={currency}
-          recommendationId={
-            actionable && recommendation.status !== "resolved"
-              ? recommendation.id
-              : undefined
-          }
-        />
-      ) : guidance &&
-        (guidance.outcome === "rejected" ||
-          guidance.outcome === "insufficient_evidence") ? (
-        <NonActionableResult review={guidance} />
-      ) : null}
-    </div>
+    </article>
   );
 }
 
@@ -414,7 +515,17 @@ export function RecommendationsInboxClient({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [, startTransition] = useTransition();
+
+  function toggleOpen(id: string) {
+    setOpenIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function toggleExpanded(id: string) {
     setExpandedIds((current) => {
@@ -645,20 +756,40 @@ export function RecommendationsInboxClient({
           description="Analyzers run on an hourly schedule against every verified cloud connection. A finding shows up here once its review has checked what the resource is for, or try clearing a filter."
         />
       ) : (
-        <div className="border-border-soft overflow-hidden rounded-xl border">
-          <div className="divide-border-soft divide-y">
-            {visible.map((recommendation) => (
-              <RecommendationRow
-                key={recommendation.id}
-                recommendation={recommendation}
-                pending={pendingId === recommendation.id}
-                expanded={expandedIds.has(recommendation.id)}
-                onToggleDetails={() => toggleExpanded(recommendation.id)}
-                onAction={runAction}
-                onUpdated={applyUpdate}
-              />
-            ))}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">
+              {visible.length} recommendation{visible.length === 1 ? "" : "s"}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setOpenIds(
+                  visible.every((item) => openIds.has(item.id))
+                    ? new Set()
+                    : new Set(visible.map((item) => item.id)),
+                )
+              }
+              className="text-muted-foreground hover:text-foreground"
+            >
+              {visible.every((item) => openIds.has(item.id))
+                ? "Collapse all"
+                : "Expand all"}
+            </button>
           </div>
+          {visible.map((recommendation) => (
+            <RecommendationRow
+              key={recommendation.id}
+              recommendation={recommendation}
+              pending={pendingId === recommendation.id}
+              open={openIds.has(recommendation.id)}
+              onToggleOpen={() => toggleOpen(recommendation.id)}
+              expanded={expandedIds.has(recommendation.id)}
+              onToggleDetails={() => toggleExpanded(recommendation.id)}
+              onAction={runAction}
+              onUpdated={applyUpdate}
+            />
+          ))}
         </div>
       )}
 
