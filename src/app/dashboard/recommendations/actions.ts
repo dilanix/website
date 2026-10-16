@@ -37,6 +37,7 @@ export async function listAllRecommendationsAction(
     productKey?: string | null;
     status?: RecommendationStatus | "all";
     analyzerKey?: string | null;
+    includeSuperseded?: boolean;
   },
   offset: number,
 ): Promise<RecommendationsActionResult<CoreUnifiedRecommendationListResponse>> {
@@ -47,6 +48,7 @@ export async function listAllRecommendationsAction(
       status:
         !filters.status || filters.status === "all" ? null : filters.status,
       analyzerKey: filters.analyzerKey,
+      includeSuperseded: filters.includeSuperseded,
       offset,
     });
     return { data };

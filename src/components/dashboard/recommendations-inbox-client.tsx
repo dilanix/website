@@ -75,13 +75,19 @@ function savingsLabel(recommendation: CoreUnifiedRecommendation) {
   };
 }
 
+/** Ranked first, best first (Core's ranking); then the most recently seen. */
 function sortRecommendations(items: CoreUnifiedRecommendation[]) {
   return [...items].sort(
     (left, right) =>
+      (left.rank ?? Number.MAX_SAFE_INTEGER) -
+        (right.rank ?? Number.MAX_SAFE_INTEGER) ||
       new Date(right.last_detected_at).getTime() -
-      new Date(left.last_detected_at).getTime(),
+        new Date(left.last_detected_at).getTime(),
   );
 }
+
+// The best ones shown first; the rest one click away.
+const TOP_COUNT = 10;
 
 function uniqueSorted(values: (string | null | undefined)[]) {
   return Array.from(
@@ -283,8 +289,10 @@ function RecommendationRow({
   onToggleDetails,
   onAction,
   onUpdated,
+  coveredBy,
 }: {
   recommendation: CoreUnifiedRecommendation;
+  coveredBy?: CoreUnifiedRecommendation;
   pending: boolean;
   open: boolean;
   onToggleOpen: () => void;
@@ -432,8 +440,23 @@ function RecommendationRow({
       gridClassName={GRID}
       title={
         <>
-          <span className="block text-sm font-semibold">
-            {recommendation.title}
+          <span className="flex items-start gap-2">
+            {recommendation.rank ? (
+              <span
+                aria-label={`Rank ${recommendation.rank}`}
+                className={cn(
+                  "mt-px inline-flex h-5 min-w-7 shrink-0 items-center justify-center rounded-md px-1.5 font-mono text-[11px] font-semibold",
+                  recommendation.rank <= 3
+                    ? "bg-accent text-accent-foreground"
+                    : "bg-accent/12 text-accent",
+                )}
+              >
+                #{recommendation.rank}
+              </span>
+            ) : null}
+            <span className="block text-sm font-semibold">
+              {recommendation.title}
+            </span>
           </span>
           {summary ? (
             <span className="text-muted-foreground mt-1 line-clamp-2 block text-xs leading-5">
@@ -456,6 +479,13 @@ function RecommendationRow({
             >
               {recommendation.status}
             </RowTag>
+            {recommendation.superseded_by_id ? (
+              <RowTag>
+                {coveredBy
+                  ? `covered by #${coveredBy.rank ?? "—"} ${coveredBy.title}`
+                  : "covered by another recommendation"}
+              </RowTag>
+            ) : null}
           </span>
         </>
       }
@@ -584,6 +614,8 @@ export function RecommendationsInboxClient({
   const [loading, setLoading] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const [showCovered, setShowCovered] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const [, startTransition] = useTransition();
 
   function toggleOpen(id: string) {
@@ -635,12 +667,19 @@ export function RecommendationsInboxClient({
         ),
       ),
     );
+    // A change to one recommendation can move the others in the ranking.
+    void refetch({
+      status: statusFilter,
+      product: productFilter,
+      analyzer: analyzerFilter,
+    });
   }
 
   async function refetch(next: {
     status: RecommendationStatus | "all";
     product: string;
     analyzer: string;
+    covered?: boolean;
   }) {
     setError("");
     setLoading(true);
@@ -649,6 +688,7 @@ export function RecommendationsInboxClient({
         productKey: next.product === ALL_OPTION ? null : next.product,
         status: next.status,
         analyzerKey: next.analyzer === ALL_OPTION ? null : next.analyzer,
+        includeSuperseded: next.covered ?? showCovered,
       },
       0,
     );
@@ -711,6 +751,7 @@ export function RecommendationsInboxClient({
         productKey: productFilter === ALL_OPTION ? null : productFilter,
         status: statusFilter,
         analyzerKey: analyzerFilter === ALL_OPTION ? null : analyzerFilter,
+        includeSuperseded: showCovered,
       },
       offset,
     );
@@ -724,6 +765,10 @@ export function RecommendationsInboxClient({
       setOffset(offset + result.data.items.length);
     }
   }
+
+  const byId = new Map(recommendations.map((item) => [item.id, item]));
+  const limited = !showAll && !search.trim() && visible.length > TOP_COUNT;
+  const shown = limited ? visible.slice(0, TOP_COUNT) : visible;
 
   const needsInput = recommendations.filter(
     (item) =>
@@ -822,6 +867,24 @@ export function RecommendationsInboxClient({
           ))}
         </select>
 
+        <label className="text-muted-foreground flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={showCovered}
+            onChange={(event) => {
+              setShowCovered(event.target.checked);
+              void refetch({
+                status: statusFilter,
+                product: productFilter,
+                analyzer: analyzerFilter,
+                covered: event.target.checked,
+              });
+            }}
+            className="accent-accent size-3.5"
+          />
+          Show covered
+        </label>
+
         <label className="border-border-soft bg-card-strong/60 ml-auto flex min-w-56 flex-1 items-center gap-2 rounded-xl border px-3 py-2 text-xs sm:max-w-sm">
           <Search size={14} className="text-muted-foreground shrink-0" />
           <input
@@ -864,7 +927,17 @@ export function RecommendationsInboxClient({
                 re-check.
               </span>
               <span className="flex items-center gap-3">
-                Showing {visible.length} of {total} recommendations
+                {limited ? `Top ${TOP_COUNT}` : `Showing ${shown.length}`} of{" "}
+                {total} recommendations
+                {limited ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAll(true)}
+                    className="text-accent font-medium hover:underline"
+                  >
+                    Show all
+                  </button>
+                ) : null}
                 {recommendations.length < total ? (
                   <button
                     type="button"
@@ -879,10 +952,15 @@ export function RecommendationsInboxClient({
             </>
           }
         >
-          {visible.map((recommendation) => (
+          {shown.map((recommendation) => (
             <RecommendationRow
               key={recommendation.id}
               recommendation={recommendation}
+              coveredBy={
+                recommendation.superseded_by_id
+                  ? byId.get(recommendation.superseded_by_id)
+                  : undefined
+              }
               pending={pendingId === recommendation.id}
               open={openIds.has(recommendation.id)}
               onToggleOpen={() => toggleOpen(recommendation.id)}

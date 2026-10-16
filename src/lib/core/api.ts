@@ -2039,6 +2039,12 @@ export interface CoreRecommendation {
   evidence: CoreRecommendationEvidence[];
   impacts: CoreRecommendationImpact[];
   ai_review: CoreRecommendationAIReview | null;
+  /** 1 = act on it first; `null` when not ranked (not shown, not active). */
+  rank?: number | null;
+  rank_score?: string | null;
+  /** The higher-ranked recommendation that already covers every resource of
+   * this one — such rows are listed only with `includeSuperseded`. */
+  superseded_by_id?: string | null;
 }
 
 /**
@@ -2070,11 +2076,13 @@ export function listAllRecommendations(
     status?: RecommendationStatus | null;
     analyzerKey?: string | null;
     recommendationType?: string | null;
+    includeSuperseded?: boolean;
     limit?: number;
     offset?: number;
   },
 ) {
   const params = new URLSearchParams();
+  if (options?.includeSuperseded) params.set("include_superseded", "true");
   if (options?.productKey) params.set("product_key", options.productKey);
   if (options?.status) params.set("status", options.status);
   if (options?.analyzerKey) params.set("analyzer_key", options.analyzerKey);

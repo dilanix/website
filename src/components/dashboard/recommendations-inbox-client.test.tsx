@@ -147,3 +147,54 @@ describe("RecommendationsInboxClient", () => {
     ).toEqual(["Re-check", "Dismiss"]);
   });
 });
+
+describe("RecommendationsInboxClient ranking", () => {
+  it("lists ranked recommendations best first, the top ten until asked for all", () => {
+    const items = Array.from({ length: 12 }, (_, index) =>
+      recommendation(
+        `00000000-0000-4000-8000-0000000001${String(index).padStart(2, "0")}`,
+        `Finding ${index + 1}`,
+        { rank: 12 - index },
+      ),
+    );
+    render(
+      <RecommendationsInboxClient
+        initial={{ items, total: 12, limit: 50, offset: 0 }}
+      />,
+    );
+
+    const rows = screen.getAllByRole("article");
+    expect(rows).toHaveLength(10);
+    expect(rows[0].getAttribute("aria-label")).toBe("Finding 12");
+    expect(screen.getByLabelText("Rank 1")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+    expect(screen.getAllByRole("article")).toHaveLength(12);
+  });
+
+  it("says which recommendation covers a superseded one", () => {
+    const environment = recommendation(
+      "00000000-0000-4000-8000-000000000201",
+      "Environment dev",
+      { rank: 1 },
+    );
+    const member = recommendation(
+      "00000000-0000-4000-8000-000000000202",
+      "Idle instance",
+      { superseded_by_id: environment.id },
+    );
+    render(
+      <RecommendationsInboxClient
+        initial={{
+          items: [environment, member],
+          total: 2,
+          limit: 50,
+          offset: 0,
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("article", { name: "Idle instance" }).textContent,
+    ).toContain("covered by #1 Environment dev");
+  });
+});
