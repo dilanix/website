@@ -11,6 +11,10 @@ vi.mock("@/app/dashboard/actions", () => ({
   signOutAction: vi.fn(),
 }));
 
+vi.mock("@/app/dashboard/sync/actions", () => ({
+  getSyncIndicatorAction: vi.fn().mockResolvedValue(null),
+}));
+
 const user = {
   firstName: "Ada",
   lastName: "Lovelace",

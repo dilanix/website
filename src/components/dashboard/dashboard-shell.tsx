@@ -25,12 +25,14 @@ import {
   Command,
   Sparkles,
   Bell,
+  RefreshCw,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { signOutAction } from "@/app/dashboard/actions";
 import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
 import { BrandLogo } from "@/components/layout/brand-logo";
+import { SyncNavIndicator } from "./sync-nav-indicator";
 
 const navGroups = [
   {
@@ -64,6 +66,12 @@ const navGroups = [
         label: "Integrations",
         href: "/dashboard/integrations",
         icon: Plug,
+        organizationRequired: true,
+      },
+      {
+        label: "Sync",
+        href: "/dashboard/sync",
+        icon: RefreshCw,
         organizationRequired: true,
       },
       {
@@ -265,6 +273,9 @@ export function DashboardShell({
                 )}
               />
               <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              {item.href === "/dashboard/sync" ? (
+                <SyncNavIndicator pathname={pathname} />
+              ) : null}
               {active ? (
                 <span className="bg-accent/70 size-1 rounded-full shadow-[0_0_8px_var(--accent)]" />
               ) : null}
