@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   AlertTriangle,
   Check,
@@ -357,7 +363,19 @@ function TradeOffs({ option }: { option: CoreRecommendationOption }) {
   );
 }
 
-export function FinalRecommendation({
+function SectionTitle({ children }: { children: ReactNode }) {
+  return <h3 className="text-base font-semibold tracking-tight">{children}</h3>;
+}
+
+function preferredOption(review: CoreRecommendationAIReview) {
+  return (
+    review.options.find((option) => option.is_preferred) ?? review.options[0]
+  );
+}
+
+/** The left half of an open recommendation: why it matters, what Dilanix
+ * recommends, the evidence behind it, and the alternatives. */
+export function RecommendationInsight({
   review,
   currency,
   recommendationId,
@@ -367,92 +385,94 @@ export function FinalRecommendation({
   /** Set where the recommendation can be acted on — shows "How to fix". */
   recommendationId?: string;
 }) {
-  const preferred =
-    review.options.find((option) => option.is_preferred) ?? review.options[0];
+  const preferred = preferredOption(review);
   const alternatives = review.options.filter((option) => option !== preferred);
   const [showAlternatives, setShowAlternatives] = useState(false);
-  if (!preferred) return null;
-  const impact = formatSavings(preferred.expected_monthly_savings, currency);
+  const impact = preferred
+    ? formatSavings(preferred.expected_monthly_savings, currency)
+    : null;
 
   return (
-    <div className="border-border-soft bg-card-strong/40 flex flex-col gap-3 rounded-lg border p-3 text-xs">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-col gap-5 text-sm">
+      <section aria-label="Why this matters">
+        <SectionTitle>Why this matters</SectionTitle>
         {review.detected_issue ? (
-          <p className="font-medium">{review.detected_issue}</p>
+          <p className="mt-1.5 font-medium">{review.detected_issue}</p>
         ) : null}
-        {review.confidence ? (
-          <StatusBadge
-            status={review.confidence === "high" ? "success" : "neutral"}
-          >
-            {review.confidence} confidence
-          </StatusBadge>
-        ) : null}
-        {review.evidence_quality ? (
-          <StatusBadge status="neutral">
-            <ShieldCheck size={11} aria-hidden />
-            {EVIDENCE_QUALITY_LABELS[review.evidence_quality] ??
-              review.evidence_quality}
-          </StatusBadge>
-        ) : null}
-      </div>
-
-      {review.evidence_summary.length > 0 ? (
-        <StepList title="Evidence" items={review.evidence_summary} />
-      ) : null}
-
-      <section
-        aria-label="Recommended action"
-        className="border-accent/40 rounded-lg border p-2.5"
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-            Recommended action
-          </p>
-          {preferred.risk_level ? (
-            <StatusBadge status={riskTone(preferred.risk_level)}>
-              {preferred.risk_level} risk
+        <p className="text-muted-foreground mt-1 leading-6">{review.summary}</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {review.confidence ? (
+            <StatusBadge
+              status={review.confidence === "high" ? "success" : "neutral"}
+            >
+              {review.confidence} confidence
             </StatusBadge>
           ) : null}
-          {impact ? (
-            <span className="text-success font-medium">{impact}</span>
+          {review.evidence_quality ? (
+            <StatusBadge status="neutral">
+              <ShieldCheck size={11} aria-hidden />
+              {EVIDENCE_QUALITY_LABELS[review.evidence_quality] ??
+                review.evidence_quality}
+            </StatusBadge>
           ) : null}
-        </div>
-        <div className="mt-1 flex flex-wrap items-start justify-between gap-2">
-          <p className="text-sm font-medium">{preferred.title}</p>
-          {recommendationId && hasFixGuide(preferred.action_type) ? (
-            <HowToFixButton
-              recommendationId={recommendationId}
-              optionIndex={review.options.indexOf(preferred)}
-              optionTitle={preferred.title}
-            />
-          ) : null}
-        </div>
-        <p className="text-muted-foreground mt-0.5 leading-5">
-          {preferred.description}
-        </p>
-        <div className="mt-2.5 grid gap-3 md:grid-cols-3">
-          <StepList title="Prerequisites" items={preferred.prerequisites} />
-          <StepList title="Validation" items={preferred.validation_steps} />
-          <StepList title="Rollback" items={preferred.rollback} />
-        </div>
-        <div className="mt-2.5">
-          <TradeOffs option={preferred} />
         </div>
       </section>
 
-      {review.risk_notes.length > 0 ? (
-        <div className="flex gap-2">
-          <AlertTriangle
-            size={13}
-            className="mt-0.5 shrink-0 text-amber-500"
-            aria-hidden
-          />
-          <StepList title="Risks" items={review.risk_notes} />
-        </div>
+      {preferred ? (
+        <section
+          aria-label="Recommended action"
+          className="border-border-soft border-t pt-5"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <SectionTitle>Recommended action</SectionTitle>
+            {preferred.risk_level ? (
+              <StatusBadge status={riskTone(preferred.risk_level)}>
+                {preferred.risk_level} risk
+              </StatusBadge>
+            ) : null}
+          </div>
+          <p className="mt-1.5 font-medium">{preferred.title}</p>
+          <p className="text-muted-foreground mt-0.5 leading-6">
+            {preferred.description}
+          </p>
+          {impact ? (
+            <p className="text-success mt-1 text-xs font-medium">
+              Saves {impact}
+            </p>
+          ) : null}
+          <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+            <StepList title="Validation" items={preferred.validation_steps} />
+            <StepList title="Rollback" items={preferred.rollback} />
+          </div>
+          <div className="mt-3 text-xs">
+            <TradeOffs option={preferred} />
+          </div>
+        </section>
+      ) : null}
+
+      {review.evidence_summary.length > 0 ? (
+        <section
+          aria-label="Evidence"
+          className="border-border-soft border-t pt-5"
+        >
+          <SectionTitle>
+            Evidence ({review.evidence_summary.length})
+          </SectionTitle>
+          <ol className="mt-3 flex flex-col gap-2.5">
+            {review.evidence_summary.map((item, index) => (
+              <li key={index} className="flex gap-3">
+                <span className="border-accent/60 text-accent flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold">
+                  {index + 1}
+                </span>
+                <span className="leading-6">{item}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
       ) : null}
 
       {alternatives.length > 0 ? (
-        <div>
+        <section className="border-border-soft border-t pt-4 text-xs">
           <button
             type="button"
             aria-expanded={showAlternatives}
@@ -510,9 +530,102 @@ export function FinalRecommendation({
               ))}
             </div>
           ) : null}
-        </div>
+        </section>
       ) : null}
     </div>
+  );
+}
+
+/** The right half of an open recommendation: what to check before acting
+ * (a checklist kept in this view only), the risks, and the way to act. */
+export function BeforeYouContinue({
+  review,
+  recommendationId,
+}: {
+  review: CoreRecommendationAIReview;
+  recommendationId?: string;
+}) {
+  const preferred = preferredOption(review);
+  const prerequisites = preferred?.prerequisites ?? [];
+  const [checked, setChecked] = useState<Set<number>>(new Set());
+  const remaining = prerequisites.length - checked.size;
+
+  function toggle(index: number) {
+    setChecked((current) => {
+      const next = new Set(current);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }
+
+  return (
+    <section
+      aria-label="Before you continue"
+      className="rounded-xl border border-amber-500/45 bg-amber-500/[0.06] p-5"
+    >
+      <div className="flex gap-3">
+        <AlertTriangle
+          size={20}
+          className="mt-0.5 shrink-0 text-amber-500"
+          aria-hidden
+        />
+        <div>
+          <h3 className="text-base font-semibold text-amber-600 dark:text-amber-300">
+            Before you continue
+          </h3>
+          <p className="text-muted-foreground mt-0.5 text-xs">
+            {prerequisites.length === 0
+              ? "Nothing to prepare — review the risks, then follow the guide."
+              : remaining === 0
+                ? "Everything is checked — follow the guide to apply it."
+                : `${remaining} item${remaining === 1 ? "" : "s"} to check before this can be applied.`}
+          </p>
+        </div>
+      </div>
+
+      {prerequisites.length > 0 ? (
+        <ul className="mt-4 flex flex-col gap-3 border-t border-amber-500/20 pt-4">
+          {prerequisites.map((item, index) => (
+            <li key={index}>
+              <label className="flex cursor-pointer items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={checked.has(index)}
+                  onChange={() => toggle(index)}
+                  className="accent-accent mt-0.5 size-4 shrink-0 rounded"
+                />
+                <span
+                  className={cn(
+                    "leading-5",
+                    checked.has(index) && "text-muted-foreground line-through",
+                  )}
+                >
+                  {item}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {review.risk_notes.length > 0 ? (
+        <div className="mt-4 border-t border-amber-500/20 pt-4">
+          <StepList title="Risks" items={review.risk_notes} />
+        </div>
+      ) : null}
+
+      {recommendationId && preferred && hasFixGuide(preferred.action_type) ? (
+        <div className="mt-5">
+          <HowToFixButton
+            recommendationId={recommendationId}
+            optionIndex={review.options.indexOf(preferred)}
+            optionTitle={preferred.title}
+            variant="large"
+          />
+        </div>
+      ) : null}
+    </section>
   );
 }
 

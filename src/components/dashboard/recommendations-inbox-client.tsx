@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ChevronDown, ChevronUp, RefreshCw, Search, Undo2 } from "lucide-react";
+import { Info, Search } from "lucide-react";
 import {
   getRecommendationAction,
   listAllRecommendationsAction,
@@ -15,10 +15,21 @@ import type {
   CoreUnifiedRecommendationListResponse,
   RecommendationStatus,
 } from "@/lib/core/api";
-import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
+import { EmptyState } from "@/components/dashboard/primitives";
 import {
-  FinalRecommendation,
+  ExpandableRow,
+  ExpandableTable,
+  RowMenu,
+  RowTag,
+  StatePill,
+  type PillTone,
+  type RowMenuItem,
+} from "@/components/dashboard/expandable-table";
+import { ResourceCategoryIcon } from "@/components/dashboard/resource-category-icon";
+import {
+  BeforeYouContinue,
   NonActionableResult,
+  RecommendationInsight,
   ReviewProgress,
   ReviewQuestions,
   useRecommendationReview,
@@ -39,16 +50,6 @@ function isRecommendationFilter(
   value: unknown,
 ): value is RecommendationStatus | "all" {
   return STATUS_FILTERS.some((filter) => filter.id === value);
-}
-
-function priorityTone(priority: CoreUnifiedRecommendation["priority"]) {
-  return priority === "high" ? ("warning" as const) : ("neutral" as const);
-}
-
-function statusTone(status: RecommendationStatus) {
-  if (status === "resolved") return "success" as const;
-  if (status === "active") return "warning" as const;
-  return "neutral" as const;
 }
 
 function formatDate(value: string) {
@@ -74,18 +75,6 @@ function savingsLabel(recommendation: CoreUnifiedRecommendation) {
   };
 }
 
-/** The card's left edge: the priority of a real recommendation, muted for
- * one that is not (yet) an actionable saving. */
-function accentStripe(recommendation: CoreUnifiedRecommendation) {
-  if (recommendation.status !== "active") return "bg-muted-foreground/40";
-  if (recommendation.ai_review?.outcome === "needs_input")
-    return "bg-amber-500";
-  if (!showsSavings(recommendation)) return "bg-muted-foreground/40";
-  if (recommendation.priority === "high") return "bg-amber-500";
-  if (recommendation.priority === "medium") return "bg-accent";
-  return "bg-success";
-}
-
 function sortRecommendations(items: CoreUnifiedRecommendation[]) {
   return [...items].sort(
     (left, right) =>
@@ -98,23 +87,6 @@ function uniqueSorted(values: (string | null | undefined)[]) {
   return Array.from(
     new Set(values.filter((value): value is string => !!value)),
   ).sort();
-}
-
-/** Pulls the resource's own AWS identifier (e.g. `i-0abc123`, `vol-0abc123`)
- * and, when tagged, its human-assigned `Name` out of the analyzer's
- * `resource_identity` evidence entry — older recommendations created before
- * analyzers started emitting it won't have one. */
-function resourceIdentity(recommendation: CoreUnifiedRecommendation) {
-  const evidence = recommendation.evidence.find(
-    (item) => item.evidence_key === "resource_identity",
-  );
-  const externalId = evidence?.value.external_id;
-  if (typeof externalId !== "string")
-    return environmentScope(recommendation) ?? commitmentScope(recommendation);
-  const name = evidence?.value.name;
-  return typeof name === "string" && name.length > 0
-    ? `${name} (${externalId})`
-    : externalId;
 }
 
 /** A whole-environment recommendation carries `environment` evidence instead
@@ -211,6 +183,97 @@ function showsSavings(recommendation: CoreUnifiedRecommendation) {
   return recommendation.ai_review?.outcome === "completed";
 }
 
+const GRID =
+  "md:grid-cols-[minmax(0,1.7fr)_minmax(0,1.1fr)_minmax(0,0.75fr)_minmax(0,0.85fr)_5.5rem]";
+
+/** What the resource column shows: kind, name and where. */
+function resourceSummary(recommendation: CoreUnifiedRecommendation) {
+  const identity = recommendation.evidence.find(
+    (item) => item.evidence_key === "resource_identity",
+  )?.value;
+  if (identity && typeof identity.external_id === "string") {
+    const type =
+      typeof identity.provider_resource_type === "string"
+        ? identity.provider_resource_type
+        : "";
+    const [service = "", kind = ""] = type.split(".");
+    const name =
+      typeof identity.name === "string" && identity.name
+        ? identity.name
+        : identity.external_id;
+    return {
+      family: service,
+      kind: [service.toUpperCase(), kind.replace(/_/g, " ")]
+        .filter(Boolean)
+        .join(" "),
+      name,
+      detail:
+        name !== identity.external_id
+          ? `${identity.external_id}`
+          : typeof identity.region === "string"
+            ? identity.region
+            : null,
+      region: typeof identity.region === "string" ? identity.region : null,
+    };
+  }
+  const scope =
+    environmentScope(recommendation) ?? commitmentScope(recommendation);
+  return scope
+    ? {
+        family: "",
+        kind: scope.split(" · ")[0],
+        name: scope,
+        detail: null,
+        region: null,
+      }
+    : null;
+}
+
+/** Icon tile tint per service family — presentation only. */
+const FAMILY_TINTS: Record<string, string> = {
+  ec2: "border-orange-500/25 bg-orange-500/10 text-orange-500",
+  ecr: "border-amber-500/25 bg-amber-500/10 text-amber-500",
+  ecs: "border-amber-500/25 bg-amber-500/10 text-amber-500",
+  rds: "border-violet-500/25 bg-violet-500/10 text-violet-500",
+  dynamodb: "border-violet-500/25 bg-violet-500/10 text-violet-500",
+  elasticache: "border-red-500/25 bg-red-500/10 text-red-500",
+  s3: "border-emerald-500/25 bg-emerald-500/10 text-emerald-500",
+  lambda: "border-yellow-500/25 bg-yellow-500/10 text-yellow-500",
+  elasticloadbalancingv2: "border-pink-500/25 bg-pink-500/10 text-pink-500",
+};
+
+const FAMILY_CATEGORIES: Record<string, string> = {
+  ec2: "compute",
+  lambda: "compute",
+  ecr: "container",
+  ecs: "container",
+  eks: "container",
+  rds: "database",
+  dynamodb: "database",
+  elasticache: "cache",
+  s3: "storage",
+  efs: "storage",
+  elasticloadbalancingv2: "network",
+};
+
+function reviewState(
+  recommendation: CoreUnifiedRecommendation,
+  reviewing: boolean,
+): { tone: PillTone; label: string; spinning?: boolean } {
+  if (reviewing)
+    return { tone: "accent", label: "Re-checking", spinning: true };
+  if (recommendation.status === "resolved")
+    return { tone: "success", label: "Resolved" };
+  if (recommendation.status === "dismissed")
+    return { tone: "neutral", label: "Dismissed" };
+  const outcome = recommendation.ai_review?.outcome;
+  if (outcome === "completed")
+    return { tone: "success", label: "Ready to fix" };
+  if (outcome === "needs_input")
+    return { tone: "warning", label: "Needs your input" };
+  return { tone: "neutral", label: "No change advised" };
+}
+
 function RecommendationRow({
   recommendation,
   pending,
@@ -244,7 +307,7 @@ function RecommendationRow({
     ? savingsLabel(recommendation)
     : null;
   const actionable = isActionable(recommendation);
-  const identity = resourceIdentity(recommendation);
+  const resource = resourceSummary(recommendation);
   const guidance = recommendation.ai_review;
   const currency =
     recommendation.impacts.find((item) => item.impact_type === "cost_savings")
@@ -254,244 +317,249 @@ function RecommendationRow({
       ? guidance.summary
       : recommendation.summary;
   const busy = pending || review.active;
+  const state = reviewState(recommendation, review.active);
+  const fixableId =
+    actionable && recommendation.status !== "resolved"
+      ? recommendation.id
+      : undefined;
 
-  const needsInput =
-    guidance?.outcome === "needs_input" && guidance.questions.length > 0;
-  const bodyId = `recommendation-${recommendation.id}`;
+  const menu: RowMenuItem[] = actionable
+    ? [
+        ...(recommendation.status !== "resolved"
+          ? [
+              {
+                label: "Re-check",
+                onSelect: () => void review.start(),
+                disabled: busy,
+              },
+            ]
+          : []),
+        ...(recommendation.status === "active"
+          ? [
+              {
+                label: "Dismiss",
+                onSelect: () =>
+                  onAction(recommendation, dismissRecommendationAction),
+                disabled: busy,
+                tone: "danger" as const,
+              },
+            ]
+          : []),
+        ...(recommendation.status === "dismissed"
+          ? [
+              {
+                label: "Restore",
+                onSelect: () =>
+                  onAction(recommendation, restoreRecommendationAction),
+                disabled: busy,
+              },
+            ]
+          : []),
+      ]
+    : [];
+
+  const evidencePanel =
+    recommendation.evidence.length > 0 ? (
+      <div className="text-xs">
+        <button
+          type="button"
+          onClick={onToggleDetails}
+          className="text-accent underline-offset-2 hover:underline"
+        >
+          {expanded ? "Hide raw evidence" : "Show raw evidence"}
+        </button>
+        {expanded ? (
+          <div className="border-border-soft bg-card-strong/30 animate-toast-in mt-2 flex flex-col gap-3 rounded-lg border p-3">
+            {recommendation.evidence.map((item, index) => (
+              <div key={index}>
+                <p className="font-medium">
+                  {EVIDENCE_LABELS[item.evidence_key] ??
+                    evidenceFieldLabel(item.evidence_key)}
+                  <span className="text-muted-foreground ml-2 font-normal">
+                    observed {formatObservedAt(item.observed_at)}
+                  </span>
+                </p>
+                <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5">
+                  {Object.entries(item.value).map(([field, value]) => (
+                    <div key={field} className="contents">
+                      <dt className="text-muted-foreground">
+                        {evidenceFieldLabel(field)}
+                      </dt>
+                      <dd className="whitespace-pre-line">
+                        {formatEvidenceFieldValue(value)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    ) : null;
+
+  const rightPanel = review.error ? (
+    <p role="alert" className="text-xs text-red-500">
+      {review.error}
+    </p>
+  ) : review.active && review.review ? (
+    <ReviewProgress review={review.review} />
+  ) : review.review?.status === "failed" ? (
+    <p className="text-muted-foreground text-xs">
+      The check couldn&apos;t be completed. The recommendation is unchanged —
+      try again later.
+    </p>
+  ) : guidance?.outcome === "needs_input" && guidance.questions.length > 0 ? (
+    <ReviewQuestions
+      key={guidance.questions.map((question) => question.fact_key).join()}
+      questions={guidance.questions}
+      pending={busy}
+      currency={currency}
+      onSubmit={(answers) => void review.answer(answers)}
+    />
+  ) : guidance?.outcome === "completed" ? (
+    <BeforeYouContinue review={guidance} recommendationId={fixableId} />
+  ) : guidance ? (
+    <NonActionableResult review={guidance} />
+  ) : null;
 
   return (
-    <article
-      aria-label={recommendation.title}
-      className={cn(
-        "group/card relative overflow-hidden rounded-2xl border transition-all duration-200",
-        open
-          ? "border-accent/35 bg-card-strong/50 ring-accent/10 shadow-[0_18px_40px_var(--shadow-card)] ring-1"
-          : "border-border-soft bg-card-strong/25 hover:border-foreground/15 hover:bg-card-strong/45",
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn(
-          "absolute inset-y-0 left-0 w-1 transition-opacity",
-          accentStripe(recommendation),
-          open ? "opacity-100" : "opacity-60 group-hover/card:opacity-100",
-        )}
-      />
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={bodyId}
-        onClick={onToggleOpen}
-        className={cn(
-          "flex w-full items-start gap-3 py-3.5 pr-4 pl-5 text-left transition-colors",
-          open && "bg-accent/[0.04] border-border-soft border-b",
-        )}
-      >
-        <span
-          className={cn(
-            "border-border-soft bg-background/60 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border transition-transform duration-200",
-            open && "border-accent/40 text-accent rotate-180",
-          )}
-        >
-          <ChevronDown size={14} aria-hidden />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold">
-              {recommendation.title}
-            </span>
-            {identity ? (
-              <code className="border-border-soft bg-card-strong/60 rounded px-1.5 py-0.5 text-[11px] font-normal">
-                {identity}
-              </code>
-            ) : null}
+    <ExpandableRow
+      id={recommendation.id}
+      label={recommendation.title}
+      open={open}
+      onToggle={onToggleOpen}
+      gridClassName={GRID}
+      title={
+        <>
+          <span className="block text-sm font-semibold">
+            {recommendation.title}
           </span>
-          <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <StatusBadge status="neutral">
-              {recommendation.product_key}
-            </StatusBadge>
-            {recommendation.priority && showsSavings(recommendation) ? (
-              <StatusBadge status={priorityTone(recommendation.priority)}>
-                {recommendation.priority} priority
-              </StatusBadge>
-            ) : null}
-            <StatusBadge status={statusTone(recommendation.status)}>
-              {recommendation.status}
-            </StatusBadge>
-            {needsInput ? (
-              <StatusBadge status="warning">Needs your input</StatusBadge>
-            ) : null}
-            {review.active ? (
-              <StatusBadge status="neutral">
-                <RefreshCw size={11} className="animate-spin" aria-hidden />
-                Re-checking
-              </StatusBadge>
-            ) : null}
-          </span>
-          {!open && summary ? (
-            <span className="text-muted-foreground mt-1.5 line-clamp-1 block text-xs">
+          {summary ? (
+            <span className="text-muted-foreground mt-1 line-clamp-2 block text-xs leading-5">
               {summary}
             </span>
           ) : null}
-        </span>
-        {savings ? (
-          <span className="shrink-0 text-right">
-            <span className="text-success block font-mono text-sm font-semibold">
+          <span className="mt-2 flex flex-wrap gap-1.5">
+            <RowTag>{recommendation.product_key}</RowTag>
+            {recommendation.priority && showsSavings(recommendation) ? (
+              <RowTag
+                tone={
+                  recommendation.priority === "high" ? "warning" : "neutral"
+                }
+              >
+                {recommendation.priority} priority
+              </RowTag>
+            ) : null}
+            <RowTag
+              tone={recommendation.status === "active" ? "warning" : "neutral"}
+            >
+              {recommendation.status}
+            </RowTag>
+          </span>
+        </>
+      }
+      cells={[
+        resource ? (
+          <div className="flex items-start gap-3">
+            <span
+              className={cn(
+                "flex size-9 shrink-0 items-center justify-center rounded-lg border",
+                FAMILY_TINTS[resource.family] ??
+                  "border-border-soft bg-card-strong/60 text-muted-foreground",
+              )}
+            >
+              <ResourceCategoryIcon
+                category={FAMILY_CATEGORIES[resource.family] ?? "other"}
+                size={16}
+              />
+            </span>
+            <span className="min-w-0 text-xs">
+              <span className="text-muted-foreground block">
+                {resource.kind}
+              </span>
+              <span className="block truncate text-sm font-medium">
+                {resource.name}
+              </span>
+              {resource.detail || resource.region ? (
+                <span className="text-muted-foreground block truncate">
+                  {[
+                    resource.detail !== resource.region
+                      ? resource.detail
+                      : null,
+                    resource.region,
+                  ]
+                    .filter(Boolean)
+                    .join(" | ")}
+                </span>
+              ) : null}
+            </span>
+          </div>
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        ),
+        savings ? (
+          <div>
+            <span className="text-muted-foreground block text-[11px]">
+              Up to
+            </span>
+            <span className="text-accent block font-mono text-xl font-semibold tracking-tight">
               {savings.amount}
             </span>
             <span className="text-muted-foreground block text-[11px]">
               {savings.unit}
             </span>
-          </span>
-        ) : null}
-      </button>
-
-      {open ? (
-        <div
-          id={bodyId}
-          className="animate-toast-in flex flex-col gap-3 py-4 pr-4 pl-5"
-        >
-          {summary ? <p className="text-sm leading-6">{summary}</p> : null}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-muted-foreground text-xs">
-              {recommendation.analyzer_key} · first detected{" "}
-              {formatDate(recommendation.first_detected_at)} · last seen{" "}
-              {formatDate(recommendation.last_detected_at)}
-              {recommendation.evidence.length > 0 ? (
-                <>
-                  {" · "}
-                  <button
-                    type="button"
-                    onClick={onToggleDetails}
-                    className="text-accent underline-offset-2 hover:underline"
-                  >
-                    {expanded ? "Hide details" : "Show details"}
-                  </button>
-                </>
-              ) : null}
-            </p>
-            {actionable ? (
-              <div className="flex shrink-0 items-center gap-3">
-                {recommendation.status === "active" ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      onAction(recommendation, dismissRecommendationAction)
-                    }
-                    className="text-muted-foreground hover:text-foreground text-xs disabled:opacity-50"
-                  >
-                    Dismiss
-                  </button>
-                ) : null}
-                {recommendation.status !== "resolved" ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void review.start()}
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs disabled:opacity-50"
-                  >
-                    <RefreshCw
-                      size={13}
-                      className={cn(review.active && "animate-spin")}
-                    />
-                    {review.active ? "Re-checking…" : "Re-check"}
-                  </button>
-                ) : null}
-                {recommendation.status === "dismissed" ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      onAction(recommendation, restoreRecommendationAction)
-                    }
-                    className="text-success inline-flex items-center gap-1 text-xs disabled:opacity-50"
-                  >
-                    <Undo2 size={13} /> Restore
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
           </div>
-
-          {expanded ? (
-            <div className="border-border-soft bg-card-strong/30 flex flex-col gap-3 rounded-lg border p-3 text-xs">
-              {recommendation.evidence.map((item, index) => (
-                <div key={index}>
-                  <p className="font-medium">
-                    {EVIDENCE_LABELS[item.evidence_key] ??
-                      evidenceFieldLabel(item.evidence_key)}
-                    <span className="text-muted-foreground ml-2 font-normal">
-                      observed {formatObservedAt(item.observed_at)}
-                    </span>
-                  </p>
-                  <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5">
-                    {Object.entries(item.value).map(([field, value]) => (
-                      <div key={field} className="contents">
-                        <dt className="text-muted-foreground">
-                          {evidenceFieldLabel(field)}
-                        </dt>
-                        <dd className="whitespace-pre-line">
-                          {formatEvidenceFieldValue(value)}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          {review.error ? (
-            <p role="alert" className="text-xs text-red-500">
-              {review.error}
-            </p>
-          ) : null}
-
-          {review.active && review.review ? (
-            <ReviewProgress review={review.review} />
-          ) : review.review?.status === "failed" ? (
-            <p className="text-muted-foreground text-xs">
-              The check couldn&apos;t be completed. The recommendation is
-              unchanged — try again later.
-            </p>
-          ) : guidance?.outcome === "needs_input" &&
-            guidance.questions.length > 0 ? (
-            <ReviewQuestions
-              key={guidance.questions
-                .map((question) => question.fact_key)
-                .join()}
-              questions={guidance.questions}
-              pending={busy}
-              currency={currency}
-              onSubmit={(answers) => void review.answer(answers)}
-            />
-          ) : guidance?.outcome === "completed" ? (
-            <FinalRecommendation
-              review={guidance}
-              currency={currency}
-              recommendationId={
-                actionable && recommendation.status !== "resolved"
-                  ? recommendation.id
-                  : undefined
-              }
-            />
-          ) : guidance &&
-            (guidance.outcome === "rejected" ||
-              guidance.outcome === "insufficient_evidence") ? (
-            <NonActionableResult review={guidance} />
-          ) : null}
-
+        ) : (
+          <span className="text-muted-foreground text-xs">No estimate</span>
+        ),
+        <StatePill key="state" tone={state.tone} spinning={state.spinning}>
+          {state.label}
+        </StatePill>,
+        <div key="actions" className="flex items-center justify-end gap-1">
           <button
             type="button"
             onClick={onToggleOpen}
-            className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 self-end text-[11px]"
+            className="text-accent px-2 py-1 text-xs font-medium hover:underline"
           >
-            <ChevronUp size={12} aria-hidden /> Collapse
+            {open ? "Close" : "Details"}
           </button>
+          <RowMenu
+            label={`More actions for ${recommendation.title}`}
+            items={menu}
+          />
+        </div>,
+      ]}
+    >
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="lg:border-border-soft flex flex-col gap-5 lg:border-r lg:pr-6">
+          {guidance?.outcome === "completed" ? (
+            <RecommendationInsight
+              review={guidance}
+              currency={currency}
+              recommendationId={fixableId}
+            />
+          ) : (
+            <section aria-label="Why this matters" className="text-sm">
+              <h3 className="text-base font-semibold tracking-tight">
+                Why this matters
+              </h3>
+              <p className="text-muted-foreground mt-1.5 leading-6">
+                {recommendation.summary ??
+                  "Dilanix is still checking this finding."}
+              </p>
+            </section>
+          )}
+          {evidencePanel}
+          <p className="text-muted-foreground text-[11px]">
+            {recommendation.analyzer_key} · first detected{" "}
+            {formatDate(recommendation.first_detected_at)} · last seen{" "}
+            {formatDate(recommendation.last_detected_at)}
+          </p>
         </div>
-      ) : null}
-    </article>
+        <div>{rightPanel}</div>
+      </div>
+    </ExpandableRow>
   );
 }
 
@@ -657,86 +725,109 @@ export function RecommendationsInboxClient({
     }
   }
 
+  const needsInput = recommendations.filter(
+    (item) =>
+      item.status === "active" && item.ai_review?.outcome === "needs_input",
+  ).length;
+  const ready = recommendations.filter(
+    (item) =>
+      item.status === "active" && item.ai_review?.outcome === "completed",
+  ).length;
+
   return (
     <div className="flex flex-col gap-5">
-      <p className="text-muted-foreground max-w-2xl text-sm leading-6">
-        Every recommendation across every product you have access to, in one
-        place — each with its options, trade-offs, and what to check before
-        acting. Filter by product, analyzer, status, or search by title.
-      </p>
-
-      <div
-        role="tablist"
-        aria-label="Filter recommendations by status"
-        className="border-foreground/10 flex gap-1 border-b"
-      >
-        {STATUS_FILTERS.map((item) => {
-          const active = statusFilter === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => onStatusChange(item.id)}
-              className={cn(
-                "relative px-3 py-2.5 text-sm transition-colors",
-                active
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
+      <dl className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        {[
+          { value: total, label: "recommendations", className: "text-accent" },
+          {
+            value: needsInput,
+            label: "need your input",
+            className: "text-amber-500",
+          },
+          { value: ready, label: "ready to fix", className: "text-success" },
+        ].map((stat, index) => (
+          <div
+            key={stat.label}
+            className={cn(
+              "flex items-baseline gap-2",
+              index > 0 && "border-border-soft border-l pl-6",
+            )}
+          >
+            <dt className="sr-only">{stat.label}</dt>
+            <dd
+              className={cn("font-mono text-2xl font-semibold", stat.className)}
             >
-              {item.label}
-              {active ? (
-                <span
-                  aria-hidden="true"
-                  className="bg-accent absolute -bottom-px left-0 h-px w-full"
-                />
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+              {stat.value}
+            </dd>
+            <span aria-hidden className="text-muted-foreground text-sm">
+              {stat.label}
+            </span>
+          </div>
+        ))}
+      </dl>
 
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-xs">
-          <span className="text-muted-foreground">Product</span>
-          <select
-            value={productFilter}
-            onChange={(event) => onProductChange(event.target.value)}
-            className="border-border-soft bg-card-strong/60 rounded-md border px-2 py-1.5 text-xs"
-          >
-            <option value={ALL_OPTION}>All products</option>
-            {productOptions.map((product) => (
-              <option key={product} value={product}>
-                {product}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div
+          role="tablist"
+          aria-label="Filter recommendations by status"
+          className="flex flex-wrap gap-2"
+        >
+          {STATUS_FILTERS.map((item) => {
+            const active = statusFilter === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => onStatusChange(item.id)}
+                className={cn(
+                  "rounded-xl border px-4 py-2 text-xs font-medium transition-colors",
+                  active
+                    ? "border-accent/60 bg-accent/10 text-accent"
+                    : "border-border-soft text-muted-foreground hover:text-foreground hover:border-foreground/20",
+                )}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
 
-        <label className="flex items-center gap-2 text-xs">
-          <span className="text-muted-foreground">Analyzer</span>
-          <select
-            value={analyzerFilter}
-            onChange={(event) => onAnalyzerChange(event.target.value)}
-            className="border-border-soft bg-card-strong/60 rounded-md border px-2 py-1.5 text-xs"
-          >
-            <option value={ALL_OPTION}>All analyzers</option>
-            {analyzerOptions.map((analyzer) => (
-              <option key={analyzer} value={analyzer}>
-                {analyzer}
-              </option>
-            ))}
-          </select>
-        </label>
+        <select
+          aria-label="Product"
+          value={productFilter}
+          onChange={(event) => onProductChange(event.target.value)}
+          className="border-border-soft bg-card-strong/60 rounded-xl border px-3 py-2 text-xs"
+        >
+          <option value={ALL_OPTION}>All products</option>
+          {productOptions.map((product) => (
+            <option key={product} value={product}>
+              {product}
+            </option>
+          ))}
+        </select>
 
-        <label className="border-border-soft bg-card-strong/60 flex min-w-48 flex-1 items-center gap-2 rounded-md border px-2 py-1.5 text-xs">
-          <Search size={13} className="text-muted-foreground shrink-0" />
+        <select
+          aria-label="Analyzer"
+          value={analyzerFilter}
+          onChange={(event) => onAnalyzerChange(event.target.value)}
+          className="border-border-soft bg-card-strong/60 rounded-xl border px-3 py-2 text-xs"
+        >
+          <option value={ALL_OPTION}>All analyzers</option>
+          {analyzerOptions.map((analyzer) => (
+            <option key={analyzer} value={analyzer}>
+              {analyzer}
+            </option>
+          ))}
+        </select>
+
+        <label className="border-border-soft bg-card-strong/60 ml-auto flex min-w-56 flex-1 items-center gap-2 rounded-xl border px-3 py-2 text-xs sm:max-w-sm">
+          <Search size={14} className="text-muted-foreground shrink-0" />
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search title or summary…"
+            placeholder="Search recommendations…"
             className="w-full bg-transparent text-xs outline-none"
           />
         </label>
@@ -756,27 +847,38 @@ export function RecommendationsInboxClient({
           description="Analyzers run on an hourly schedule against every verified cloud connection. A finding shows up here once its review has checked what the resource is for, or try clearing a filter."
         />
       ) : (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">
-              {visible.length} recommendation{visible.length === 1 ? "" : "s"}
-            </span>
-            <button
-              type="button"
-              onClick={() =>
-                setOpenIds(
-                  visible.every((item) => openIds.has(item.id))
-                    ? new Set()
-                    : new Set(visible.map((item) => item.id)),
-                )
-              }
-              className="text-muted-foreground hover:text-foreground"
-            >
-              {visible.every((item) => openIds.has(item.id))
-                ? "Collapse all"
-                : "Expand all"}
-            </button>
-          </div>
+        <ExpandableTable
+          label="Recommendations"
+          columns={[
+            "Recommendation",
+            "Resource",
+            "Potential savings",
+            "Status",
+            "",
+          ]}
+          gridClassName={GRID}
+          footer={
+            <>
+              <span className="inline-flex items-center gap-1.5">
+                <Info size={13} aria-hidden /> Estimates may change after a
+                re-check.
+              </span>
+              <span className="flex items-center gap-3">
+                Showing {visible.length} of {total} recommendations
+                {recommendations.length < total ? (
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={loadMore}
+                    className="text-accent font-medium hover:underline disabled:opacity-50"
+                  >
+                    {loading ? "Loading…" : "Load more"}
+                  </button>
+                ) : null}
+              </span>
+            </>
+          }
+        >
           {visible.map((recommendation) => (
             <RecommendationRow
               key={recommendation.id}
@@ -790,19 +892,8 @@ export function RecommendationsInboxClient({
               onUpdated={applyUpdate}
             />
           ))}
-        </div>
+        </ExpandableTable>
       )}
-
-      {recommendations.length < total ? (
-        <button
-          type="button"
-          disabled={loading}
-          onClick={loadMore}
-          className="border-border-soft text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1.5 rounded-lg border px-3 py-2 text-xs disabled:opacity-50"
-        >
-          <ChevronDown size={13} /> {loading ? "Loading…" : "Load more"}
-        </button>
-      ) : null}
     </div>
   );
 }

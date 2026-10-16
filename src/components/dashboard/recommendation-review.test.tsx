@@ -17,8 +17,9 @@ import type {
   CoreRecommendationReview,
 } from "@/lib/core/api";
 import {
-  FinalRecommendation,
+  BeforeYouContinue,
   NonActionableResult,
+  RecommendationInsight,
   ReviewProgress,
   ReviewQuestions,
   useRecommendationReview,
@@ -277,23 +278,23 @@ describe("ReviewQuestions", () => {
   });
 });
 
-describe("FinalRecommendation", () => {
-  it("separates issue, evidence, recommended action, and alternatives", () => {
-    render(<FinalRecommendation review={guidance()} currency="USD" />);
+describe("RecommendationInsight", () => {
+  it("separates why it matters, the recommended action, evidence, and alternatives", () => {
+    render(<RecommendationInsight review={guidance()} currency="USD" />);
 
-    expect(screen.getByText("Idle EC2 instance")).toBeTruthy();
+    expect(
+      screen.getByRole("region", { name: "Why this matters" }).textContent,
+    ).toContain("Idle EC2 instance");
     expect(screen.getByText("high confidence")).toBeTruthy();
     expect(screen.getByText("Confirmed by you")).toBeTruthy();
-    expect(screen.getByText("CPU averaged 0.2% over 14 days")).toBeTruthy();
+    expect(
+      screen.getByRole("region", { name: "Evidence" }).textContent,
+    ).toContain("CPU averaged 0.2% over 14 days");
     const action = screen.getByRole("region", { name: "Recommended action" });
     expect(action.textContent).toContain("Stop the instance");
     expect(action.textContent).toContain("8.32 USD / month");
-    expect(action.textContent).toContain("Take an AMI");
     expect(action.textContent).toContain("Confirm no alarms fire for 24h");
     expect(action.textContent).toContain("Start the instance again");
-    expect(
-      screen.getByText("Any data on instance store volumes is lost"),
-    ).toBeTruthy();
 
     expect(screen.queryByText("Terminate after snapshot")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "1 alternative" }));
@@ -301,9 +302,9 @@ describe("FinalRecommendation", () => {
     expect(screen.queryByRole("button", { name: "How to fix" })).toBeNull();
   });
 
-  it("offers How to fix for every option that changes something, where it can be acted on", () => {
+  it("offers How to fix for an alternative that changes something", () => {
     render(
-      <FinalRecommendation
+      <RecommendationInsight
         review={guidance()}
         currency="USD"
         recommendationId="00000000-0000-4000-8000-000000000001"
@@ -312,8 +313,34 @@ describe("FinalRecommendation", () => {
     fireEvent.click(screen.getByRole("button", { name: "1 alternative" }));
 
     expect(screen.getAllByRole("button", { name: "How to fix" })).toHaveLength(
-      2,
+      1,
     );
+  });
+});
+
+describe("BeforeYouContinue", () => {
+  it("lists what to check, the risks, and the way to act", () => {
+    render(
+      <BeforeYouContinue
+        review={guidance()}
+        recommendationId="00000000-0000-4000-8000-000000000001"
+      />,
+    );
+
+    const panel = screen.getByRole("region", { name: "Before you continue" });
+    expect(panel.textContent).toContain("1 item to check");
+    expect(panel.textContent).toContain(
+      "Any data on instance store volumes is lost",
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Take an AMI" }));
+    expect(panel.textContent).toContain("Everything is checked");
+    expect(screen.getByRole("button", { name: "How to fix" })).toBeTruthy();
+  });
+
+  it("offers no guide where the recommendation can't be acted on", () => {
+    render(<BeforeYouContinue review={guidance()} />);
+
+    expect(screen.queryByRole("button", { name: "How to fix" })).toBeNull();
   });
 });
 

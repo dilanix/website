@@ -106,40 +106,44 @@ function renderInbox() {
 }
 
 describe("RecommendationsInboxClient", () => {
-  it("shows each recommendation collapsed with its savings in the header", () => {
+  it("lists recommendations as collapsed rows with resource, savings and status", () => {
     renderInbox();
 
-    const headers = screen.getAllByRole("button", { expanded: false });
-    expect(headers).toHaveLength(2);
-    expect(headers[0].textContent).toContain("42.5 USD");
-    expect(headers[0].textContent).toContain("per month");
+    expect(screen.getAllByRole("button", { expanded: false })).toHaveLength(2);
+    const row = screen.getByRole("article", { name: "Idle instance" });
+    expect(row.textContent).toContain("42.5 USD");
+    expect(row.textContent).toContain("per month");
+    expect(row.textContent).toContain("Ready to fix");
     expect(screen.queryByText("Fix Idle instance")).toBeNull();
   });
 
-  it("opens several recommendations as separate cards", () => {
+  it("opens several rows, each with its own content", () => {
     renderInbox();
 
-    fireEvent.click(screen.getByRole("button", { name: /Idle instance/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Idle NAT gateway/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Idle instance/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Details" })[0]);
 
     const instance = screen.getByRole("article", { name: "Idle instance" });
     const nat = screen.getByRole("article", { name: "Idle NAT gateway" });
     expect(instance.textContent).toContain("Fix Idle instance");
+    expect(instance.textContent).toContain("Before you continue");
     expect(instance.textContent).not.toContain("Fix Idle NAT gateway");
     expect(nat.textContent).toContain("Fix Idle NAT gateway");
     expect(screen.getAllByRole("button", { expanded: true })).toHaveLength(2);
   });
 
-  it("collapses a card again and toggles all at once", () => {
+  it("closes a row from its Close action and offers row actions in a menu", () => {
     renderInbox();
 
-    fireEvent.click(screen.getByRole("button", { name: /Idle instance/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Idle instance/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByText("Fix Idle instance")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
-    expect(screen.getAllByRole("button", { expanded: true })).toHaveLength(2);
-    fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
-    expect(screen.queryAllByRole("button", { expanded: true })).toHaveLength(0);
+    fireEvent.click(
+      screen.getByRole("button", { name: "More actions for Idle instance" }),
+    );
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent),
+    ).toEqual(["Re-check", "Dismiss"]);
   });
 });

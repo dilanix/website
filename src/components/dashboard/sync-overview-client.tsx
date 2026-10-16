@@ -3,7 +3,8 @@
 import { useState } from "react";
 import type { Route } from "next";
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowUpRight } from "lucide-react";
 import type {
   CoreIntegrationConnection,
   CoreIntegrationTarget,
@@ -16,9 +17,16 @@ import {
   connectionSyncState,
   type SyncState,
 } from "@/lib/sync/overview";
-import { EmptyState, StatusBadge } from "./primitives";
+import { EmptyState } from "./primitives";
+import {
+  ExpandableRow,
+  ExpandableTable,
+  RowMenu,
+  RowTag,
+  StatePill,
+  type PillTone,
+} from "./expandable-table";
 import { SyncPanel } from "./sync-panel";
-import { cn } from "@/lib/utils";
 
 export type ConnectionSyncData = {
   connection: CoreIntegrationConnection;
@@ -33,31 +41,29 @@ export type ConnectionSyncData = {
   health: CoreSyncDatasetHealth[];
 };
 
-function stateTone(state: SyncState): "success" | "warning" | "neutral" {
-  if (state === "healthy") return "success";
-  if (state === "failing" || state === "attention") return "warning";
-  return "neutral";
-}
+const GRID =
+  "md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_5.5rem]";
 
-function stripe(state: SyncState | null) {
-  if (state === "failing") return "bg-red-500";
-  if (state === "attention") return "bg-amber-500";
-  if (state === "running") return "bg-accent";
-  if (state === "healthy") return "bg-success";
-  return "bg-muted-foreground/40";
-}
+const STATE_TONES: Record<SyncState, PillTone> = {
+  running: "accent",
+  failing: "danger",
+  attention: "warning",
+  never_synced: "neutral",
+  healthy: "success",
+  idle: "neutral",
+};
 
 function formatSynced(value: string | null) {
-  if (!value) return "never synced";
-  return `last synced ${new Date(value).toLocaleString("en-US", {
+  if (!value) return null;
+  return new Date(value).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  })}`;
+  });
 }
 
-function ConnectionSyncCard({
+function ConnectionSyncRow({
   item,
   open,
   onToggle,
@@ -68,115 +74,107 @@ function ConnectionSyncCard({
   onToggle: () => void;
   activeOrganizationCapabilityCodes: string[];
 }) {
+  const router = useRouter();
   const { connection } = item;
   const state = item.error ? null : connectionSyncState(item.runs, item.health);
   const healthy = item.health.filter((row) => row.status === "healthy").length;
-  const bodyId = `sync-${connection.id}`;
+  const synced = formatSynced(connection.last_synced_at);
+  const connectionHref =
+    `/dashboard/integrations/${connection.id}?tab=activity` as Route;
 
   return (
-    <article
-      aria-label={connection.name}
-      className={cn(
-        "group/card relative overflow-hidden rounded-2xl border transition-all duration-200",
-        open
-          ? "border-accent/35 bg-card-strong/50 ring-accent/10 shadow-[0_18px_40px_var(--shadow-card)] ring-1"
-          : "border-border-soft bg-card-strong/25 hover:border-foreground/15 hover:bg-card-strong/45",
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn(
-          "absolute inset-y-0 left-0 w-1",
-          stripe(state),
-          open ? "opacity-100" : "opacity-60 group-hover/card:opacity-100",
-        )}
-      />
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={bodyId}
-        onClick={onToggle}
-        className={cn(
-          "flex w-full items-center gap-3 py-3.5 pr-4 pl-5 text-left transition-colors",
-          open && "bg-accent/[0.04] border-border-soft border-b",
-        )}
-      >
-        <span
-          className={cn(
-            "border-border-soft bg-background/60 flex size-6 shrink-0 items-center justify-center rounded-full border transition-transform duration-200",
-            open && "border-accent/40 text-accent rotate-180",
-          )}
-        >
-          <ChevronDown size={14} aria-hidden />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold">{connection.name}</span>
-            <span className="text-muted-foreground text-xs">
-              {item.integrationName}
-            </span>
-          </span>
-          <span className="text-muted-foreground mt-1 block text-xs">
-            {formatSynced(connection.last_synced_at)}
-            {item.health.length > 0
-              ? ` · ${healthy} of ${item.health.length} datasets healthy`
-              : ""}
-          </span>
-        </span>
-        {item.error ? (
-          <StatusBadge status="warning">Unavailable</StatusBadge>
-        ) : state ? (
-          <StatusBadge status={stateTone(state)}>
-            {state === "running" ? (
-              <Loader2 size={11} className="animate-spin" aria-hidden />
-            ) : null}
-            {SYNC_STATE_LABELS[state]}
-          </StatusBadge>
-        ) : null}
-      </button>
-
-      {open ? (
-        <div id={bodyId} className="animate-toast-in py-4 pr-4 pl-5">
-          <div className="mb-3 flex justify-end">
-            <Link
-              href={
-                `/dashboard/integrations/${connection.id}?tab=activity` as Route
-              }
-              className="text-accent inline-flex items-center gap-1 text-xs underline-offset-2 hover:underline"
+    <ExpandableRow
+      id={connection.id}
+      label={connection.name}
+      open={open}
+      onToggle={onToggle}
+      gridClassName={GRID}
+      title={
+        <>
+          <span className="block text-sm font-semibold">{connection.name}</span>
+          <span className="mt-2 flex flex-wrap gap-1.5">
+            <RowTag>{item.integrationName}</RowTag>
+            <RowTag
+              tone={connection.status === "connected" ? "success" : "warning"}
             >
-              Open connection <ArrowUpRight size={12} aria-hidden />
-            </Link>
-          </div>
-          {item.error ? (
-            <p role="alert" className="text-sm text-red-500">
-              {item.error}
-            </p>
-          ) : (
-            <SyncPanel
-              connectionId={connection.id}
-              providerSlug={item.integrationSlug}
-              enabledCapabilitySlugs={item.enabledCapabilitySlugs}
-              activeOrganizationCapabilityCodes={
-                activeOrganizationCapabilityCodes
-              }
-              connectionUsable={connection.status === "connected"}
-              initialRuns={item.runs}
-              initialTotal={item.runsTotal}
-              initialPolicies={item.policies}
-              initialHealth={item.health}
-              initialTargets={item.targets}
-            />
-          )}
+              {connection.status}
+            </RowTag>
+          </span>
+        </>
+      }
+      cells={[
+        <div key="synced" className="text-xs">
+          <span className="text-muted-foreground block">Last synced</span>
+          <span className="block text-sm font-medium">{synced ?? "Never"}</span>
+        </div>,
+        <div key="datasets" className="text-xs">
+          <span className="text-muted-foreground block">Datasets healthy</span>
+          <span className="text-accent block font-mono text-xl font-semibold">
+            {item.health.length > 0
+              ? `${healthy} / ${item.health.length}`
+              : "—"}
+          </span>
+        </div>,
+        item.error ? (
+          <StatePill key="state" tone="warning">
+            Unavailable
+          </StatePill>
+        ) : state ? (
+          <StatePill
+            key="state"
+            tone={STATE_TONES[state]}
+            spinning={state === "running"}
+          >
+            {SYNC_STATE_LABELS[state]}
+          </StatePill>
+        ) : null,
+        <div key="actions" className="flex items-center justify-end gap-1">
           <button
             type="button"
             onClick={onToggle}
-            className="text-muted-foreground hover:text-foreground mt-3 ml-auto flex items-center gap-1 text-[11px]"
+            className="text-accent px-2 py-1 text-xs font-medium hover:underline"
           >
-            <ChevronUp size={12} aria-hidden /> Collapse
+            {open ? "Close" : "Details"}
           </button>
-        </div>
-      ) : null}
-    </article>
+          <RowMenu
+            label={`More actions for ${connection.name}`}
+            items={[
+              {
+                label: "Open connection",
+                onSelect: () => router.push(connectionHref),
+              },
+            ]}
+          />
+        </div>,
+      ]}
+    >
+      <div className="mb-3 flex justify-end">
+        <Link
+          href={connectionHref}
+          className="text-accent inline-flex items-center gap-1 text-xs underline-offset-2 hover:underline"
+        >
+          Open connection <ArrowUpRight size={12} aria-hidden />
+        </Link>
+      </div>
+      {item.error ? (
+        <p role="alert" className="text-sm text-red-500">
+          {item.error}
+        </p>
+      ) : (
+        <SyncPanel
+          connectionId={connection.id}
+          providerSlug={item.integrationSlug}
+          enabledCapabilitySlugs={item.enabledCapabilitySlugs}
+          activeOrganizationCapabilityCodes={activeOrganizationCapabilityCodes}
+          connectionUsable={connection.status === "connected"}
+          initialRuns={item.runs}
+          initialTotal={item.runsTotal}
+          initialPolicies={item.policies}
+          initialHealth={item.health}
+          initialTargets={item.targets}
+        />
+      )}
+    </ExpandableRow>
   );
 }
 
@@ -219,9 +217,21 @@ export function SyncOverviewClient({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <ExpandableTable
+      label="Connections"
+      columns={["Connection", "Last synced", "Datasets", "Status", ""]}
+      gridClassName={GRID}
+      footer={
+        <>
+          <span>Each connection syncs on its own schedule.</span>
+          <span>
+            {items.length} connection{items.length === 1 ? "" : "s"}
+          </span>
+        </>
+      }
+    >
       {items.map((item) => (
-        <ConnectionSyncCard
+        <ConnectionSyncRow
           key={item.connection.id}
           item={item}
           open={openIds.has(item.connection.id)}
@@ -229,6 +239,6 @@ export function SyncOverviewClient({
           activeOrganizationCapabilityCodes={activeOrganizationCapabilityCodes}
         />
       ))}
-    </div>
+    </ExpandableTable>
   );
 }

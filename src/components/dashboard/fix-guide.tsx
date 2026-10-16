@@ -690,7 +690,7 @@ export function HowToFixButton({
   recommendationId: string;
   optionIndex: number;
   optionTitle: string;
-  variant?: "primary" | "subtle";
+  variant?: "primary" | "subtle" | "large";
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -700,12 +700,14 @@ export function HowToFixButton({
         onClick={() => setOpen(true)}
         className={cn(
           "inline-flex items-center gap-1.5 rounded-lg text-xs font-medium transition-colors",
-          variant === "primary"
-            ? "bg-accent text-accent-foreground px-3 py-1.5 hover:opacity-90"
-            : "text-accent hover:underline",
+          variant === "large" &&
+            "bg-accent text-accent-foreground px-5 py-2.5 text-sm shadow-[0_10px_30px_color-mix(in_oklab,var(--accent)_35%,transparent)] hover:opacity-90",
+          variant === "primary" &&
+            "bg-accent text-accent-foreground px-3 py-1.5 hover:opacity-90",
+          variant === "subtle" && "text-accent hover:underline",
         )}
       >
-        <Wrench size={12} aria-hidden /> How to fix
+        <Wrench size={variant === "large" ? 15 : 12} aria-hidden /> How to fix
       </button>
       {open ? (
         <FixGuideDrawer

@@ -6,6 +6,10 @@ import {
   type ConnectionSyncData,
 } from "./sync-overview-client";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 vi.mock("./sync-panel", () => ({
   SyncPanel: ({ connectionId }: { connectionId: string }) => (
     <div data-testid="sync-panel">{connectionId}</div>
@@ -93,7 +97,7 @@ describe("SyncOverviewClient", () => {
       "Healthy",
     );
     expect(screen.getByRole("article", { name: "Prod" }).textContent).toContain(
-      "1 of 1 datasets healthy",
+      "1 / 1",
     );
     expect(screen.getByRole("article", { name: "Dev" }).textContent).toContain(
       "Failing",
@@ -102,9 +106,9 @@ describe("SyncOverviewClient", () => {
       "Unavailable",
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Dev/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Dev/ }));
     expect(screen.getByTestId("sync-panel").textContent).toBe("c2");
-    fireEvent.click(screen.getByRole("button", { name: /Old/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Old/ }));
     expect(screen.getByRole("alert").textContent).toContain(
       "could not be loaded",
     );
