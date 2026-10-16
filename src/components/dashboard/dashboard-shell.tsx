@@ -26,6 +26,7 @@ import {
   Sparkles,
   Bell,
   RefreshCw,
+  BookOpen,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
@@ -102,6 +103,48 @@ function isActiveItem(pathname: string, href: string) {
   return pathname.startsWith(href);
 }
 
+/** The documentation entry pinned to the bottom of the sidebar. */
+function DocumentationLink({
+  pathname,
+  onNavigate,
+}: {
+  pathname: string;
+  onNavigate: () => void;
+}) {
+  const active = pathname.startsWith("/dashboard/docs");
+  return (
+    <Link
+      href="/dashboard/docs"
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "group border-border-soft relative mb-3 flex items-center gap-3 overflow-hidden rounded-xl border px-3 py-2.5 text-[13px] font-medium transition-all duration-200",
+        active
+          ? "border-accent/40 bg-accent/10 text-foreground"
+          : "bg-dashboard-panel text-muted-foreground hover:border-accent/30 hover:text-foreground",
+      )}
+    >
+      <span
+        aria-hidden
+        className="from-accent/0 via-accent/10 to-accent/0 absolute inset-0 -translate-x-full bg-gradient-to-r transition-transform duration-700 group-hover:translate-x-full"
+      />
+      <span className="border-accent/20 bg-accent/10 text-accent flex size-7 items-center justify-center rounded-lg border">
+        <BookOpen size={14} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block">Documentation</span>
+        <span className="text-muted-foreground block text-[10px] font-normal">
+          Guides and API reference
+        </span>
+      </span>
+      <ChevronRight
+        size={14}
+        className="text-muted-foreground transition-transform group-hover:translate-x-0.5"
+      />
+    </Link>
+  );
+}
+
 function initials(firstName: string, lastName: string) {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
@@ -169,6 +212,10 @@ function getPageContext(pathname: string, product?: DashboardProduct) {
       return { section: product.name, page: "Resources" };
     }
     return { section: "Products", page: product.name };
+  }
+
+  if (pathname.startsWith("/dashboard/docs")) {
+    return { section: "Help", page: "Documentation" };
   }
 
   const item = navGroups
@@ -409,6 +456,10 @@ export function DashboardShell({
         <div className="mt-6 min-h-0 flex-1 overflow-y-auto pb-4">{nav}</div>
 
         <div className="border-border-soft mt-auto border-t pt-4">
+          <DocumentationLink
+            pathname={pathname}
+            onNavigate={() => setOpen(false)}
+          />
           <div className="flex items-center gap-3 px-2">
             <span
               aria-hidden="true"
@@ -529,6 +580,10 @@ export function DashboardShell({
               <div className="mt-6 min-h-0 flex-1 overflow-y-auto pb-6">
                 {nav}
               </div>
+              <DocumentationLink
+                pathname={pathname}
+                onNavigate={() => setOpen(false)}
+              />
               <div className="border-border-soft flex items-center gap-3 border-t px-2 pt-4">
                 <span className="from-accent/18 to-accent-secondary/18 text-accent flex size-9 items-center justify-center rounded-xl bg-gradient-to-br text-xs font-semibold">
                   {initials(user.firstName, user.lastName)}

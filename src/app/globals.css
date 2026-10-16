@@ -98,6 +98,42 @@
   }
 }
 
+@keyframes docs-flow-x {
+  from {
+    left: 0%;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  to {
+    left: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes docs-flow-y {
+  from {
+    top: 0%;
+    left: -2px;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  to {
+    top: 100%;
+    left: -2px;
+    opacity: 0;
+  }
+}
+
 @keyframes drawer-in {
   from {
     opacity: 0;
