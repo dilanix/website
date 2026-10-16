@@ -2201,6 +2201,84 @@ export function answerRecommendationReview(
   );
 }
 
+export type FixGuideMethodKind = "console" | "terraform" | "cli";
+
+export interface CoreFixGuideLink {
+  label: string;
+  url: string;
+  kind: "console" | "documentation" | "cli_reference" | "terraform_registry";
+}
+
+export interface CoreFixGuideStep {
+  title: string;
+  detail: string | null;
+  code: {
+    language: "bash" | "hcl";
+    content: string;
+    /** `<UPPER_CASE>` values the user fills in — never invented by Core. */
+    placeholders: string[];
+  } | null;
+}
+
+export interface CoreFixGuideMethod {
+  method: FixGuideMethodKind;
+  available: boolean;
+  unavailable_reason: string | null;
+  /** `generic_example`: an illustration to adapt (Terraform — Core never
+   * sees the customer's Terraform code or state). */
+  scope: "customer_resource" | "generic_example";
+  note: string | null;
+  links: CoreFixGuideLink[];
+  steps: CoreFixGuideStep[];
+  validation: CoreFixGuideStep[];
+  rollback: CoreFixGuideStep[];
+}
+
+/** A validated "How to fix" guide for one option of a reviewed
+ * recommendation — instructions only; nothing is ever run for the user. */
+export interface CoreRecommendationFixGuide {
+  status: "ready" | "insufficient";
+  provider: string;
+  provider_label: string;
+  option_index: number;
+  option_title: string;
+  action_type: string;
+  summary: string;
+  resource: {
+    provider: string;
+    resource_type: string | null;
+    external_id: string | null;
+    name: string | null;
+    region: string | null;
+    arn: string | null;
+  } | null;
+  prerequisites: string[];
+  warnings: string[];
+  methods: CoreFixGuideMethod[];
+  documentation: CoreFixGuideLink[];
+  /** What verification removed from the generated guide, in plain words. */
+  omitted: string[];
+  model: string | null;
+  generated_at: string | null;
+}
+
+export function getRecommendationFixGuide(
+  organizationId: string,
+  recommendationId: string,
+  input: { option_index: number | null; regenerate: boolean },
+  token: string,
+) {
+  return coreRequest<CoreRecommendationFixGuide>(
+    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/fix-guide`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
 export type ExplorerGranularity = "daily" | "weekly" | "monthly";
 
 export interface CostExplorerGroupByField {

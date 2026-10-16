@@ -298,6 +298,22 @@ describe("FinalRecommendation", () => {
     expect(screen.queryByText("Terminate after snapshot")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "1 alternative" }));
     expect(screen.getByText("Terminate after snapshot")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "How to fix" })).toBeNull();
+  });
+
+  it("offers How to fix for every option that changes something, where it can be acted on", () => {
+    render(
+      <FinalRecommendation
+        review={guidance()}
+        currency="USD"
+        recommendationId="00000000-0000-4000-8000-000000000001"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "1 alternative" }));
+
+    expect(screen.getAllByRole("button", { name: "How to fix" })).toHaveLength(
+      2,
+    );
   });
 });
 

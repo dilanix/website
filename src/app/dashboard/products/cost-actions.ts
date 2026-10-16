@@ -31,6 +31,7 @@ import {
   listCostUsage,
   queryCostExplorer,
   answerRecommendationReview,
+  getRecommendationFixGuide,
   getRecommendationReview,
   requestRecommendationReview,
   restoreRecommendation,
@@ -56,6 +57,7 @@ import {
   type CoreCostUsageListResponse,
   type CoreNotification,
   type CoreRecommendation,
+  type CoreRecommendationFixGuide,
   type CoreRecommendationReview,
   type CoreReport,
   type CoreSavedView,
@@ -835,6 +837,35 @@ export async function getRecommendationReviewAction(
     const data = await getRecommendationReview(
       organizationId,
       parsed.data,
+      token,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const fixGuideOptionSchema = z.number().int().min(0).max(20).nullable();
+
+/** Reads (or, the first time, generates) the "How to fix" guide for one
+ * review option — slow only on that first generation. */
+export async function getRecommendationFixGuideAction(
+  recommendationId: string,
+  optionIndex: number | null,
+  regenerate = false,
+): Promise<CostActionResult<CoreRecommendationFixGuide>> {
+  const parsedId = idSchema.safeParse(recommendationId);
+  if (!parsedId.success) return { error: validationMessage(parsedId.error) };
+  const parsedOption = fixGuideOptionSchema.safeParse(optionIndex);
+  if (!parsedOption.success)
+    return { error: validationMessage(parsedOption.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getRecommendationFixGuide(
+      organizationId,
+      parsedId.data,
+      { option_index: parsedOption.data, regenerate },
       token,
     );
     return { data };

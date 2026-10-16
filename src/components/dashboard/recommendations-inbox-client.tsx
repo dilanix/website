@@ -376,7 +376,15 @@ function RecommendationRow({
           onSubmit={(answers) => void review.answer(answers)}
         />
       ) : guidance?.outcome === "completed" ? (
-        <FinalRecommendation review={guidance} currency={currency} />
+        <FinalRecommendation
+          review={guidance}
+          currency={currency}
+          recommendationId={
+            actionable && recommendation.status !== "resolved"
+              ? recommendation.id
+              : undefined
+          }
+        />
       ) : guidance &&
         (guidance.outcome === "rejected" ||
           guidance.outcome === "insufficient_evidence") ? (

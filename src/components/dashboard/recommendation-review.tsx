@@ -21,6 +21,7 @@ import type {
   CoreRecommendationReview,
 } from "@/lib/core/api";
 import { StatusBadge } from "@/components/dashboard/primitives";
+import { HowToFixButton, hasFixGuide } from "@/components/dashboard/fix-guide";
 import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 1000;
@@ -359,9 +360,12 @@ function TradeOffs({ option }: { option: CoreRecommendationOption }) {
 export function FinalRecommendation({
   review,
   currency,
+  recommendationId,
 }: {
   review: CoreRecommendationAIReview;
   currency: string | null;
+  /** Set where the recommendation can be acted on — shows "How to fix". */
+  recommendationId?: string;
 }) {
   const preferred =
     review.options.find((option) => option.is_preferred) ?? review.options[0];
@@ -413,7 +417,16 @@ export function FinalRecommendation({
             <span className="text-success font-medium">{impact}</span>
           ) : null}
         </div>
-        <p className="mt-1 text-sm font-medium">{preferred.title}</p>
+        <div className="mt-1 flex flex-wrap items-start justify-between gap-2">
+          <p className="text-sm font-medium">{preferred.title}</p>
+          {recommendationId && hasFixGuide(preferred.action_type) ? (
+            <HowToFixButton
+              recommendationId={recommendationId}
+              optionIndex={review.options.indexOf(preferred)}
+              optionTitle={preferred.title}
+            />
+          ) : null}
+        </div>
         <p className="text-muted-foreground mt-0.5 leading-5">
           {preferred.description}
         </p>
@@ -483,6 +496,16 @@ export function FinalRecommendation({
                   <div className="mt-1.5">
                     <TradeOffs option={option} />
                   </div>
+                  {recommendationId && hasFixGuide(option.action_type) ? (
+                    <div className="mt-2">
+                      <HowToFixButton
+                        recommendationId={recommendationId}
+                        optionIndex={review.options.indexOf(option)}
+                        optionTitle={option.title}
+                        variant="subtle"
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
