@@ -11,6 +11,8 @@ const defaultSettings: SiteSettings = {
   calendlyUrl: "https://calendly.com",
   social: {},
   nav: [
+    { label: "Products", href: "/products" },
+    { label: "Solutions", href: "/solutions/aws-cost-optimization" },
     { label: "How it works", href: "/#platform" },
     { label: "Product tour", href: "/#demo" },
     { label: "Security", href: "/#trust" },
