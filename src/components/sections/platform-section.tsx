@@ -1,61 +1,135 @@
 import {
   Activity,
-  ArrowRight,
-  Boxes,
+  BellRing,
   CircleDollarSign,
   Cloud,
-  DatabaseZap,
-  Eye,
-  ShieldCheck,
+  Lightbulb,
+  Network,
+  RefreshCw,
+  Wrench,
+  type LucideIcon,
 } from "lucide-react";
 import { Reveal } from "@/components/common/reveal";
 import { Container } from "@/components/ui/container";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { cn } from "@/lib/utils";
 
-const operatingFlow = [
+const steps: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  detail: string;
+}[] = [
   {
     icon: Cloud,
-    step: "01",
     title: "Connect",
     description:
-      "Bring technology sources, cost data, and resource metadata into one governed workspace.",
+      "Launch one CloudFormation stack per account. It creates a read-only role that only your workspace can assume.",
+    detail: "Every permission is a parameter you can switch off",
   },
   {
-    icon: Boxes,
-    step: "02",
+    icon: RefreshCw,
+    title: "Sync",
+    description:
+      "Inventory, the bill, CloudWatch metrics, and runtime interactions refresh on their own schedules.",
+    detail: "Data health for every dataset, at a glance",
+  },
+  {
+    icon: Network,
     title: "Understand",
     description:
-      "Map resources to applications, environments, owners, and the costs they generate.",
+      "See where the money goes and how resources depend on each other — with the evidence behind every link.",
+    detail: "FOCUS 1.2 line items, not estimates",
+  },
+  {
+    icon: Wrench,
+    title: "Fix",
+    description:
+      "Act on ranked, reviewed recommendations with Console, Terraform, and CLI steps written for your resources.",
+    detail: "You stay in control of every change",
+  },
+];
+
+const capabilities: {
+  icon: LucideIcon;
+  eyebrow: string;
+  title: string;
+  description: string;
+  points: string[];
+  tone: "accent" | "success";
+  wide?: boolean;
+}[] = [
+  {
+    icon: CircleDollarSign,
+    eyebrow: "Cost",
+    title: "Every dollar explained",
+    description:
+      "Effective cost after discounts, credits, Savings Plans, and reservations — by account, service, resource, tag, or team.",
+    points: [
+      "Overview and drill-down Explorer",
+      "Budgets with forecasts",
+      "Allocations by team or cost center",
+      "Anomaly detection",
+      "Scheduled CSV and PDF reports",
+      "Saved views",
+    ],
+    tone: "success",
+    wide: true,
+  },
+  {
+    icon: Lightbulb,
+    eyebrow: "Recommendations",
+    title: "Savings worth making, first",
+    description:
+      "Over 30 AWS checks — idle and oversized resources, storage, networking, and commitments. Each one is reviewed for safety, then ranked by saving × confidence ÷ effort.",
+    points: [
+      "One recommendation per resource",
+      "Savings Plans and reservations sized after cleanup",
+      "How to fix: Console, Terraform, CLI",
+    ],
+    tone: "accent",
+    wide: true,
+  },
+  {
+    icon: Network,
+    eyebrow: "Infrastructure",
+    title: "A live map of your cloud",
+    description:
+      "Resources and the connections between them — from configuration, IAM, flow logs, load balancer logs, and traces.",
+    points: ["Evidence on every edge", "Configured and observed traffic"],
+    tone: "accent",
+  },
+  {
+    icon: RefreshCw,
+    eyebrow: "Sync",
+    title: "Data you can trust",
+    description:
+      "Per-dataset schedules, Sync now, run history, and a clear status when something needs attention.",
+    points: ["Multiple accounts per connection", "Freshness for every dataset"],
+    tone: "accent",
   },
   {
     icon: Activity,
-    step: "03",
-    title: "Optimize",
+    eyebrow: "Telemetry",
+    title: "Your applications, too",
     description:
-      "Find anomalies, waste, utilization gaps, and the opportunities worth acting on first.",
+      "Model applications and environments and send their logs over HTTPS with scoped, revocable ingestion tokens.",
+    points: ["Secrets redacted on arrival", "Per-source tokens"],
+    tone: "accent",
   },
   {
-    icon: ShieldCheck,
-    step: "04",
-    title: "Govern",
+    icon: BellRing,
+    eyebrow: "Notifications",
+    title: "Told when it matters",
     description:
-      "Turn insight into budgets, allocations, recommendations, and repeatable decisions.",
+      "New high-priority savings, budget thresholds, and generated reports go straight to the people who act on them.",
+    points: [
+      "Slack, email, and webhooks",
+      "Reports arrive with the file attached",
+    ],
+    tone: "success",
   },
-] as const;
-
-const technologyCapabilities = [
-  "Cloud resource inventory",
-  "Application and environment context",
-  "Utilization and operational signals",
-  "Ownership and resource metadata",
-] as const;
-
-const costCapabilities = [
-  "Cross-platform cost data",
-  "Spend allocation and unit context",
-  "Budgets, anomalies, and reporting",
-  "Prioritized optimization opportunities",
-] as const;
+];
 
 export function PlatformSection() {
   return (
@@ -66,146 +140,123 @@ export function PlatformSection() {
       />
       <Container className="max-w-7xl">
         <SectionHeading
-          eyebrow="The Dilanix platform"
-          title="Technology context and cost data belong together."
-          description="Most teams manage infrastructure in one place and spend in another. Dilanix creates a shared operating picture, connecting what technology exists, how it behaves, and what it costs."
+          eyebrow="How it works"
+          title="From a read-only role to savings you can trust."
+          description="Connect an account in minutes. Dilanix keeps a fresh copy of what runs and what it costs, and turns it into changes you can safely make."
         />
 
-        <div className="mt-12 grid gap-4 lg:grid-cols-2">
-          <Reveal>
-            <article
-              id="technology-intelligence"
-              className="border-border-soft bg-card-strong/68 relative h-full scroll-mt-24 overflow-hidden rounded-[1.75rem] border p-7 shadow-[0_22px_58px_var(--shadow-card)] backdrop-blur-xl sm:p-9"
+        <Reveal>
+          <ol className="relative mt-12 grid gap-3 md:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute top-[2.35rem] right-[12%] left-[12%] hidden h-px lg:block"
             >
-              <div
-                aria-hidden="true"
-                className="bg-accent/12 pointer-events-none absolute -top-20 -right-16 size-52 rounded-full blur-[72px]"
-              />
-              <div className="flex items-start justify-between gap-5">
-                <span className="border-accent/18 bg-accent/8 text-accent flex size-11 items-center justify-center rounded-xl border">
-                  <Eye size={19} />
-                </span>
-                <span className="text-muted-foreground/55 font-mono text-[10px] tracking-[0.14em] uppercase">
-                  Know what you run
-                </span>
-              </div>
-              <p className="text-accent mt-8 text-[10px] font-semibold tracking-[0.16em] uppercase">
-                Technology Intelligence
-              </p>
-              <h3 className="mt-2 max-w-lg text-2xl font-semibold tracking-[-0.035em] text-balance sm:text-3xl">
-                Turn fragmented infrastructure into decision-ready context.
-              </h3>
-              <p className="text-muted-foreground mt-4 max-w-xl text-sm leading-6 sm:text-base">
-                Build a living view of resources, applications, environments,
-                ownership, and operational signals—without losing the technical
-                detail engineering teams need.
-              </p>
-              <ul className="mt-7 grid gap-3 sm:grid-cols-2">
-                {technologyCapabilities.map((capability) => (
-                  <li
-                    key={capability}
-                    className="text-muted-foreground flex items-center gap-2.5 text-xs"
-                  >
-                    <span className="bg-accent size-1.5 shrink-0 rounded-full" />
-                    {capability}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          </Reveal>
-
-          <Reveal delayMs={90}>
-            <article
-              id="cost-management"
-              className="border-border-soft bg-card-strong/68 relative h-full scroll-mt-24 overflow-hidden rounded-[1.75rem] border p-7 shadow-[0_22px_58px_var(--shadow-card)] backdrop-blur-xl sm:p-9"
-            >
-              <div
-                aria-hidden="true"
-                className="bg-success/10 pointer-events-none absolute -top-20 -right-16 size-52 rounded-full blur-[72px]"
-              />
-              <div className="flex items-start justify-between gap-5">
-                <span className="border-success/18 bg-success/8 text-success flex size-11 items-center justify-center rounded-xl border">
-                  <CircleDollarSign size={19} />
-                </span>
-                <span className="text-muted-foreground/55 font-mono text-[10px] tracking-[0.14em] uppercase">
-                  Control what you spend
-                </span>
-              </div>
-              <p className="text-success mt-8 text-[10px] font-semibold tracking-[0.16em] uppercase">
-                Cost Management
-              </p>
-              <h3 className="mt-2 max-w-lg text-2xl font-semibold tracking-[-0.035em] text-balance sm:text-3xl">
-                Make every cost visible, explainable, and actionable.
-              </h3>
-              <p className="text-muted-foreground mt-4 max-w-xl text-sm leading-6 sm:text-base">
-                Connect billing data to the systems and teams behind it, then
-                move from spend visibility to allocation, optimization, and
-                financial accountability.
-              </p>
-              <ul className="mt-7 grid gap-3 sm:grid-cols-2">
-                {costCapabilities.map((capability) => (
-                  <li
-                    key={capability}
-                    className="text-muted-foreground flex items-center gap-2.5 text-xs"
-                  >
-                    <span className="bg-success size-1.5 shrink-0 rounded-full" />
-                    {capability}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          </Reveal>
-        </div>
-
-        <Reveal delayMs={120}>
-          <div className="border-border-soft bg-card-strong/58 mt-5 rounded-[1.75rem] border p-5 shadow-[0_20px_54px_var(--shadow-card)] backdrop-blur-xl sm:p-7">
-            <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-              <div>
-                <p className="text-accent text-[10px] font-semibold tracking-[0.16em] uppercase">
-                  One continuous operating loop
-                </p>
-                <h3 className="mt-2 text-xl font-semibold tracking-[-0.025em]">
-                  From raw technology data to governed action
-                </h3>
-              </div>
-              <div className="text-muted-foreground flex items-center gap-2 text-[11px]">
-                <DatabaseZap className="text-accent" size={14} />
-                Shared context for engineering and finance
-              </div>
+              <span className="bg-accent/25 absolute inset-0" />
+              <span className="bg-accent absolute top-0 left-0 size-1.5 -translate-y-[2px] [animation:docs-flow-x_3.2s_linear_infinite] rounded-full shadow-[0_0_12px_var(--accent)] motion-reduce:hidden" />
             </div>
+            {steps.map(({ icon: Icon, title, description, detail }, index) => (
+              <li
+                key={title}
+                className="border-border-soft bg-card-strong/68 relative flex flex-col rounded-[1.4rem] border p-5 shadow-[0_18px_48px_var(--shadow-card)] backdrop-blur-xl"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="border-accent/20 bg-card-strong text-accent relative z-10 flex size-11 items-center justify-center rounded-xl border shadow-sm">
+                    <Icon size={18} />
+                  </span>
+                  <span className="text-muted-foreground/55 font-mono text-[10px]">
+                    0{index + 1}
+                  </span>
+                </div>
+                <h3 className="mt-5 text-lg font-semibold tracking-[-0.02em]">
+                  {title}
+                </h3>
+                <p className="text-muted-foreground mt-2 flex-1 text-sm leading-6">
+                  {description}
+                </p>
+                <p className="text-accent border-border-soft mt-4 border-t pt-3 text-[11px] font-medium">
+                  {detail}
+                </p>
+              </li>
+            ))}
+          </ol>
+        </Reveal>
 
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-              {operatingFlow.map(
-                ({ icon: Icon, step, title, description }, index) => (
-                  <div
-                    key={title}
-                    className="border-border-soft/75 bg-surface/48 relative rounded-2xl border p-5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="border-accent/15 bg-accent/8 text-accent flex size-9 items-center justify-center rounded-xl border">
-                        <Icon size={15} />
-                      </span>
-                      <span className="text-muted-foreground/50 font-mono text-[10px]">
-                        {step}
-                      </span>
-                    </div>
-                    <h4 className="mt-5 text-sm font-semibold">{title}</h4>
-                    <p className="text-muted-foreground mt-2 text-[11px] leading-5">
+        <div id="capabilities" className="mt-20 scroll-mt-24">
+          <SectionHeading
+            eyebrow="What's inside"
+            title="Cost, infrastructure, and action in one workspace."
+            description="Engineering and finance look at the same numbers, the same resources, and the same list of what to do next."
+          />
+          <div className="mt-12 grid gap-4 lg:grid-cols-4">
+            {capabilities.map(
+              (
+                { icon: Icon, eyebrow, title, description, points, tone, wide },
+                index,
+              ) => (
+                <Reveal
+                  key={eyebrow}
+                  delayMs={(index % 4) * 70}
+                  className={cn(wide ? "lg:col-span-2" : "lg:col-span-1")}
+                >
+                  <article className="border-border-soft bg-card-strong/68 group relative flex h-full flex-col overflow-hidden rounded-[1.6rem] border p-6 shadow-[0_20px_54px_var(--shadow-card)] backdrop-blur-xl transition-transform duration-300 hover:-translate-y-0.5 sm:p-7">
+                    <div
+                      aria-hidden="true"
+                      className={cn(
+                        "pointer-events-none absolute -top-20 -right-16 size-48 rounded-full opacity-70 blur-[72px] transition-opacity group-hover:opacity-100",
+                        tone === "success" ? "bg-success/12" : "bg-accent/12",
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "flex size-11 items-center justify-center rounded-xl border",
+                        tone === "success"
+                          ? "border-success/20 bg-success/8 text-success"
+                          : "border-accent/20 bg-accent/8 text-accent",
+                      )}
+                    >
+                      <Icon size={19} />
+                    </span>
+                    <p
+                      className={cn(
+                        "mt-6 text-[10px] font-semibold tracking-[0.16em] uppercase",
+                        tone === "success" ? "text-success" : "text-accent",
+                      )}
+                    >
+                      {eyebrow}
+                    </p>
+                    <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-balance sm:text-2xl">
+                      {title}
+                    </h3>
+                    <p className="text-muted-foreground mt-3 text-sm leading-6">
                       {description}
                     </p>
-                    {index < operatingFlow.length - 1 ? (
-                      <ArrowRight
-                        aria-hidden="true"
-                        className="text-accent/55 absolute top-1/2 -right-2.5 z-10 hidden -translate-y-1/2 lg:block"
-                        size={16}
-                      />
-                    ) : null}
-                  </div>
-                ),
-              )}
-            </div>
+                    <ul
+                      className={cn(
+                        "mt-auto grid gap-2.5 pt-6",
+                        wide ? "sm:grid-cols-2" : "",
+                      )}
+                    >
+                      {points.map((point) => (
+                        <li
+                          key={point}
+                          className="text-muted-foreground flex items-center gap-2.5 text-xs"
+                        >
+                          <span
+                            className={cn(
+                              "size-1.5 shrink-0 rounded-full",
+                              tone === "success" ? "bg-success" : "bg-accent",
+                            )}
+                          />
+                          {point}
+                        </li>
+                      ))}
+                    </ul>
+                  </article>
+                </Reveal>
+              ),
+            )}
           </div>
-        </Reveal>
+        </div>
       </Container>
     </section>
   );

@@ -8,61 +8,56 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GuidedDashboardDemo } from "./guided-dashboard-demo";
 
-const snapshot = {
-  monthlySpendUsd: 48600,
-  potentialSavingsUsd: 7300,
-  spendTrend: [41200, 42800, 43350, 44950, 45100, 46800, 45950],
-  breakdown: [
-    { label: "EC2 & Compute", amountUsd: 21400 },
-    { label: "S3 & Storage", amountUsd: 12800 },
-  ],
-  recommendation: {
-    title: "AWS cost optimization opportunity detected",
-    description: "Idle infrastructure is increasing cloud spend.",
-    monthlySavingUsd: 7300,
-    metrics: [{ label: "Optimization score", value: "72%" }],
-  },
-};
-
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
 });
 
+function selected(name: string) {
+  return screen.getByRole("tab", { name }).getAttribute("aria-selected");
+}
+
 describe("GuidedDashboardDemo", () => {
-  it("labels sample data and lets visitors explore dashboard views", () => {
-    render(<GuidedDashboardDemo productName="CostOps" snapshot={snapshot} />);
+  it("labels sample data and lets visitors explore the product views", () => {
+    render(<GuidedDashboardDemo />);
 
-    expect(screen.getByText("Sample workspace")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("tab", { name: "Overview" })
-        .getAttribute("aria-selected"),
-    ).toBe("true");
-
-    fireEvent.click(screen.getByRole("tab", { name: "Costs" }));
-
-    expect(
-      screen.getByRole("tab", { name: "Costs" }).getAttribute("aria-selected"),
-    ).toBe("true");
+    expect(screen.getByText("Sample data")).toBeTruthy();
+    expect(selected("Cost")).toBe("true");
     expect(screen.getByText("Cost by service")).toBeTruthy();
-    expect(screen.getByText("$48,600")).toBeTruthy();
+    expect(screen.getByText("$43,420")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Recommendations" }));
+    expect(selected("Recommendations")).toBe("true");
+    expect(
+      screen.getByText(/aws rds modify-db-instance --db-instance-identifier/),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Terraform" }));
+    expect(screen.getByText(/resource "aws_db_instance"/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Sync" }));
+    expect(screen.getByText("Runtime Interactions")).toBeTruthy();
+  });
+
+  it("shows the evidence behind the selected graph node", () => {
+    render(<GuidedDashboardDemo />);
+    fireEvent.click(screen.getByRole("tab", { name: "Infrastructure" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "orders-db" }));
+    expect(
+      screen.getByText("Used by orders-api and billing-worker"),
+    ).toBeTruthy();
   });
 
   it("guides visitors automatically until they take control", () => {
     vi.useFakeTimers();
-    render(<GuidedDashboardDemo productName="CostOps" snapshot={snapshot} />);
+    render(<GuidedDashboardDemo />);
 
-    act(() => vi.advanceTimersByTime(5500));
-    expect(
-      screen.getByRole("tab", { name: "Costs" }).getAttribute("aria-selected"),
-    ).toBe("true");
+    act(() => vi.advanceTimersByTime(7000));
+    expect(selected("Recommendations")).toBe("true");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Health" }));
-    act(() => vi.advanceTimersByTime(11000));
-
-    expect(
-      screen.getByRole("tab", { name: "Health" }).getAttribute("aria-selected"),
-    ).toBe("true");
+    fireEvent.click(screen.getByRole("tab", { name: "Sync" }));
+    act(() => vi.advanceTimersByTime(14000));
+    expect(selected("Sync")).toBe("true");
   });
 });

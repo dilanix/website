@@ -20,16 +20,14 @@ export function FinalCtaSection({ calendlyUrl }: { calendlyUrl: string }) {
             />
             <div className="relative flex flex-col items-center gap-6">
               <span className="border-accent/20 bg-card-strong/55 text-accent inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.14em] uppercase backdrop-blur-sm">
-                <CalendarCheck size={12} /> Technology and cost, one
-                conversation
+                <CalendarCheck size={12} /> See it on your own account
               </span>
               <h2 className="max-w-3xl text-3xl font-semibold tracking-[-0.04em] text-balance sm:text-5xl">
-                Build a shared operating view of technology and spend.
+                Find out what your AWS really needs to cost.
               </h2>
               <p className="text-muted-foreground max-w-xl text-lg leading-7">
-                See how Dilanix can connect infrastructure intelligence,
-                technology cost, and optimization decisions for engineering and
-                finance teams.
+                Connect a read-only role and walk through your own ranked
+                savings with us — each one with the steps to make it.
               </p>
               <div className="mt-2 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
                 <Button
@@ -39,18 +37,18 @@ export function FinalCtaSection({ calendlyUrl }: { calendlyUrl: string }) {
                   variant="primary"
                   className="group justify-center px-6 py-3"
                 >
-                  Book a platform demo
+                  Book a demo
                   <ArrowRight
                     size={15}
                     className="transition-transform group-hover:translate-x-0.5"
                   />
                 </Button>
                 <Button
-                  href="#interactive-demo"
+                  href="#demo"
                   variant="secondary"
                   className="justify-center px-6 py-3"
                 >
-                  <MousePointerClick size={15} /> Explore the workspace
+                  <MousePointerClick size={15} /> Take the product tour
                 </Button>
               </div>
             </div>

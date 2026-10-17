@@ -11,9 +11,9 @@ const defaultSettings: SiteSettings = {
   calendlyUrl: "https://calendly.com",
   social: {},
   nav: [
-    { label: "Platform", href: "/#platform" },
-    { label: "Technology Intelligence", href: "/#technology-intelligence" },
-    { label: "Cost Management", href: "/#cost-management" },
+    { label: "How it works", href: "/#platform" },
+    { label: "Product tour", href: "/#demo" },
+    { label: "Security", href: "/#trust" },
     { label: "Contact", href: "/contact" },
   ],
 };

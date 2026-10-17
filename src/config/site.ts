@@ -8,5 +8,5 @@ export const siteConfig = {
   domain: "dilanix.org",
   url: "https://dilanix.org",
   description:
-    "Dilanix is a cross-platform Technology Intelligence & Cost Management Platform that connects infrastructure context, resources, and cost data in one operating view.",
+    "Dilanix maps your AWS resources, reads your real bill, and ranks the savings that are safe to make — with verified Console, Terraform, and CLI steps to make them.",
 } as const;

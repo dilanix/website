@@ -1,22 +1,17 @@
 import { ArrowRight, MousePointerClick, Play, ShieldCheck } from "lucide-react";
-import type { ProductDashboardSnapshot } from "@/types";
 import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
 import { GuidedDashboardDemo } from "@/components/product/guided-dashboard-demo";
 import { Reveal } from "@/components/common/reveal";
 
 export function InteractiveDemoSection({
-  productName,
-  snapshot,
   calendlyUrl,
 }: {
-  productName: string;
-  snapshot: ProductDashboardSnapshot;
   calendlyUrl: string;
 }) {
   return (
     <section
-      id="interactive-demo"
+      id="demo"
       className="relative scroll-mt-20 pt-8 pb-24 sm:pt-12 sm:pb-32"
     >
       <div
@@ -29,18 +24,18 @@ export function InteractiveDemoSection({
             <div>
               <div className="border-accent/15 bg-card-strong/70 text-accent inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.16em] uppercase shadow-sm backdrop-blur-sm">
                 <Play size={11} fill="currentColor" />
-                Platform workspace · Guided tour
+                Product tour
               </div>
               <h2 className="mt-5 max-w-3xl text-3xl leading-tight font-semibold tracking-[-0.04em] text-balance sm:text-5xl">
-                See technology intelligence become cost action.
+                From the bill to the fix.
                 <span className="text-muted-foreground block">
-                  Explore the workspace yourself.
+                  Click through the workspace.
                 </span>
               </h2>
               <p className="text-muted-foreground mt-5 max-w-2xl text-base leading-7 sm:text-lg">
-                This interactive CostOps workspace shows how Dilanix connects
-                billing data, infrastructure context, and optimization signals
-                in one decision flow. No signup required.
+                Follow one story: spend you can explain, the savings worth
+                making, what a change would affect, and data you know is fresh.
+                It plays on its own — click any screen to take over.
               </p>
             </div>
             <div className="flex flex-wrap gap-3 lg:justify-end">
@@ -50,7 +45,7 @@ export function InteractiveDemoSection({
                 rel="noopener noreferrer"
                 className="group"
               >
-                Book a platform demo
+                See it on your own account
                 <ArrowRight
                   size={15}
                   className="transition-transform group-hover:translate-x-0.5"
@@ -61,17 +56,17 @@ export function InteractiveDemoSection({
         </Reveal>
 
         <Reveal delayMs={100}>
-          <GuidedDashboardDemo productName={productName} snapshot={snapshot} />
+          <GuidedDashboardDemo />
         </Reveal>
 
         <div className="text-muted-foreground mx-auto mt-6 flex max-w-3xl flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px]">
           <span className="flex items-center gap-1.5">
             <MousePointerClick size={13} className="text-accent" />
-            Click any view to take control
+            Click screens, How to fix tabs, and graph nodes
           </span>
           <span className="flex items-center gap-1.5">
             <ShieldCheck size={13} className="text-success" />
-            Clearly labeled sample data
+            Sample data — no real account shown
           </span>
         </div>
       </Container>
