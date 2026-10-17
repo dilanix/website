@@ -59,15 +59,6 @@ export interface DashboardRecommendation {
   metrics: DashboardMetric[];
 }
 
-export interface ProductDashboardSnapshot {
-  monthlySpendUsd: number;
-  potentialSavingsUsd: number;
-  /** Trailing daily spend, oldest first — drives the sparkline. */
-  spendTrend: number[];
-  breakdown: CostBreakdownItem[];
-  recommendation: DashboardRecommendation;
-}
-
 export interface DashboardOverview {
   monthlySpendUsd: number;
   potentialSavingsUsd: number;

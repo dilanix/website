@@ -1,4 +1,4 @@
-import type { Product, ProductDashboardSnapshot } from "@/types";
+import type { Product } from "@/types";
 
 const fallbackProducts: Product[] = [
   {
@@ -149,56 +149,6 @@ const fallbackProducts: Product[] = [
   },
 ];
 
-const defaultDashboardSnapshots: Record<string, ProductDashboardSnapshot> = {
-  costops: {
-    monthlySpendUsd: 48600,
-    potentialSavingsUsd: 7300,
-    spendTrend: [
-      41200, 42800, 43350, 44950, 45100, 46800, 45950, 47010, 47460, 46990,
-      48610, 47280, 49150, 48600,
-    ],
-    breakdown: [
-      { label: "Compute", amountUsd: 21400 },
-      { label: "Storage", amountUsd: 12800 },
-      { label: "Databases", amountUsd: 9600 },
-      { label: "Data Transfer", amountUsd: 4800 },
-    ],
-    recommendation: {
-      title: "Cost optimization opportunity detected",
-      description:
-        "Unified cost data shows idle compute capacity and oversized database instances driving avoidable spend.",
-      monthlySavingUsd: 7300,
-      metrics: [
-        { label: "Optimization score", value: "72%" },
-        { label: "Cost data source", value: "Unified dataset" },
-      ],
-    },
-  },
-  dena: {
-    monthlySpendUsd: 14200,
-    potentialSavingsUsd: 2800,
-    spendTrend: [
-      11200, 11800, 12350, 11950, 13100, 13800, 12950, 14010, 14460, 13990,
-      14610, 14280, 14950, 14200,
-    ],
-    breakdown: [
-      { label: "Object Storage", amountUsd: 8240 },
-      { label: "Block Storage", amountUsd: 3980 },
-      { label: "Data Transfer", amountUsd: 1980 },
-    ],
-    recommendation: {
-      title: "Cold archive tiering opportunity",
-      description:
-        "Auto-tiering objects unread for 30+ days saves substantial storage spend.",
-      monthlySavingUsd: 2800,
-      metrics: [
-        { label: "Cold tier ratio", value: "64%" },
-        { label: "Average latency impact", value: "0ms" },
-      ],
-    },
-  },
-};
-
 function mapDtoToProduct(dto: Record<string, unknown>): Product {
   const slug = String(dto.slug || "");
   const name = String(dto.name || "");
@@ -290,16 +240,4 @@ export async function getProductBySlug(
   }
   const all = await getProducts();
   return all.find((product) => product.slug === slug);
-}
-
-export async function getUpcomingProducts(): Promise<Product[]> {
-  const all = await getProducts();
-  const featured = await getFeaturedProduct();
-  return all.filter((product) => product.slug !== featured?.slug);
-}
-
-export async function getProductDashboardSnapshot(
-  slug: string,
-): Promise<ProductDashboardSnapshot | undefined> {
-  return defaultDashboardSnapshots[slug] ?? defaultDashboardSnapshots.dena;
 }

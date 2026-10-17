@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Bell,
   BookOpen,
@@ -44,7 +44,7 @@ export type DemoView =
 const STEP_MS = 9000;
 
 /** The tour: what each screen shows, in the order a customer meets them. */
-const steps: { id: DemoView; label: string; caption: string }[] = [
+const ALL_STEPS: { id: DemoView; label: string; caption: string }[] = [
   {
     id: "overview",
     label: "Overview",
@@ -393,11 +393,25 @@ function Header({ view, mobile }: { view: DemoView; mobile: boolean }) {
  * rendered with sample data. It walks through the screens on its own until
  * the visitor clicks anything inside.
  */
-export function GuidedDashboardDemo() {
+export function GuidedDashboardDemo({
+  views,
+  label = "Product tour",
+}: {
+  /** The screens to show, in order — every screen when omitted. */
+  views?: DemoView[];
+  label?: string;
+} = {}) {
+  const steps = useMemo(
+    () =>
+      views
+        ? views.map((id) => ALL_STEPS.find((step) => step.id === id)!)
+        : ALL_STEPS,
+    [views],
+  );
   const frameRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const { mobile, scale, screenWidth, screenHeight } = useScreenScale(frameRef);
-  const [view, setView] = useState<DemoView>("overview");
+  const [view, setView] = useState<DemoView>(steps[0]!.id);
   const [autoplay, setAutoplay] = useState(true);
   const [paused, setPaused] = useState(false);
   const [fixOpen, setFixOpen] = useState(false);
@@ -419,7 +433,7 @@ export function GuidedDashboardDemo() {
       setGraphSelection(null);
     }, STEP_MS);
     return () => window.clearTimeout(timer);
-  }, [playing, view]);
+  }, [playing, view, steps]);
 
   useEffect(() => {
     contentRef.current?.scrollTo?.({ top: 0 });
@@ -438,7 +452,7 @@ export function GuidedDashboardDemo() {
     <div>
       <div
         role="tablist"
-        aria-label="Product tour"
+        aria-label={label}
         className="mb-4 flex flex-wrap items-center justify-center gap-2"
       >
         {steps.map((step, index) => {
