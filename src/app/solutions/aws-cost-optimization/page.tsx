@@ -143,6 +143,11 @@ const foundation: { icon: LucideIcon; title: string; text: string }[] = [
 
 const faqs = [
   {
+    question: "Is Dilanix only for AWS?",
+    answer:
+      "No. Dilanix is a cross-platform cost and infrastructure platform, built provider-neutral from the start. AWS is the first provider it connects to today; more cloud providers are coming.",
+  },
+  {
     question:
       "How is this different from AWS Cost Explorer or Trusted Advisor?",
     answer:
@@ -242,6 +247,10 @@ export default async function AwsCostOptimizationPage() {
               automatically
             </span>
           </div>
+          <p className="text-muted-foreground mt-4 text-xs">
+            Dilanix is cross-platform — AWS is the first provider it connects
+            to, with more cloud providers coming.
+          </p>
         </Container>
       </section>
 
@@ -381,7 +390,7 @@ export default async function AwsCostOptimizationPage() {
             Find out what your AWS really needs to cost.
           </h2>
           <p className="text-muted-foreground max-w-xl text-sm">
-            Connect a read-only role, let the first sync finish, and walk
+            Give Dilanix read-only access, let the first sync finish, and walk
             through your ranked savings with us.
           </p>
           <Button

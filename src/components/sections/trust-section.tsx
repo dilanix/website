@@ -16,25 +16,25 @@ const principles: { icon: LucideIcon; title: string; description: string }[] = [
     icon: KeyRound,
     title: "Read-only by construction",
     description:
-      "The IAM role can describe, list, and read — never create, change, stop, or delete. Switch off any permission you do not want to grant.",
+      "Dilanix can describe, list, and read — never create, change, stop, or delete. Switch off any permission you do not want to grant.",
   },
   {
     icon: Fingerprint,
     title: "Only your workspace gets in",
     description:
-      "The role can be assumed only with your workspace's External ID. No long-lived access keys, ever.",
+      "Access is tied to your workspace — on AWS, a role only your External ID can assume. No long-lived access keys, ever.",
   },
   {
     icon: Calculator,
     title: "Savings from real numbers",
     description:
-      "Every saving is calculated from current AWS prices and your own bill. AI explains and reviews — it never invents a dollar amount.",
+      "Every saving is calculated from the provider's current prices and your own bill. AI explains and reviews — it never invents a dollar amount.",
   },
   {
     icon: BadgeCheck,
     title: "Every command checked",
     description:
-      "CLI commands are validated against AWS's own API definitions, Terraform against the provider docs, and every ID must exist in your data.",
+      "CLI commands are validated against the provider's own API definitions, Terraform against the provider docs, and every ID must exist in your data.",
   },
   {
     icon: Hand,

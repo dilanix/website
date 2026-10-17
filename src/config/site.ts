@@ -8,5 +8,5 @@ export const siteConfig = {
   domain: "dilanix.org",
   url: "https://dilanix.org",
   description:
-    "Dilanix maps your AWS resources, reads your real bill, and ranks the savings that are safe to make — with verified Console, Terraform, and CLI steps to make them.",
+    "Dilanix maps your cloud resources, reads your real bill, and ranks the savings that are safe to make — with verified Console, Terraform, and CLI steps to make them.",
 } as const;

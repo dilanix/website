@@ -17,11 +17,11 @@ export function HeroSection({ calendlyUrl }: { calendlyUrl: string }) {
           <div className="flex flex-col items-start text-left">
             <div className="border-accent/20 bg-card-strong/72 text-accent inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[10px] font-semibold tracking-[0.14em] uppercase shadow-[0_12px_32px_var(--shadow-card)] backdrop-blur-xl">
               <span className="bg-accent h-1.5 w-1.5 rounded-full shadow-[0_0_9px_var(--accent)]" />
-              <span>AWS cost and infrastructure intelligence</span>
+              <span>Cloud cost and infrastructure intelligence</span>
             </div>
 
             <h1 className="text-foreground mt-7 max-w-3xl text-4xl leading-[1.02] font-semibold tracking-[-0.055em] text-balance sm:text-6xl lg:text-[4.4rem]">
-              Know what your AWS runs.
+              Know what your cloud runs.
               <span className="from-accent via-accent to-accent-secondary mt-2 block bg-gradient-to-r bg-clip-text text-transparent">
                 Pay only for what it needs.
               </span>
@@ -61,10 +61,20 @@ export function HeroSection({ calendlyUrl }: { calendlyUrl: string }) {
               </Button>
             </div>
 
-            <div className="text-muted-foreground mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[11px]">
+            <p className="text-muted-foreground mt-8 flex flex-wrap items-center gap-2 text-xs">
+              <span className="border-border-soft bg-card-strong/70 text-foreground inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-semibold">
+                <span className="bg-success size-1.5 rounded-full" />
+                AWS today
+              </span>
+              <span className="border-border-soft inline-flex items-center rounded-full border border-dashed px-2.5 py-1">
+                More cloud providers coming
+              </span>
+            </p>
+
+            <div className="text-muted-foreground mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[11px]">
               <span className="flex items-center gap-1.5">
                 <Lock size={13} className="text-accent" />
-                Read-only IAM role
+                Read-only access
               </span>
               <span className="flex items-center gap-1.5">
                 <Receipt size={13} className="text-accent" />

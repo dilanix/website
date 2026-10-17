@@ -20,7 +20,7 @@ function usePrefersReducedMotion() {
 
 /**
  * The hero's living preview: ranked recommendations take turns, and the
- * selected one's verified AWS CLI fix types itself out below.
+ * selected one's verified CLI fix types itself out below.
  */
 export function HeroPreview() {
   const reducedMotion = usePrefersReducedMotion();

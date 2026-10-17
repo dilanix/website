@@ -23,10 +23,10 @@ export function FinalCtaSection({ calendlyUrl }: { calendlyUrl: string }) {
                 <CalendarCheck size={12} /> See it on your own account
               </span>
               <h2 className="max-w-3xl text-3xl font-semibold tracking-[-0.04em] text-balance sm:text-5xl">
-                Find out what your AWS really needs to cost.
+                Find out what your cloud really needs to cost.
               </h2>
               <p className="text-muted-foreground max-w-xl text-lg leading-7">
-                Connect a read-only role and walk through your own ranked
+                Give Dilanix read-only access and walk through your own ranked
                 savings with us — each one with the steps to make it.
               </p>
               <div className="mt-2 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">

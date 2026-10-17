@@ -24,9 +24,9 @@ import { GuidedDashboardDemo } from "@/components/product/guided-dashboard-demo"
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
-  title: "Products — Cost and Infrastructure for AWS",
+  title: "Products — Cloud Cost and Infrastructure",
   description:
-    "Dilanix Cost explains your AWS bill and ranks verified savings; Dilanix Infrastructure maps every resource and the evidence behind each connection. Both run on one read-only platform.",
+    "Dilanix Cost explains your cloud bill and ranks verified savings; Dilanix Infrastructure maps every resource and the evidence behind each connection. Both run on one read-only platform.",
   alternates: { canonical: "/products" },
 };
 
@@ -63,11 +63,11 @@ const liveProducts: {
       },
       {
         title: "Recommendations",
-        text: "Over 30 AWS checks, each reviewed for safety, ranked, and explained.",
+        text: "Over 30 checks for AWS today, each reviewed for safety, ranked, and explained.",
       },
       {
         title: "How to fix",
-        text: "Console, Terraform, and CLI steps, every command checked against AWS's API definitions.",
+        text: "Console, Terraform, and CLI steps, every command checked against the provider's API definitions.",
       },
       {
         title: "Savings Plans and reservations",
@@ -83,7 +83,7 @@ const liveProducts: {
     name: "Infrastructure",
     headline: "See every resource and what it really talks to.",
     description:
-      "A live graph of your AWS accounts: what is provisioned, how it is wired, and which connections traffic actually uses — with the evidence behind every line.",
+      "A live graph of your cloud accounts: what is provisioned, how it is wired, and which connections traffic actually uses — with the evidence behind every line.",
     features: [
       {
         title: "Provisioned and Runtime",
@@ -109,8 +109,8 @@ const liveProducts: {
 const platform: { icon: LucideIcon; title: string; text: string }[] = [
   {
     icon: Cloud,
-    title: "Read-only AWS connection",
-    text: "One CloudFormation stack per account; several accounts per connection.",
+    title: "Read-only cloud connections",
+    text: "AWS today: one CloudFormation stack per account, several accounts per connection. More providers are coming.",
   },
   {
     icon: RefreshCw,
@@ -154,6 +154,11 @@ const roadmap: { icon: LucideIcon; title: string; text: string }[] = [
     icon: Workflow,
     title: "Automation",
     text: "Workflows and remediation for what the other products detect.",
+  },
+  {
+    icon: Cloud,
+    title: "More cloud providers",
+    text: "The same products and data on more clouds — Dilanix is built provider-neutral from the start.",
   },
   {
     icon: Lightbulb,
@@ -303,7 +308,7 @@ export default async function ProductsPage() {
             title="What we are building next."
             description="Planned, not yet available. Each one will run on the same connection and data."
           />
-          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {roadmap.map((item) => (
               <article
                 key={item.title}
@@ -332,11 +337,11 @@ export default async function ProductsPage() {
       <section className="border-foreground/10 bg-card-strong border-t py-20">
         <Container className="mx-auto flex max-w-2xl flex-col items-center text-center">
           <h2 className="text-foreground text-2xl font-semibold tracking-tight sm:text-3xl">
-            See both on your own AWS account.
+            See both on your own cloud account.
           </h2>
           <p className="text-muted-foreground mt-3 text-sm">
-            Connect a read-only role and walk through your spend, your graph,
-            and your ranked savings with us.
+            Give Dilanix read-only access and walk through your spend, your
+            graph, and your ranked savings with us.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Button

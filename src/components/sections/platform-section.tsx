@@ -24,7 +24,7 @@ const steps: {
     icon: Cloud,
     title: "Connect",
     description:
-      "Launch one CloudFormation stack per account. It creates a read-only role that only your workspace can assume.",
+      "Give Dilanix read-only access to each cloud account. On AWS it is one CloudFormation stack that only your workspace can use.",
     detail: "Every permission is a parameter you can switch off",
   },
   {
@@ -81,7 +81,7 @@ const capabilities: {
     eyebrow: "Recommendations",
     title: "Savings worth making, first",
     description:
-      "Over 30 AWS checks — idle and oversized resources, storage, networking, and commitments. Each one is reviewed for safety, then ranked by saving × confidence ÷ effort.",
+      "Over 30 checks for AWS today — idle and oversized resources, storage, networking, and commitments. Each one is reviewed for safety, then ranked by saving × confidence ÷ effort.",
     points: [
       "One recommendation per resource",
       "Savings Plans and reservations sized after cleanup",
@@ -141,7 +141,7 @@ export function PlatformSection() {
       <Container className="max-w-7xl">
         <SectionHeading
           eyebrow="How it works"
-          title="From a read-only role to savings you can trust."
+          title="From read-only access to savings you can trust."
           description="Connect an account in minutes. Dilanix keeps a fresh copy of what runs and what it costs, and turns it into changes you can safely make."
         />
 

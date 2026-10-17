@@ -83,7 +83,7 @@ export default function Image() {
             color: "#26425f",
           }}
         >
-          AWS cost and infrastructure intelligence
+          Cloud cost and infrastructure intelligence
         </div>
       </div>
       <div
