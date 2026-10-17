@@ -367,7 +367,7 @@ function MethodPanel({
   );
 }
 
-function GuideBody({
+export function GuideBody({
   guide,
   recommendationId,
 }: {

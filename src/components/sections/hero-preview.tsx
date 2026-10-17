@@ -5,7 +5,7 @@ import { BadgeCheck, Lightbulb, ShieldCheck, Terminal } from "lucide-react";
 import { demoRecommendations, formatUsd } from "@/components/product/demo-data";
 import { cn } from "@/lib/utils";
 
-const ready = demoRecommendations.filter((item) => item.status === "ready");
+const ready = demoRecommendations.filter((item) => item.command);
 const CYCLE_MS = 4200;
 
 function usePrefersReducedMotion() {
@@ -117,7 +117,7 @@ export function HeroPreview() {
                     {item.title}
                   </span>
                   <span className="text-muted-foreground block truncate text-[10px]">
-                    {item.resource} · {item.resourceType}
+                    {item.resourceName} · {item.resourceKind}
                   </span>
                 </span>
                 <span className="text-success shrink-0 font-mono text-xs font-semibold">
