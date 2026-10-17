@@ -221,11 +221,6 @@ export async function getProducts(): Promise<Product[]> {
   return fallbackProducts;
 }
 
-export async function getFeaturedProduct(): Promise<Product | undefined> {
-  const all = await getProducts();
-  return all.find((product) => product.featured) || all[0];
-}
-
 export async function getProductBySlug(
   slug: string,
 ): Promise<Product | undefined> {
