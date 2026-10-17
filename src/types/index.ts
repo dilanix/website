@@ -7,7 +7,16 @@
 export interface NavLink {
   label: string;
   href: string;
+  description?: string;
 }
+
+/** A top-level menu entry that opens a dropdown of links. */
+export interface NavGroup {
+  label: string;
+  children: NavLink[];
+}
+
+export type NavItem = NavLink | NavGroup;
 
 export interface ProductCapability {
   label: string;
@@ -115,5 +124,5 @@ export interface SiteSettings {
   email: string;
   calendlyUrl: string;
   social: SiteSocialLinks;
-  nav: NavLink[];
+  nav: NavItem[];
 }
