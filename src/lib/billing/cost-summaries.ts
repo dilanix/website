@@ -65,10 +65,23 @@ export interface DateRange {
   end: Date;
 }
 
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
 function utcMidnight(date: Date): Date {
   return new Date(
     Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
   );
+}
+
+/** The current calendar month through today, using UTC day boundaries. The
+ * exclusive end is tomorrow's UTC midnight so today's accumulating estimated
+ * data remains included, consistent with the rolling presets below. */
+export function monthToDateRange(now: Date = new Date()): DateRange {
+  const today = utcMidnight(now);
+  return {
+    start: new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)),
+    end: new Date(today.getTime() + DAY_IN_MS),
+  };
 }
 
 /**
@@ -96,8 +109,8 @@ export function presetRange(
 ): DateRange {
   const preset = PERIOD_PRESETS.find((candidate) => candidate.id === presetId);
   const days = preset?.days ?? 1;
-  const end = new Date(utcMidnight(now).getTime() + 24 * 60 * 60 * 1000);
-  const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
+  const end = new Date(utcMidnight(now).getTime() + DAY_IN_MS);
+  const start = new Date(end.getTime() - days * DAY_IN_MS);
   return { start, end };
 }
 
@@ -116,7 +129,7 @@ export function previousRange({ start, end }: DateRange): DateRange {
 export function customRange(startDate: string, endDate: string): DateRange {
   const start = new Date(`${startDate}T00:00:00.000Z`);
   const endDayStart = new Date(`${endDate}T00:00:00.000Z`);
-  const end = new Date(endDayStart.getTime() + 24 * 60 * 60 * 1000);
+  const end = new Date(endDayStart.getTime() + DAY_IN_MS);
   return { start, end };
 }
 

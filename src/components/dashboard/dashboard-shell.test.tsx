@@ -1,5 +1,6 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
 import { DashboardShell } from "./dashboard-shell";
 
 vi.mock("next/navigation", () => ({
@@ -10,50 +11,183 @@ vi.mock("@/app/dashboard/actions", () => ({
   signOutAction: vi.fn(),
 }));
 
+vi.mock("@/app/dashboard/sync/actions", () => ({
+  getSyncIndicatorAction: vi.fn().mockResolvedValue(null),
+}));
+
 const user = {
   firstName: "Ada",
   lastName: "Lovelace",
   email: "ada@example.com",
 };
 
+const products: DashboardProduct[] = [
+  {
+    id: "automation",
+    name: "Automation",
+    slug: "automation",
+    description: "Workflow automation",
+    status: "active",
+    href: "/dashboard/products/automation",
+    navigation: [
+      { label: "Overview", href: "/dashboard/products/automation" },
+      { label: "Usage", href: "/dashboard/products/automation/usage" },
+      { label: "Docs", href: "/dashboard/products/automation/docs" },
+    ],
+  },
+  {
+    id: "cost",
+    name: "Cost",
+    slug: "cost",
+    description: "Cloud cost management",
+    status: "active",
+    href: "/dashboard/products/cost",
+    navigation: [
+      { label: "Overview", href: "/dashboard/products/cost" },
+      { label: "Usage", href: "/dashboard/products/cost/usage" },
+      { label: "Docs", href: "/dashboard/products/cost/docs" },
+    ],
+  },
+  {
+    id: "security",
+    name: "Security",
+    slug: "security",
+    description: "Cloud security",
+    status: "pending",
+    href: "/dashboard/products/security",
+    navigation: [],
+  },
+];
+
 afterEach(cleanup);
 
 describe("DashboardShell", () => {
-  it("hides organization-scoped navigation when no effective organization exists", () => {
-    render(
-      <DashboardShell user={user} organization={null} products={[]}>
-        <p>Account settings</p>
-      </DashboardShell>,
-    );
-
-    expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Overview" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Resources" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Applications" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Costs" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Integrations" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "API Keys" })).toBeNull();
-    expect(screen.queryByText("Organization")).toBeNull();
-  });
-
   it("shows organization-scoped navigation for an effective organization", () => {
     render(
       <DashboardShell
         user={user}
         organization={{ name: "Analytical Engines" }}
         products={[]}
+        activeCapabilityCodes={[
+          "aws.inventory.read",
+          "aws.billing.read",
+          "platform.application",
+          "platform.api_keys",
+        ]}
       >
         <p>Organization dashboard</p>
       </DashboardShell>,
     );
 
     expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Resources" })).toBeTruthy();
+    // Resources lives in the Infrastructure product, never a workspace section.
+    expect(screen.queryByRole("link", { name: "Resources" })).toBeNull();
     expect(screen.getByRole("link", { name: "Applications" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Costs" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Integrations" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "API Keys" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Billing" })).toBeNull();
+    // Cost data lives in the Cost product, never a separate workspace section.
+    expect(screen.queryByRole("link", { name: "Costs" })).toBeNull();
     expect(screen.getByText("Analytical Engines")).toBeTruthy();
+    expect(screen.getAllByRole("link", { name: "Dilanix home" })).toHaveLength(
+      1,
+    );
+  });
+
+  it("hides Applications without platform.application capability", () => {
+    render(
+      <DashboardShell
+        user={user}
+        organization={{ name: "Analytical Engines" }}
+        products={[]}
+        activeCapabilityCodes={[
+          "aws.inventory.read",
+          "aws.billing.read",
+          "platform.api_keys",
+        ]}
+      >
+        <p>Organization dashboard</p>
+      </DashboardShell>,
+    );
+
+    expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Applications" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Integrations" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "API Keys" })).toBeTruthy();
+  });
+
+  it("hides API Keys without platform.api_keys capability", () => {
+    render(
+      <DashboardShell
+        user={user}
+        organization={{ name: "Analytical Engines" }}
+        products={[]}
+        activeCapabilityCodes={[
+          "aws.inventory.read",
+          "aws.billing.read",
+          "platform.application",
+        ]}
+      >
+        <p>Organization dashboard</p>
+      </DashboardShell>,
+    );
+
+    expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Applications" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Integrations" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "API Keys" })).toBeNull();
+  });
+
+  it("hides capability-owned navigation without an organization grant", () => {
+    render(
+      <DashboardShell
+        user={user}
+        organization={{ name: "Analytical Engines" }}
+        products={[]}
+        activeCapabilityCodes={["aws.inventory.read"]}
+      >
+        <p>Organization dashboard</p>
+      </DashboardShell>,
+    );
+
+    expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Applications" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "API Keys" })).toBeNull();
+  });
+
+  it("groups active products into a single linked list", () => {
+    render(
+      <DashboardShell
+        user={user}
+        organization={{ name: "Analytical Engines" }}
+        products={products}
+        activeCapabilityCodes={[]}
+      >
+        <p>Organization dashboard</p>
+      </DashboardShell>,
+    );
+
+    expect(screen.getByText("Products")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Automation" }).getAttribute("href"),
+    ).toBe("/dashboard/products/automation");
+    expect(
+      screen.getByRole("link", { name: "Cost" }).getAttribute("href"),
+    ).toBe("/dashboard/products/cost");
+    expect(screen.queryByRole("link", { name: "Security" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Usage" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Docs" })).toBeNull();
+    expect(screen.getByText("Workflow automation")).toBeTruthy();
+    expect(screen.getByText("Cloud cost management")).toBeTruthy();
+
+    const navigation = within(
+      screen.getByRole("navigation", { name: "Dashboard navigation" }),
+    );
+
+    expect(
+      navigation
+        .getByText("Products")
+        .compareDocumentPosition(navigation.getByText("Manage")) & 4,
+    ).toBe(4);
   });
 });

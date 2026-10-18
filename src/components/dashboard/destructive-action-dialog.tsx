@@ -2,6 +2,7 @@
 
 import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
+import { ModalOverlay } from "./modal-overlay";
 
 export function DestructiveActionDialog({
   title,
@@ -25,7 +26,7 @@ export function DestructiveActionDialog({
     confirmationName === undefined || confirmation === confirmationName;
 
   return (
-    <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+    <ModalOverlay onClose={onCancel}>
       <div
         role="alertdialog"
         aria-modal="true"
@@ -98,6 +99,6 @@ export function DestructiveActionDialog({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

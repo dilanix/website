@@ -2,15 +2,22 @@
 import {
   type FormEvent,
   type ReactNode,
+  useEffect,
+  useEffectEvent,
   useMemo,
+  useRef,
   useState,
   useTransition,
 } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { RefreshCw, Search } from "lucide-react";
-import type { CoreCostSummary, CostBasis } from "@/lib/core/api";
-import { listCostSummariesAction } from "@/app/dashboard/integrations/actions";
+import type {
+  CoreCostSummary,
+  CoreIntegrationTarget,
+  CostBasis,
+} from "@/lib/core/api";
+import { listCostSummariesAction } from "@/app/dashboard/products/cost-actions";
 import {
   COST_BASIS_FILTER_ORDER,
   COST_SUMMARIES_PAGE_SIZE,
@@ -26,6 +33,7 @@ import {
 import { EmptyState, StatusBadge } from "./primitives";
 import { CostSummaryTotals } from "./cost-summary-totals";
 import { cn } from "@/lib/utils";
+import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 
 export function FilterChip({
   active,
@@ -65,9 +73,25 @@ function updateCostsUrl(values: Record<string, string | null>) {
   window.history.replaceState(null, "", url);
 }
 
-function CostSummaryRow({ costSummary }: { costSummary: CoreCostSummary }) {
+function CostSummaryRow({
+  costSummary,
+  targetLabel,
+}: {
+  costSummary: CoreCostSummary;
+  /** `display_name ?? external_id` of the `IntegrationTarget` this row's
+   * charges belong to — `null` when the connection only ever resolved to a
+   * single target, where a per-row label would be redundant. */
+  targetLabel: string | null;
+}) {
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-4 text-sm md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(7rem,0.7fr)]">
+    <div
+      className={cn(
+        "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-4 text-sm",
+        targetLabel !== null
+          ? "md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(7rem,0.7fr)]"
+          : "md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(7rem,0.7fr)]",
+      )}
+    >
       <div className="min-w-0">
         <p className="truncate font-medium">{costSummary.service_name}</p>
         <p className="text-muted-foreground mt-0.5 font-mono text-xs">
@@ -82,6 +106,11 @@ function CostSummaryRow({ costSummary }: { costSummary: CoreCostSummary }) {
           {costSummary.billing_authority}
         </span>
       </div>
+      {targetLabel !== null ? (
+        <div className="text-muted-foreground hidden truncate text-xs md:block">
+          {targetLabel}
+        </div>
+      ) : null}
       <div className="hidden items-center gap-2 md:flex">
         <StatusBadge status="neutral">
           {costBasisLabel(costSummary.cost_basis)}
@@ -102,8 +131,30 @@ interface CostSummaryFilters {
   serviceName: string;
 }
 
+function isCostSummaryFilters(value: unknown): value is CostSummaryFilters {
+  if (!value || typeof value !== "object") return false;
+  const filters = value as Record<string, unknown>;
+  return (
+    typeof filters.costBasis === "string" &&
+    COST_BASIS_FILTER_ORDER.includes(filters.costBasis as CostBasis) &&
+    typeof filters.serviceName === "string"
+  );
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isPeriod(value: unknown): value is PeriodPresetId | "custom" {
+  return (
+    value === "custom" || PERIOD_PRESETS.some((preset) => preset.id === value)
+  );
+}
+
 export function CostSummaryPanel({
   connectionId,
+  targetId = null,
+  targets = [],
   costReadEnabled,
   connectionSettingsHref,
   initialCostSummaries,
@@ -113,8 +164,17 @@ export function CostSummaryPanel({
   initialPeriod = "30d",
   initialCustomStart = "",
   initialCustomEnd = "",
+  preferInitialFilters = false,
 }: {
   connectionId: string;
+  /** Narrows every fetch to one `IntegrationTarget` (provider account) within
+   * this connection — `null` reads every target the connection currently
+   * holds. Set from the `target` URL param via `CostDataScopeSelector`. */
+  targetId?: string | null;
+  /** This connection's own targets, for resolving each row's `target_id` to a
+   * human label — never fetched here, since the page already loads them for
+   * `CostDataScopeSelector`. */
+  targets?: CoreIntegrationTarget[];
   /** Whether `billing.read` is enabled on this connection — Core's read API
    * 403s rather than returning an empty page when it isn't
    * (`CostSummaryService.list_cost_summaries`), so this panel never even
@@ -128,24 +188,59 @@ export function CostSummaryPanel({
   initialPeriod?: PeriodPresetId | "custom";
   initialCustomStart?: string;
   initialCustomEnd?: string;
+  preferInitialFilters?: boolean;
 }) {
+  const targetLabelById = useMemo(() => {
+    const result = new Map<string, string>();
+    for (const target of targets) {
+      result.set(target.id, target.display_name ?? target.external_id);
+    }
+    return result;
+  }, [targets]);
+  const showTargetColumn = targets.length > 1;
   const [costSummaries, setCostSummaries] = useState(initialCostSummaries);
   const [total, setTotal] = useState(initialTotal);
-  const [filters, setFilters] = useState<CostSummaryFilters>({
+  const initialResolvedFilters: CostSummaryFilters = {
     costBasis: initialCostBasis,
     serviceName: initialServiceName,
-  });
-  const [serviceNameInput, setServiceNameInput] = useState(initialServiceName);
-  const [presetId, setPresetId] = useState<PeriodPresetId | "custom">(
-    initialPeriod,
+  };
+  const [filters, setFilters, { restored: filtersRestored }] =
+    useDashboardFilterState<CostSummaryFilters>(
+      `costs:${connectionId}:summary-filters`,
+      initialResolvedFilters,
+      isCostSummaryFilters,
+      { fallbackPriority: preferInitialFilters },
+    );
+  const [serviceNameInput, setServiceNameInput] = useDashboardFilterState(
+    `costs:${connectionId}:summary-service-input`,
+    initialServiceName,
+    isString,
+    { fallbackPriority: preferInitialFilters },
   );
-  const [customStart, setCustomStart] = useState(initialCustomStart);
-  const [customEnd, setCustomEnd] = useState(initialCustomEnd);
+  const [presetId, setPresetId] = useDashboardFilterState<
+    PeriodPresetId | "custom"
+  >(`costs:${connectionId}:summary-period`, initialPeriod, isPeriod, {
+    fallbackPriority: preferInitialFilters,
+  });
+  const [customStart, setCustomStart] = useDashboardFilterState(
+    `costs:${connectionId}:summary-start`,
+    initialCustomStart,
+    isString,
+    { fallbackPriority: preferInitialFilters },
+  );
+  const [customEnd, setCustomEnd] = useDashboardFilterState(
+    `costs:${connectionId}:summary-end`,
+    initialCustomEnd,
+    isString,
+    { fallbackPriority: preferInitialFilters },
+  );
+  const [includeCredits, setIncludeCredits] = useState(false);
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const restoredFiltersApplied = useRef(false);
 
   const range: DateRange | null = useMemo(() => {
     if (presetId === "custom") {
@@ -162,15 +257,17 @@ export function CostSummaryPanel({
     });
   }, [costSummaries, range]);
 
-  function reload(next: CostSummaryFilters) {
+  function reload(next: CostSummaryFilters, credits = includeCredits) {
     setRefreshing(true);
     setError("");
     startTransition(async () => {
       const result = await listCostSummariesAction(connectionId, {
         limit: COST_SUMMARIES_PAGE_SIZE,
         offset: 0,
+        targetId,
         costBasis: next.costBasis,
         serviceName: next.serviceName || null,
+        includeCredits: credits,
       });
       setRefreshing(false);
       if (result.error) return setError(result.error);
@@ -180,12 +277,47 @@ export function CostSummaryPanel({
       }
     });
   }
+  const restoreFilters = useEffectEvent((next: CostSummaryFilters) => {
+    reload(next);
+  });
+
+  useEffect(() => {
+    if (!filtersRestored || restoredFiltersApplied.current) return;
+    restoredFiltersApplied.current = true;
+    updateCostsUrl({
+      basis: filters.costBasis,
+      service: filters.serviceName || null,
+      period: presetId === "30d" ? null : presetId,
+      start: presetId === "custom" ? customStart : null,
+      end: presetId === "custom" ? customEnd : null,
+    });
+    if (
+      filters.costBasis !== initialResolvedFilters.costBasis ||
+      filters.serviceName !== initialResolvedFilters.serviceName
+    ) {
+      window.setTimeout(() => restoreFilters(filters), 0);
+    }
+  }, [
+    customEnd,
+    customStart,
+    filters,
+    filtersRestored,
+    initialResolvedFilters.costBasis,
+    initialResolvedFilters.serviceName,
+    presetId,
+  ]);
 
   function selectCostBasis(next: CostBasis) {
     const nextFilters = { ...filters, costBasis: next };
     setFilters(nextFilters);
     updateCostsUrl({ basis: next });
     reload(nextFilters);
+  }
+
+  function toggleIncludeCredits() {
+    const next = !includeCredits;
+    setIncludeCredits(next);
+    reload(filters, next);
   }
 
   function submitServiceNameFilter(event: FormEvent<HTMLFormElement>) {
@@ -202,8 +334,10 @@ export function CostSummaryPanel({
       const result = await listCostSummariesAction(connectionId, {
         limit: COST_SUMMARIES_PAGE_SIZE,
         offset: costSummaries.length,
+        targetId,
         costBasis: filters.costBasis,
         serviceName: filters.serviceName || null,
+        includeCredits,
       });
       setLoadingMore(false);
       if (result.error) return setError(result.error);
@@ -342,6 +476,9 @@ export function CostSummaryPanel({
               ))}
             </div>
           </div>
+          <FilterChip active={includeCredits} onClick={toggleIncludeCredits}>
+            Include credits
+          </FilterChip>
           <form
             onSubmit={submitServiceNameFilter}
             className="flex min-w-56 flex-1 items-center gap-2 sm:max-w-sm"
@@ -371,8 +508,10 @@ export function CostSummaryPanel({
 
       <CostSummaryTotals
         connectionId={connectionId}
+        targetId={targetId}
         range={range}
         costBasis={filters.costBasis}
+        includeCredits={includeCredits}
         refreshKey={refreshVersion}
       />
 
@@ -417,15 +556,31 @@ export function CostSummaryPanel({
         />
       ) : (
         <div className="border-border-soft overflow-hidden rounded-2xl border">
-          <div className="border-border-soft bg-foreground/[0.025] text-muted-foreground hidden grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(7rem,0.7fr)] gap-3 border-b px-4 py-3 text-[11px] font-semibold tracking-wide uppercase md:grid">
+          <div
+            className={cn(
+              "border-border-soft bg-foreground/[0.025] text-muted-foreground hidden gap-3 border-b px-4 py-3 text-[11px] font-semibold tracking-wide uppercase md:grid",
+              showTargetColumn
+                ? "grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(7rem,0.7fr)]"
+                : "grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(7rem,0.7fr)]",
+            )}
+          >
             <span>Service / period</span>
             <span>Provider / authority</span>
+            {showTargetColumn ? <span>Target account</span> : null}
             <span>Basis</span>
             <span className="text-right">Amount</span>
           </div>
           <div className="divide-border-soft divide-y">
             {visibleCostSummaries.map((costSummary) => (
-              <CostSummaryRow key={costSummary.id} costSummary={costSummary} />
+              <CostSummaryRow
+                key={costSummary.id}
+                costSummary={costSummary}
+                targetLabel={
+                  showTargetColumn
+                    ? (targetLabelById.get(costSummary.target_id) ?? null)
+                    : null
+                }
+              />
             ))}
           </div>
         </div>

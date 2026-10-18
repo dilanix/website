@@ -1,0 +1,1171 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { getMe } from "@/lib/auth/api";
+import { getAccessToken } from "@/lib/auth/session";
+import {
+  CoreApiError,
+  createAllocation,
+  createBudget,
+  createReport,
+  createSavedView,
+  deleteAllocation,
+  deleteBudget,
+  deleteNotification,
+  deleteReport,
+  deleteSavedView,
+  dismissRecommendation,
+  generateReport,
+  getAllocationBreakdown,
+  getCostDrivers,
+  getCostOverviewHighlights,
+  listBudgetStatuses,
+  queryCostBreakdown,
+  getCostForecast,
+  getCostOverview,
+  getCostSummaryTotals,
+  getNotificationAttachmentDownloadUrl,
+  listNotifications,
+  listCostSummaries,
+  listCostUsage,
+  queryCostExplorer,
+  answerRecommendationReview,
+  getRecommendationFixGuide,
+  getRecommendationReview,
+  requestRecommendationReview,
+  restoreRecommendation,
+  runCostExplorerSavedView,
+  updateAllocation,
+  updateAnomalyStatus,
+  updateBudget,
+  updateReport,
+  updateSavedView,
+  type CoreAllocation,
+  type CoreAllocationBreakdown,
+  type CoreAnomaly,
+  type CoreBudget,
+  type CoreBudgetStatus,
+  type CoreCostBreakdown,
+  type CoreCostOverviewHighlights,
+  type CoreCostDrivers,
+  type CoreCostExplorerResponse,
+  type CoreCostForecast,
+  type CoreCostOverview,
+  type CoreCostSummaryListResponse,
+  type CoreCostSummaryTotals,
+  type CoreCostUsageListResponse,
+  type CoreNotification,
+  type CoreRecommendation,
+  type CoreRecommendationFixGuide,
+  type CoreRecommendationReview,
+  type CoreReport,
+  type CoreSavedView,
+  type CoreScopeCondition,
+  type CostExplorerQueryInput,
+  type GetCostSummaryTotalsParams,
+  type ListCostSummariesParams,
+  type ListCostUsageParams,
+  type GenerateReportResult,
+  type NotificationAttachmentDownloadResult,
+} from "@/lib/core/api";
+
+export type CostActionResult<T = undefined> = {
+  data?: T;
+  error?: string;
+};
+
+const BASE_PATH = "/dashboard/products/cost";
+
+async function context() {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Your session has expired.");
+  const me = await getMe(token);
+  const organization = me.organizations[0];
+  if (!organization)
+    throw new Error("Your account does not belong to an organization.");
+  return { token, organizationId: organization.organization_id };
+}
+
+function message(error: unknown) {
+  return error instanceof CoreApiError || error instanceof Error
+    ? error.message
+    : "Unable to complete the request.";
+}
+
+function validationMessage(result: z.ZodError) {
+  return result.issues[0]?.message ?? "The submitted data is invalid.";
+}
+
+export async function listCostSummariesAction(
+  connectionId: string,
+  params: ListCostSummariesParams,
+): Promise<CostActionResult<CoreCostSummaryListResponse>> {
+  try {
+    const { token, organizationId } = await context();
+    return {
+      data: await listCostSummaries(
+        organizationId,
+        connectionId,
+        token,
+        params,
+      ),
+    };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getCostSummaryTotalsAction(
+  connectionId: string,
+  params: GetCostSummaryTotalsParams,
+): Promise<CostActionResult<CoreCostSummaryTotals>> {
+  try {
+    const { token, organizationId } = await context();
+    return {
+      data: await getCostSummaryTotals(
+        organizationId,
+        connectionId,
+        token,
+        params,
+      ),
+    };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function listCostUsageAction(
+  connectionId: string,
+  params: ListCostUsageParams,
+): Promise<CostActionResult<CoreCostUsageListResponse>> {
+  try {
+    const { token, organizationId } = await context();
+    return {
+      data: await listCostUsage(organizationId, connectionId, token, params),
+    };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const idSchema = z.uuid();
+const nameSchema = z.string().trim().min(1).max(255);
+const descriptionSchema = z.string().trim().max(2000).nullable();
+const recipientsSchema = z.array(z.email()).max(50);
+
+const scopeConditionSchema = z
+  .object({
+    dimension: z.enum([
+      "provider_name",
+      "billing_account_id",
+      "sub_account_id",
+      "service_category",
+      "service_name",
+      "region_id",
+      "resource_id",
+      "resource_type",
+      "charge_category",
+      "tag",
+    ]),
+    tag_key: z.string().trim().min(1).max(200).nullable().optional(),
+    operator: z.enum(["eq", "in", "not_in"]),
+    value: z.union([
+      z.string().trim().min(1).max(500),
+      z.array(z.string().trim().min(1).max(500)).min(1).max(50),
+    ]),
+  })
+  .refine(
+    (condition) =>
+      condition.dimension === "tag"
+        ? Boolean(condition.tag_key)
+        : !condition.tag_key,
+    {
+      message:
+        "A tag key is required for tag scope, and must be left blank otherwise.",
+      path: ["tag_key"],
+    },
+  )
+  .refine(
+    (condition) =>
+      condition.operator === "eq"
+        ? typeof condition.value === "string"
+        : Array.isArray(condition.value),
+    {
+      message: "The scope value doesn't match the selected operator.",
+      path: ["value"],
+    },
+  );
+
+const scopeSchema = z.array(scopeConditionSchema).max(30);
+
+function toScopeInput(scope: CoreScopeCondition[]) {
+  return scope.map((condition) => ({
+    dimension: condition.dimension,
+    tag_key: condition.dimension === "tag" ? (condition.tag_key ?? "") : null,
+    operator: condition.operator,
+    value: condition.value,
+  }));
+}
+
+const explorerGroupBySchema = z
+  .object({
+    dimension: scopeConditionSchema.shape.dimension,
+    tag_key: z.string().trim().min(1).max(200).nullable().optional(),
+  })
+  .refine(
+    (field) =>
+      field.dimension === "tag" ? Boolean(field.tag_key) : !field.tag_key,
+    {
+      message:
+        "A tag key is required for tag grouping, and must be left blank otherwise.",
+      path: ["tag_key"],
+    },
+  );
+
+const costUsageMetricSchema = z.enum([
+  "billed_cost",
+  "effective_cost",
+  "list_cost",
+  "contracted_cost",
+]);
+
+const explorerQuerySchema = z
+  .object({
+    period_start: z.iso.datetime(),
+    period_end: z.iso.datetime(),
+    metric: costUsageMetricSchema,
+    connection_id: idSchema.nullable().optional(),
+    target_id: idSchema.nullable().optional(),
+    granularity: z.enum(["daily", "weekly", "monthly"]).nullable(),
+    group_by: z.array(explorerGroupBySchema).max(10),
+    scope: scopeSchema,
+  })
+  .refine(
+    (input) => Date.parse(input.period_end) > Date.parse(input.period_start),
+    {
+      message: "The period end must be after its start.",
+      path: ["period_end"],
+    },
+  )
+  .refine((input) => !input.target_id || Boolean(input.connection_id), {
+    message: "Choose a connection before choosing a target.",
+    path: ["target_id"],
+  });
+
+export async function queryCostExplorerAction(
+  input: CostExplorerQueryInput,
+): Promise<CostActionResult<CoreCostExplorerResponse>> {
+  const parsed = explorerQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await queryCostExplorer(organizationId, token, {
+      ...parsed.data,
+      scope: toScopeInput(parsed.data.scope),
+    });
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const savedViewQuerySchema = z
+  .object({
+    savedViewId: idSchema,
+    periodStart: z.iso.datetime(),
+    periodEnd: z.iso.datetime(),
+    connectionId: idSchema.nullable().optional(),
+    targetId: idSchema.nullable().optional(),
+  })
+  .refine(
+    (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
+    {
+      message: "The period end must be after its start.",
+      path: ["periodEnd"],
+    },
+  )
+  .refine((input) => !input.targetId || Boolean(input.connectionId), {
+    message: "Choose a connection before choosing a target.",
+    path: ["targetId"],
+  });
+
+export async function runCostExplorerSavedViewAction(
+  input: z.infer<typeof savedViewQuerySchema>,
+): Promise<CostActionResult<CoreCostExplorerResponse>> {
+  const parsed = savedViewQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await runCostExplorerSavedView(
+      organizationId,
+      parsed.data.savedViewId,
+      token,
+      {
+        periodStart: parsed.data.periodStart,
+        periodEnd: parsed.data.periodEnd,
+        connectionId: parsed.data.connectionId,
+        targetId: parsed.data.targetId,
+      },
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const overviewQuerySchema = z
+  .object({
+    periodStart: z.iso.datetime(),
+    periodEnd: z.iso.datetime(),
+    connectionId: idSchema.nullable().optional(),
+    targetId: idSchema.nullable().optional(),
+    topN: z.number().int().min(1).max(20).optional(),
+  })
+  .refine(
+    (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
+    {
+      message: "The period end must be after its start.",
+      path: ["periodEnd"],
+    },
+  )
+  .refine((input) => !input.targetId || Boolean(input.connectionId), {
+    message: "Choose a connection before choosing a target.",
+    path: ["targetId"],
+  });
+
+export async function getCostOverviewAction(
+  input: z.infer<typeof overviewQuerySchema>,
+): Promise<CostActionResult<CoreCostOverview | null>> {
+  const parsed = overviewQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getCostOverview(organizationId, token, {
+      periodStart: parsed.data.periodStart,
+      periodEnd: parsed.data.periodEnd,
+      connectionId: parsed.data.connectionId,
+      targetId: parsed.data.targetId,
+      topN: parsed.data.topN,
+    });
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getCostDriversAction(
+  input: z.infer<typeof overviewQuerySchema>,
+): Promise<CostActionResult<CoreCostDrivers>> {
+  const parsed = overviewQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getCostDrivers(organizationId, token, {
+      periodStart: parsed.data.periodStart,
+      periodEnd: parsed.data.periodEnd,
+      connectionId: parsed.data.connectionId,
+      targetId: parsed.data.targetId,
+      topN: parsed.data.topN,
+    });
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const breakdownQuerySchema = z
+  .object({
+    period_start: z.iso.datetime(),
+    period_end: z.iso.datetime(),
+    dimension: scopeConditionSchema.shape.dimension,
+    tag_key: z.string().trim().min(1).max(200).nullable().optional(),
+    connection_id: idSchema.nullable().optional(),
+    target_id: idSchema.nullable().optional(),
+    scope: scopeSchema,
+    top_n: z.number().int().min(1).max(100).optional(),
+  })
+  .refine(
+    (input) => Date.parse(input.period_end) > Date.parse(input.period_start),
+    {
+      message: "The period end must be after its start.",
+      path: ["period_end"],
+    },
+  )
+  .refine(
+    (input) =>
+      input.dimension === "tag" ? Boolean(input.tag_key) : !input.tag_key,
+    {
+      message: "A tag key is required for a tag breakdown.",
+      path: ["tag_key"],
+    },
+  );
+
+export async function queryCostBreakdownAction(
+  input: z.infer<typeof breakdownQuerySchema>,
+): Promise<
+  CostActionResult<CoreCostBreakdown> & {
+    /** Core's 409: this breakdown needs complete FOCUS coverage. */
+    coverageRequired?: boolean;
+  }
+> {
+  const parsed = breakdownQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await queryCostBreakdown(organizationId, token, {
+      ...parsed.data,
+      tag_key: parsed.data.dimension === "tag" ? parsed.data.tag_key : null,
+      scope: toScopeInput(parsed.data.scope),
+    });
+    return { data };
+  } catch (error) {
+    if (error instanceof CoreApiError && error.status === 409) {
+      return { error: message(error), coverageRequired: true };
+    }
+    return { error: message(error) };
+  }
+}
+
+const highlightsQuerySchema = z
+  .object({ periodStart: z.iso.datetime(), periodEnd: z.iso.datetime() })
+  .refine(
+    (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
+    { message: "The period end must be after its start.", path: ["periodEnd"] },
+  );
+
+export async function getCostOverviewHighlightsAction(
+  input: z.infer<typeof highlightsQuerySchema>,
+): Promise<CostActionResult<CoreCostOverviewHighlights>> {
+  const parsed = highlightsQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getCostOverviewHighlights(
+      organizationId,
+      token,
+      parsed.data,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function listBudgetStatusesAction(): Promise<
+  CostActionResult<CoreBudgetStatus[]>
+> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await listBudgetStatuses(organizationId, token);
+    return { data: data.items };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getCostForecastAction(
+  input: z.infer<typeof overviewQuerySchema>,
+): Promise<
+  CostActionResult<CoreCostForecast> & {
+    /** `true` when Core rejected the period with its own 400
+     * `InvalidForecastPeriodError` (not currently in progress) — lets the
+     * client show "pick a range that includes today" instead of a generic
+     * failure, without ever duplicating Core's own `now` check client-side. */
+    periodNotInProgress?: boolean;
+  }
+> {
+  const parsed = overviewQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getCostForecast(organizationId, token, {
+      periodStart: parsed.data.periodStart,
+      periodEnd: parsed.data.periodEnd,
+      connectionId: parsed.data.connectionId,
+      targetId: parsed.data.targetId,
+    });
+    return { data };
+  } catch (error) {
+    if (error instanceof CoreApiError && error.status === 400) {
+      return { error: message(error), periodNotInProgress: true };
+    }
+    return { error: message(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Budgets
+// ---------------------------------------------------------------------------
+
+const budgetPeriodSchema = z.enum(["monthly", "quarterly", "annual", "custom"]);
+const currencySchema = z
+  .string()
+  .trim()
+  .length(3, "Use a 3-letter currency code.")
+  .transform((value) => value.toUpperCase());
+const amountSchema = z
+  .string()
+  .trim()
+  .refine((value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0;
+  }, "Amount must be a number greater than 0.");
+const alertThresholdsSchema = z.array(z.number().min(0).max(1000)).max(20);
+
+const budgetInputSchema = z
+  .object({
+    name: nameSchema,
+    description: descriptionSchema,
+    amount: amountSchema,
+    currency: currencySchema,
+    period: budgetPeriodSchema,
+    periodStart: z.iso.datetime().nullable(),
+    periodEnd: z.iso.datetime().nullable(),
+    alertThresholds: alertThresholdsSchema,
+    recipients: recipientsSchema,
+    scope: scopeSchema,
+  })
+  .refine(
+    (input) =>
+      input.period !== "custom" || (input.periodStart && input.periodEnd),
+    {
+      message: "Custom budgets need both a start and end date.",
+      path: ["periodStart"],
+    },
+  );
+
+export async function createBudgetAction(
+  input: z.infer<typeof budgetInputSchema>,
+): Promise<CostActionResult<CoreBudget>> {
+  const parsed = budgetInputSchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await createBudget(organizationId, token, {
+      name: parsed.data.name,
+      description: parsed.data.description,
+      amount: parsed.data.amount,
+      currency: parsed.data.currency,
+      period: parsed.data.period,
+      period_start: parsed.data.periodStart,
+      period_end: parsed.data.periodEnd,
+      alert_thresholds: parsed.data.alertThresholds,
+      recipients: parsed.data.recipients,
+      scope: toScopeInput(parsed.data.scope),
+    });
+    revalidatePath(BASE_PATH);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function updateBudgetAction(
+  budgetId: string,
+  input: Partial<z.infer<typeof budgetInputSchema>> & { enabled?: boolean },
+): Promise<CostActionResult<CoreBudget>> {
+  const idParsed = idSchema.safeParse(budgetId);
+  if (!idParsed.success) return { error: "Invalid budget." };
+  const parsed = budgetInputSchema.partial().safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await updateBudget(organizationId, idParsed.data, token, {
+      name: parsed.data.name,
+      description: parsed.data.description,
+      amount: parsed.data.amount,
+      currency: parsed.data.currency,
+      period: parsed.data.period,
+      period_start: parsed.data.periodStart,
+      period_end: parsed.data.periodEnd,
+      alert_thresholds: parsed.data.alertThresholds,
+      recipients: parsed.data.recipients,
+      enabled: input.enabled,
+      scope: parsed.data.scope ? toScopeInput(parsed.data.scope) : undefined,
+    });
+    revalidatePath(BASE_PATH);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function deleteBudgetAction(
+  budgetId: string,
+): Promise<CostActionResult<{ deletedId: string }>> {
+  const parsed = idSchema.safeParse(budgetId);
+  if (!parsed.success) return { error: "Invalid budget." };
+
+  try {
+    const { token, organizationId } = await context();
+    await deleteBudget(organizationId, parsed.data, token);
+    revalidatePath(BASE_PATH);
+    return { data: { deletedId: parsed.data } };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Allocations
+// ---------------------------------------------------------------------------
+
+const allocationInputSchema = z.object({
+  name: nameSchema,
+  targetLabel: z.string().trim().min(1).max(255),
+  priority: z.number().int().min(0).max(100000),
+  scope: scopeSchema,
+});
+
+export async function createAllocationAction(
+  input: z.infer<typeof allocationInputSchema>,
+): Promise<CostActionResult<CoreAllocation>> {
+  const parsed = allocationInputSchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await createAllocation(organizationId, token, {
+      name: parsed.data.name,
+      target_label: parsed.data.targetLabel,
+      priority: parsed.data.priority,
+      scope: toScopeInput(parsed.data.scope),
+    });
+    revalidatePath(BASE_PATH);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function updateAllocationAction(
+  allocationId: string,
+  input: Partial<z.infer<typeof allocationInputSchema>> & {
+    enabled?: boolean;
+  },
+): Promise<CostActionResult<CoreAllocation>> {
+  const idParsed = idSchema.safeParse(allocationId);
+  if (!idParsed.success) return { error: "Invalid allocation." };
+  const parsed = allocationInputSchema.partial().safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await updateAllocation(organizationId, idParsed.data, token, {
+      name: parsed.data.name,
+      target_label: parsed.data.targetLabel,
+      priority: parsed.data.priority,
+      enabled: input.enabled,
+      scope: parsed.data.scope ? toScopeInput(parsed.data.scope) : undefined,
+    });
+    revalidatePath(BASE_PATH);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function deleteAllocationAction(
+  allocationId: string,
+): Promise<CostActionResult<{ deletedId: string }>> {
+  const parsed = idSchema.safeParse(allocationId);
+  if (!parsed.success) return { error: "Invalid allocation." };
+
+  try {
+    const { token, organizationId } = await context();
+    await deleteAllocation(organizationId, parsed.data, token);
+    revalidatePath(BASE_PATH);
+    return { data: { deletedId: parsed.data } };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const allocationBreakdownQuerySchema = z
+  .object({
+    periodStart: z.iso.datetime(),
+    periodEnd: z.iso.datetime(),
+    metric: costUsageMetricSchema,
+    connectionId: idSchema.nullable().optional(),
+    targetId: idSchema.nullable().optional(),
+  })
+  .refine(
+    (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
+    {
+      message: "The period end must be after its start.",
+      path: ["periodEnd"],
+    },
+  )
+  .refine((input) => !input.targetId || Boolean(input.connectionId), {
+    message: "Choose a connection before choosing a target.",
+    path: ["targetId"],
+  });
+
+export async function getAllocationBreakdownAction(
+  input: z.infer<typeof allocationBreakdownQuerySchema>,
+): Promise<CostActionResult<CoreAllocationBreakdown>> {
+  const parsed = allocationBreakdownQuerySchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getAllocationBreakdown(organizationId, token, {
+      periodStart: parsed.data.periodStart,
+      periodEnd: parsed.data.periodEnd,
+      metric: parsed.data.metric,
+      connectionId: parsed.data.connectionId,
+      targetId: parsed.data.targetId,
+    });
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Anomalies
+// ---------------------------------------------------------------------------
+
+export async function updateAnomalyStatusAction(
+  anomalyId: string,
+  status: "acknowledged" | "resolved",
+): Promise<CostActionResult<CoreAnomaly>> {
+  const parsed = z
+    .object({
+      anomalyId: idSchema,
+      status: z.enum(["acknowledged", "resolved"]),
+    })
+    .safeParse({ anomalyId, status });
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await updateAnomalyStatus(
+      organizationId,
+      parsed.data.anomalyId,
+      token,
+      parsed.data.status,
+    );
+    revalidatePath(BASE_PATH);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Recommendations
+// ---------------------------------------------------------------------------
+
+export async function dismissRecommendationAction(
+  recommendationId: string,
+): Promise<CostActionResult<CoreRecommendation>> {
+  const parsed = idSchema.safeParse(recommendationId);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await dismissRecommendation(
+      organizationId,
+      parsed.data,
+      token,
+    );
+    revalidatePath(`${BASE_PATH}/recommendations`);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function restoreRecommendationAction(
+  recommendationId: string,
+): Promise<CostActionResult<CoreRecommendation>> {
+  const parsed = idSchema.safeParse(recommendationId);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await restoreRecommendation(
+      organizationId,
+      parsed.data,
+      token,
+    );
+    revalidatePath(`${BASE_PATH}/recommendations`);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function requestRecommendationReviewAction(
+  recommendationId: string,
+): Promise<CostActionResult<CoreRecommendationReview>> {
+  const parsed = idSchema.safeParse(recommendationId);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await requestRecommendationReview(
+      organizationId,
+      parsed.data,
+      token,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getRecommendationReviewAction(
+  recommendationId: string,
+): Promise<CostActionResult<CoreRecommendationReview>> {
+  const parsed = idSchema.safeParse(recommendationId);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getRecommendationReview(
+      organizationId,
+      parsed.data,
+      token,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const fixGuideOptionSchema = z.number().int().min(0).max(20).nullable();
+
+/** Reads (or, the first time, generates) the "How to fix" guide for one
+ * review option — slow only on that first generation. */
+export async function getRecommendationFixGuideAction(
+  recommendationId: string,
+  optionIndex: number | null,
+  regenerate = false,
+): Promise<CostActionResult<CoreRecommendationFixGuide>> {
+  const parsedId = idSchema.safeParse(recommendationId);
+  if (!parsedId.success) return { error: validationMessage(parsedId.error) };
+  const parsedOption = fixGuideOptionSchema.safeParse(optionIndex);
+  if (!parsedOption.success)
+    return { error: validationMessage(parsedOption.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getRecommendationFixGuide(
+      organizationId,
+      parsedId.data,
+      { option_index: parsedOption.data, regenerate },
+      token,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const reviewAnswersSchema = z.record(
+  z.string().regex(/^[a-z0-9_.]{1,100}$/),
+  z.string().regex(/^[a-z0-9_]{1,50}$/),
+);
+
+export async function answerRecommendationReviewAction(
+  recommendationId: string,
+  answers: Record<string, string>,
+): Promise<CostActionResult<CoreRecommendationReview>> {
+  const parsedId = idSchema.safeParse(recommendationId);
+  if (!parsedId.success) return { error: validationMessage(parsedId.error) };
+  const parsedAnswers = reviewAnswersSchema.safeParse(answers);
+  if (!parsedAnswers.success)
+    return { error: validationMessage(parsedAnswers.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await answerRecommendationReview(
+      organizationId,
+      parsedId.data,
+      parsedAnswers.data,
+      token,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Saved views
+// ---------------------------------------------------------------------------
+
+const savedViewInputSchema = z.object({
+  name: nameSchema,
+  description: descriptionSchema,
+  groupBy: z
+    .array(
+      z.enum([
+        "provider_name",
+        "billing_account_id",
+        "sub_account_id",
+        "service_category",
+        "service_name",
+        "region_id",
+        "resource_id",
+        "resource_type",
+        "charge_category",
+      ]),
+    )
+    .max(10),
+  granularity: z.enum(["daily", "weekly", "monthly"]),
+  visibility: z.enum(["private", "organization"]),
+  scope: scopeSchema,
+});
+
+export async function createSavedViewAction(
+  input: z.infer<typeof savedViewInputSchema>,
+): Promise<CostActionResult<CoreSavedView>> {
+  const parsed = savedViewInputSchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await createSavedView(organizationId, token, {
+      name: parsed.data.name,
+      description: parsed.data.description,
+      group_by: parsed.data.groupBy,
+      granularity: parsed.data.granularity,
+      visibility: parsed.data.visibility,
+      scope: toScopeInput(parsed.data.scope),
+    });
+    revalidatePath(BASE_PATH);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function updateSavedViewAction(
+  savedViewId: string,
+  input: Partial<z.infer<typeof savedViewInputSchema>>,
+): Promise<CostActionResult<CoreSavedView>> {
+  const idParsed = idSchema.safeParse(savedViewId);
+  if (!idParsed.success) return { error: "Invalid saved view." };
+  const parsed = savedViewInputSchema.partial().safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await updateSavedView(organizationId, idParsed.data, token, {
+      name: parsed.data.name,
+      description: parsed.data.description,
+      group_by: parsed.data.groupBy,
+      granularity: parsed.data.granularity,
+      visibility: parsed.data.visibility,
+      scope: parsed.data.scope ? toScopeInput(parsed.data.scope) : undefined,
+    });
+    revalidatePath(BASE_PATH);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function deleteSavedViewAction(
+  savedViewId: string,
+): Promise<CostActionResult<{ deletedId: string }>> {
+  const parsed = idSchema.safeParse(savedViewId);
+  if (!parsed.success) return { error: "Invalid saved view." };
+
+  try {
+    const { token, organizationId } = await context();
+    await deleteSavedView(organizationId, parsed.data, token);
+    revalidatePath(BASE_PATH);
+    return { data: { deletedId: parsed.data } };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reports
+// ---------------------------------------------------------------------------
+
+const reportPeriodPresetSchema = z.enum([
+  "last_7_days",
+  "last_30_days",
+  "last_month",
+  "month_to_date",
+  "last_quarter",
+  "last_year",
+]);
+
+const reportInputSchema = z.object({
+  name: nameSchema,
+  description: descriptionSchema,
+  format: z.enum(["csv", "pdf"]),
+  recipients: recipientsSchema,
+  destinationIds: z.array(idSchema).max(50),
+  periodPreset: reportPeriodPresetSchema,
+  scheduleCron: z.string().trim().min(1).max(120).nullable(),
+  scope: scopeSchema,
+});
+
+export async function createReportAction(
+  input: z.infer<typeof reportInputSchema>,
+): Promise<CostActionResult<CoreReport>> {
+  const parsed = reportInputSchema.safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await createReport(organizationId, token, {
+      name: parsed.data.name,
+      description: parsed.data.description,
+      format: parsed.data.format,
+      recipients: parsed.data.recipients,
+      destination_ids: parsed.data.destinationIds,
+      period_preset: parsed.data.periodPreset,
+      schedule_cron: parsed.data.scheduleCron,
+      scope: toScopeInput(parsed.data.scope),
+    });
+    revalidatePath(BASE_PATH);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function updateReportAction(
+  reportId: string,
+  input: Partial<z.infer<typeof reportInputSchema>> & { enabled?: boolean },
+): Promise<CostActionResult<CoreReport>> {
+  const idParsed = idSchema.safeParse(reportId);
+  if (!idParsed.success) return { error: "Invalid report." };
+  const parsed = reportInputSchema.partial().safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await updateReport(organizationId, idParsed.data, token, {
+      name: parsed.data.name,
+      description: parsed.data.description,
+      format: parsed.data.format,
+      recipients: parsed.data.recipients,
+      destination_ids: parsed.data.destinationIds,
+      period_preset: parsed.data.periodPreset,
+      schedule_cron: parsed.data.scheduleCron,
+      enabled: input.enabled,
+      scope: parsed.data.scope ? toScopeInput(parsed.data.scope) : undefined,
+    });
+    revalidatePath(BASE_PATH);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function deleteReportAction(
+  reportId: string,
+): Promise<CostActionResult<{ deletedId: string }>> {
+  const parsed = idSchema.safeParse(reportId);
+  if (!parsed.success) return { error: "Invalid report." };
+
+  try {
+    const { token, organizationId } = await context();
+    await deleteReport(organizationId, parsed.data, token);
+    revalidatePath(BASE_PATH);
+    return { data: { deletedId: parsed.data } };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function generateReportAction(
+  reportId: string,
+): Promise<CostActionResult<GenerateReportResult>> {
+  const parsed = idSchema.safeParse(reportId);
+  if (!parsed.success) return { error: "Invalid report." };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await generateReport(organizationId, parsed.data, token);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+const REPORT_GENERATED_EVENT_TYPE = "cost.report.generated";
+
+/** Every past generation of one report definition — read back off the
+ * shared Notification history (`cost.report.generated`) rather than a
+ * second, Cost-owned table, filtered here to this specific report's id
+ * since Core's `event_type` filter alone spans every report in the
+ * organization. */
+export async function listGeneratedReportsAction(
+  reportId: string,
+): Promise<CostActionResult<CoreNotification[]>> {
+  const parsed = idSchema.safeParse(reportId);
+  if (!parsed.success) return { error: "Invalid report." };
+
+  try {
+    const { token, organizationId } = await context();
+    const { items } = await listNotifications(organizationId, token, {
+      limit: 100,
+      offset: 0,
+      eventType: REPORT_GENERATED_EVENT_TYPE,
+    });
+    return {
+      data: items.filter((item) => item.data.report_id === parsed.data),
+    };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function deleteGeneratedReportAction(
+  notificationId: string,
+): Promise<CostActionResult<{ deletedId: string }>> {
+  const parsed = idSchema.safeParse(notificationId);
+  if (!parsed.success) return { error: "Invalid generated report." };
+
+  try {
+    const { token, organizationId } = await context();
+    await deleteNotification(organizationId, parsed.data, token);
+    return { data: { deletedId: parsed.data } };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function getGeneratedReportDownloadUrlAction(
+  notificationId: string,
+  attachmentId: string,
+): Promise<CostActionResult<NotificationAttachmentDownloadResult>> {
+  const parsed = z
+    .object({ notificationId: idSchema, attachmentId: idSchema })
+    .safeParse({ notificationId, attachmentId });
+  if (!parsed.success) return { error: "Invalid attachment." };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await getNotificationAttachmentDownloadUrl(
+      organizationId,
+      parsed.data.notificationId,
+      parsed.data.attachmentId,
+      token,
+    );
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}

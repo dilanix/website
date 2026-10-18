@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
 import type { CoreCostSummaryTotals, CostBasis } from "@/lib/core/api";
-import { getCostSummaryTotalsAction } from "@/app/dashboard/integrations/actions";
+import { getCostSummaryTotalsAction } from "@/app/dashboard/products/cost-actions";
 import {
   costDiff,
   formatCostAmount,
@@ -70,13 +70,19 @@ function DiffLine({
 
 export function CostSummaryTotals({
   connectionId,
+  targetId = null,
   range,
   costBasis,
+  includeCredits = false,
   refreshKey = 0,
 }: {
   connectionId: string;
+  /** Narrows the total to one `IntegrationTarget` within this connection —
+   * `null` sums every target the connection currently holds. */
+  targetId?: string | null;
   range: DateRange | null;
   costBasis: CostBasis;
+  includeCredits?: boolean;
   refreshKey?: number;
 }) {
   const [current, setCurrent] = useState<CoreCostSummaryTotals | null>(null);
@@ -94,11 +100,15 @@ export function CostSummaryTotals({
           periodStart: range.start.toISOString(),
           periodEnd: range.end.toISOString(),
           costBasis,
+          targetId,
+          includeCredits,
         }),
         getCostSummaryTotalsAction(connectionId, {
           periodStart: previousPeriod.start.toISOString(),
           periodEnd: previousPeriod.end.toISOString(),
           costBasis,
+          targetId,
+          includeCredits,
         }),
       ]);
       if (currentResult.error) return setError(currentResult.error);
@@ -106,7 +116,7 @@ export function CostSummaryTotals({
       setCurrent(currentResult.data ?? null);
       setPrevious(previousResult.data ?? null);
     });
-  }, [connectionId, range, costBasis, refreshKey]);
+  }, [connectionId, targetId, range, costBasis, includeCredits, refreshKey]);
 
   return (
     <div

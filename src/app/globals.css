@@ -22,6 +22,11 @@
   --shadow-card: rgba(10, 34, 69, 0.09);
   --glow-blue: rgba(23, 121, 213, 0.18);
   --glow-cyan: rgba(32, 208, 219, 0.12);
+  --dashboard-sidebar: rgba(251, 253, 255, 0.9);
+  --dashboard-header: rgba(245, 249, 253, 0.8);
+  --dashboard-panel: rgba(255, 255, 255, 0.82);
+  --dashboard-panel-strong: rgba(255, 255, 255, 0.96);
+  --dashboard-grid: rgba(23, 121, 213, 0.075);
 }
 
 .dark {
@@ -41,6 +46,11 @@
   --shadow-card: rgba(0, 0, 0, 0.28);
   --glow-blue: rgba(78, 159, 255, 0.2);
   --glow-cyan: rgba(35, 200, 218, 0.14);
+  --dashboard-sidebar: rgba(8, 18, 32, 0.9);
+  --dashboard-header: rgba(7, 17, 31, 0.78);
+  --dashboard-panel: rgba(13, 25, 43, 0.8);
+  --dashboard-panel-strong: rgba(15, 32, 53, 0.94);
+  --dashboard-grid: rgba(117, 176, 237, 0.08);
 }
 
 @theme inline {
@@ -55,11 +65,16 @@
   --color-surface: var(--surface);
   --color-surface-strong: var(--surface-strong);
   --color-border-soft: var(--border-soft);
+  --color-dashboard-sidebar: var(--dashboard-sidebar);
+  --color-dashboard-header: var(--dashboard-header);
+  --color-dashboard-panel: var(--dashboard-panel);
+  --color-dashboard-panel-strong: var(--dashboard-panel-strong);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --animate-spin-slow: spin-slow 3s linear infinite;
   --animate-menu-reveal: menu-reveal 0.18s ease-out;
   --animate-toast-in: toast-in 0.22s ease-out;
+  --animate-drawer-in: drawer-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
   --animate-float-slow: float-slow 8s ease-in-out infinite;
   --animate-drift: drift 12s ease-in-out infinite;
   --animate-sheen: sheen 3.8s ease-in-out infinite;
@@ -80,6 +95,53 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes docs-flow-x {
+  from {
+    left: 0%;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  to {
+    left: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes docs-flow-y {
+  from {
+    top: 0%;
+    left: -2px;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  to {
+    top: 100%;
+    left: -2px;
+    opacity: 0;
+  }
+}
+
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
@@ -146,6 +208,62 @@
   }
 }
 
+@keyframes demo-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes demo-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes demo-draw {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes demo-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes demo-bar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.animate-demo-draw {
+  stroke-dasharray: 100;
+  animation: demo-draw 1s ease-out both;
+}
+
+.animate-demo-fade {
+  animation: demo-fade 0.7s ease-out both;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
@@ -162,6 +280,72 @@ body {
   transition:
     background-color 0.2s ease,
     color 0.2s ease;
+}
+
+.dashboard-canvas {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(
+      ellipse 55% 32% at 18% -8%,
+      color-mix(in oklab, var(--accent) 13%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      ellipse 42% 30% at 94% 8%,
+      color-mix(in oklab, var(--accent-secondary) 10%, transparent),
+      transparent 76%
+    ),
+    linear-gradient(
+      145deg,
+      color-mix(in oklab, var(--background) 96%, var(--accent) 4%),
+      var(--background) 56%,
+      color-mix(in oklab, var(--background) 97%, var(--accent-secondary) 3%)
+    );
+}
+
+.dashboard-canvas::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background-image: radial-gradient(
+    var(--dashboard-grid) 0.75px,
+    transparent 0.75px
+  );
+  background-size: 24px 24px;
+  content: "";
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, black, transparent 76%);
+}
+
+.dashboard-panel-highlight {
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-panel-highlight::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    118deg,
+    color-mix(in oklab, white 22%, transparent),
+    transparent 28%,
+    transparent 72%,
+    color-mix(in oklab, var(--accent-secondary) 6%, transparent)
+  );
+  content: "";
+  pointer-events: none;
+}
+
+.dark .dashboard-panel-highlight::after {
+  background: linear-gradient(
+    118deg,
+    color-mix(in oklab, white 5%, transparent),
+    transparent 28%,
+    transparent 72%,
+    color-mix(in oklab, var(--accent-secondary) 6%, transparent)
+  );
 }
 
 /* The marketing homepage uses one continuous atmospheric canvas. Individual
@@ -324,4 +508,189 @@ body {
   :where(button, a[href], summary, [role="button"]) {
     transition-duration: 0.01ms;
   }
+}
+
+/* Infrastructure → Graph.
+   Performance: nodes and edges never subscribe to the zoom level. The
+   workspace carries `data-lod="far|mid|near"` (changes only when a zoom
+   threshold is crossed) and highlight state is a class on each node/edge
+   wrapper, so level of detail and emphasis are resolved here in CSS. No
+   backdrop filters, large shadows or idle animations on graph elements —
+   they repaint on every pan frame. */
+
+.infrastructure-graph {
+  --xy-background-color: transparent;
+  --xy-node-border-radius: 1rem;
+  --xy-edge-label-background-color: transparent;
+}
+
+.infrastructure-graph .react-flow__node-group,
+.infrastructure-graph .react-flow__node-resource,
+.infrastructure-graph .react-flow__node-internet {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+/* Graph controls sit on the canvas; the global hover filter would repaint
+   under every pointer move. */
+.graph-workspace :where(button):hover {
+  filter: none;
+}
+
+/* Cards */
+.graph-card {
+  border-color: var(--border-soft);
+  background: color-mix(
+    in oklab,
+    var(--dashboard-panel-strong) 95%,
+    transparent
+  );
+  box-shadow: 0 14px 36px var(--shadow-card);
+  transition:
+    border-color 200ms,
+    box-shadow 200ms;
+}
+
+.graph-card-group {
+  border-color: rgba(34, 211, 238, 0.5);
+  background: rgba(6, 182, 212, 0.07);
+}
+
+.graph-card-selected {
+  border-color: color-mix(in oklab, var(--accent) 70%, transparent);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 18px 48px var(--shadow-brand);
+}
+
+.react-flow__node.graph-hl .graph-card:not(.graph-card-selected) {
+  border-color: color-mix(in oklab, var(--accent) 55%, transparent);
+}
+
+/* Emphasis: hover/selection traces paths; search dims non-matches. */
+.graph-workspace .react-flow__node {
+  transition: opacity 160ms ease-out;
+}
+
+.graph-workspace .react-flow__node.graph-dim,
+.graph-workspace .react-flow__node.graph-miss {
+  opacity: 0.25;
+}
+
+.graph-workspace .react-flow__node-group.graph-dim {
+  opacity: 0.55;
+}
+
+/* Edges */
+.graph-edge-path {
+  stroke-width: 1.6;
+  opacity: 0.8;
+  transition: opacity 160ms ease-out;
+}
+
+.react-flow__edge.graph-hl .graph-edge-path,
+.react-flow__edge.selected .graph-edge-path {
+  stroke-width: 2.6;
+  opacity: 1;
+}
+
+.react-flow__edge.selected .graph-edge-path {
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.react-flow__edge.graph-dim .graph-edge-path,
+.react-flow__edge.graph-dim .graph-edge-flow {
+  opacity: 0.12;
+}
+
+.react-flow__edge.graph-dim .graph-edge-label {
+  display: none;
+}
+
+@keyframes graph-edge-flow {
+  to {
+    stroke-dashoffset: -34;
+  }
+}
+
+/* Direction of traffic along configured/observed edges. Paused while the
+   canvas moves so panning and zooming never repaint animated paths. */
+.graph-edge-flow {
+  stroke-width: 1.8;
+  opacity: 0.9;
+  pointer-events: none;
+  animation: graph-edge-flow 1.4s linear infinite;
+}
+
+.react-flow__edge.graph-hl .graph-edge-flow,
+.react-flow__edge.selected .graph-edge-flow {
+  stroke-width: 2.6;
+}
+
+.graph-workspace[data-moving] .graph-edge-flow,
+.graph-workspace[data-moving] .graph-ambient {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .graph-edge-flow {
+    animation: none;
+  }
+}
+
+.graph-edge-label {
+  display: none;
+  pointer-events: none;
+}
+
+.graph-edge-label rect {
+  fill: var(--dashboard-panel-strong);
+  stroke-opacity: 0.4;
+}
+
+.graph-edge-label text {
+  fill: var(--foreground);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* Semantic zoom. Near: full cards, every label and technical detail. */
+.graph-workspace[data-lod="near"] .graph-edge-label,
+.react-flow__edge.graph-hl .graph-edge-label,
+.react-flow__edge.selected .graph-edge-label {
+  display: inline;
+}
+
+.graph-workspace:not([data-lod="near"]) .graph-lod-near,
+.graph-workspace:not([data-lod="near"]) .graph-node-sub {
+  display: none;
+}
+
+/* Far: icons only; detail-layer resources (security groups, interfaces,
+   target groups…) and their edges step back. */
+.graph-workspace[data-lod="far"] .react-flow__node.graph-lod-detail,
+.graph-workspace[data-lod="far"] .react-flow__edge.graph-lod-detail {
+  visibility: hidden;
+}
+
+.graph-workspace[data-lod="far"] .graph-card > span:not(.graph-node-icon),
+.graph-workspace[data-lod="far"] .graph-expand {
+  display: none;
+}
+
+.graph-workspace[data-lod="far"] .graph-card {
+  justify-content: center;
+}
+
+/* Fullscreen fallback (no Fullscreen API): the workspace is fixed to the
+   viewport; product chrome is taken out of the way. */
+html[data-graph-fullscreen] {
+  overflow: hidden;
+}
+
+html[data-graph-fullscreen] [data-dashboard-chrome] {
+  display: none;
 }

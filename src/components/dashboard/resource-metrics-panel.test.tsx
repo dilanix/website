@@ -15,6 +15,7 @@ vi.mock("@/app/dashboard/integrations/actions", () => ({
 
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   vi.clearAllMocks();
 });
 

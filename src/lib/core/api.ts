@@ -9,6 +9,32 @@ export class CoreApiError extends Error {
   }
 }
 
+const COST_REQUEST_TIMEOUT_MS = 10_000;
+
+async function withCoreRequestTimeout<T>(
+  request: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      request,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(
+            new Error(
+              "Dilanix Core did not respond within 10 seconds. Please try again.",
+            ),
+          );
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
 async function extractErrorMessage(
   response: Response,
   fallback: string,
@@ -34,8 +60,9 @@ export async function coreRequest<T>(
   path: string,
   accessToken: string,
   init?: RequestInit,
+  options?: { timeoutMs?: number },
 ): Promise<T> {
-  const response = await fetch(`${env.NEXT_PUBLIC_API_URL}${path}`, {
+  const request = fetch(`${env.NEXT_PUBLIC_API_URL}${path}`, {
     ...init,
     headers: {
       Accept: "application/json",
@@ -44,6 +71,10 @@ export async function coreRequest<T>(
     },
     cache: "no-store",
   });
+
+  const response = options?.timeoutMs
+    ? await withCoreRequestTimeout(request, options.timeoutMs)
+    : await request;
   if (!response.ok) {
     const message = await extractErrorMessage(
       response,
@@ -55,6 +86,16 @@ export async function coreRequest<T>(
   return response.json() as Promise<T>;
 }
 
+function costReadRequest<T>(
+  path: string,
+  accessToken: string,
+  init?: RequestInit,
+): Promise<T> {
+  return coreRequest<T>(path, accessToken, init, {
+    timeoutMs: COST_REQUEST_TIMEOUT_MS,
+  });
+}
+
 export interface CoreProduct {
   id: string;
   name: string;
@@ -62,8 +103,40 @@ export interface CoreProduct {
   description: string | null;
   dashboard_enabled: boolean;
   api_enabled: boolean;
+  availability: "core" | "entitled";
   access_status: "active" | "pending" | "expired" | "disabled";
   access_expires_at: string | null;
+}
+
+/**
+ * Platform-wide capability grant (`aws.billing.cost_usage`, ...) — not tied
+ * to any Product, and distinct from `CoreConnectionCapability` (a
+ * self-service, per-connection toggle under a connection's own "Access"
+ * tab). `access_status` is `"disabled"` both when Core has no grant row for
+ * this organization and when a grant exists but is explicitly disabled —
+ * callers gate on `=== "active"` and never need to tell the two apart.
+ */
+export interface CoreOrganizationCapability {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  domain: string | null;
+  access_status: "active" | "pending" | "expired" | "disabled";
+}
+
+/** Mirrors Core's `modules.integrations.repositories.access_repository.provider_capability_code`
+ * — the `Capability.code` gating an organization's access to a whole provider/integration. */
+export function providerCapabilityCode(slug: string): string {
+  return `provider.${slug}`;
+}
+
+/** Mirrors Core's canonical organization grant for one provider capability. */
+export function integrationCapabilityCode(
+  providerSlug: string,
+  capabilitySlug: string,
+): string {
+  return `${providerSlug}.${capabilitySlug}`;
 }
 
 export type ApiKeyAccessMode = "full" | "restricted";
@@ -152,6 +225,15 @@ export function listOrganizationProducts(
 ) {
   return coreRequest<CoreProduct[]>(
     `/v1/organizations/${organizationId}/products`,
+    token,
+  );
+}
+export function listOrganizationCapabilities(
+  organizationId: string,
+  token: string,
+) {
+  return coreRequest<CoreOrganizationCapability[]>(
+    `/v1/organizations/${organizationId}/capabilities`,
     token,
   );
 }
@@ -555,9 +637,10 @@ export type IntegrationTargetStatus = "verified" | "invalid" | "disabled";
 /**
  * Mirrors Core's `IntegrationTargetRead` — the actual provider-side identity
  * (AWS account, Azure subscription, GCP project, ...) a connection resolves
- * to. A connection still only ever has one *live* (`verified`) target per
- * `target_type` at a time; `replaceTargetIdentity` is the supported way to
- * change which one that is.
+ * to. A connection may hold several simultaneously-`verified` targets of the
+ * same `target_type` (e.g. multiple AWS accounts); `replaceTargetIdentity` is
+ * the supported way to swap which identity one specific target holds, and
+ * `renameTarget` sets a customer-chosen label independent of verification.
  */
 export interface CoreIntegrationTarget {
   id: string;
@@ -594,6 +677,24 @@ export function disableTarget(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/targets/${targetId}/disable`,
     token,
     { method: "POST" },
+  );
+}
+
+export function renameTarget(
+  organizationId: string,
+  connectionId: string,
+  targetId: string,
+  token: string,
+  displayName: string,
+) {
+  return coreRequest<CoreIntegrationTarget>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/targets/${targetId}/rename`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ display_name: displayName }),
+    },
   );
 }
 
@@ -902,19 +1003,6 @@ export function listSyncPolicies(
   );
 }
 
-export function deleteSyncPolicy(
-  organizationId: string,
-  connectionId: string,
-  syncPolicyId: string,
-  token: string,
-) {
-  return coreRequest<void>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/sync-policies/${syncPolicyId}`,
-    token,
-    { method: "DELETE" },
-  );
-}
-
 /**
  * Mirrors Dilanix Core's `ResourceSpecificationRead` (`modules/catalog/schemas.py`)
  * — a platform-global, provider-owned technical specification, never tenant data.
@@ -989,6 +1077,7 @@ export interface CoreResourceListResponse {
 export interface ListResourcesParams {
   limit: number;
   offset: number;
+  targetId?: string | null;
   category?: string | null;
   resourceType?: string | null;
   region?: string | null;
@@ -1007,6 +1096,7 @@ export function listResources(
     limit: String(params.limit),
     offset: String(params.offset),
   });
+  if (params.targetId) query.set("target_id", params.targetId);
   if (params.category) query.set("category", params.category);
   if (params.resourceType) query.set("resource_type", params.resourceType);
   if (params.region) query.set("region", params.region);
@@ -1118,9 +1208,13 @@ export function listResourceFilters(
   organizationId: string,
   connectionId: string,
   token: string,
+  targetId?: string | null,
 ) {
+  const query = new URLSearchParams();
+  if (targetId) query.set("target_id", targetId);
+  const queryString = query.toString();
   return coreRequest<CoreResourceFilterOptions>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/resources/filters`,
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/resources/filters${queryString ? `?${queryString}` : ""}`,
     token,
   );
 }
@@ -1135,7 +1229,7 @@ export type CostBasis =
   "unblended" | "net_unblended" | "amortized" | "net_amortized";
 
 /**
- * Mirrors Core's `CostSummaryRead` (`modules/billing/schemas/cost_summary.py`) —
+ * Mirrors Core's Cost product `CostSummaryRead` contract —
  * one AWS Cost Explorer cost observation for one connection/target, one
  * `(service, period, granularity, cost_basis)` combination. Deliberately a
  * narrower, Cost-Explorer-API-sourced sibling of the still-planned FOCUS/CUR
@@ -1150,6 +1244,7 @@ export interface CoreCostSummary {
   billing_authority: string;
   service_provider: string;
   service_name: string;
+  charge_type: string | null;
   period_start: string;
   period_end: string;
   granularity: "daily";
@@ -1180,6 +1275,9 @@ export interface ListCostSummariesParams {
   targetId?: string | null;
   serviceName?: string | null;
   costBasis?: CostBasis | null;
+  /** Server default `false`: `Credit`/`Refund` charge types are left out, like
+   * the AWS console's default view. `true` returns the net figure. */
+  includeCredits?: boolean;
 }
 
 /**
@@ -1201,8 +1299,9 @@ export function listCostSummaries(
   if (params.targetId) query.set("target_id", params.targetId);
   if (params.serviceName) query.set("service_name", params.serviceName);
   if (params.costBasis) query.set("cost_basis", params.costBasis);
-  return coreRequest<CoreCostSummaryListResponse>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-summaries?${query.toString()}`,
+  if (params.includeCredits) query.set("include_credits", "true");
+  return costReadRequest<CoreCostSummaryListResponse>(
+    `/v1/organizations/${organizationId}/cost/data/connections/${connectionId}/summaries?${query.toString()}`,
     token,
   );
 }
@@ -1245,6 +1344,8 @@ export interface GetCostSummaryTotalsParams {
   costBasis?: CostBasis | null;
   targetId?: string | null;
   serviceName?: string | null;
+  /** See `ListCostSummariesParams.includeCredits`. */
+  includeCredits?: boolean;
 }
 
 /**
@@ -1265,8 +1366,9 @@ export function getCostSummaryTotals(
   if (params.costBasis) query.set("cost_basis", params.costBasis);
   if (params.targetId) query.set("target_id", params.targetId);
   if (params.serviceName) query.set("service_name", params.serviceName);
-  return coreRequest<CoreCostSummaryTotals>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-summaries/totals?${query.toString()}`,
+  if (params.includeCredits) query.set("include_credits", "true");
+  return costReadRequest<CoreCostSummaryTotals>(
+    `/v1/organizations/${organizationId}/cost/data/connections/${connectionId}/summaries/totals?${query.toString()}`,
     token,
   );
 }
@@ -1279,7 +1381,7 @@ export type CostUsageMetric =
   "billed_cost" | "effective_cost" | "list_cost" | "contracted_cost";
 
 /**
- * Mirrors Core's `CostUsageRead` (`modules/billing/schemas/cost_usage.py`) — one
+ * Mirrors Core's Cost product `CostUsageRead` contract — one
  * FOCUS 1.2 (with AWS columns) charge row from the customer's AWS Data Export.
  * The richer, provider-independent sibling of `CoreCostSummary`, sourced from a
  * FOCUS export rather than Cost Explorer — never the same numbers, never summed
@@ -1394,8 +1496,8 @@ export function listCostUsage(
   if (params.serviceName) query.set("service_name", params.serviceName);
   if (params.billingAccountId)
     query.set("billing_account_id", params.billingAccountId);
-  return coreRequest<CoreCostUsageListResponse>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-usage?${query.toString()}`,
+  return costReadRequest<CoreCostUsageListResponse>(
+    `/v1/organizations/${organizationId}/cost/data/connections/${connectionId}/usage?${query.toString()}`,
     token,
   );
 }
@@ -1451,61 +1553,1428 @@ export function getCostUsageTotals(
   if (params.targetId) query.set("target_id", params.targetId);
   if (params.serviceName) query.set("service_name", params.serviceName);
   return coreRequest<CoreCostUsageTotals>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/cost-usage/totals?${query.toString()}`,
+    `/v1/organizations/${organizationId}/cost/data/connections/${connectionId}/usage/totals?${query.toString()}`,
     token,
   );
 }
 
 /**
  * Which dataset actually answered a unified totals request — mirrors Core's
- * `BillingCostSource`. `cost_usage` (FOCUS) is used only when every expected
+ * `CostDataSource`. `cost_usage` (FOCUS) is used only when every expected
  * monthly partition for every target in scope is fully synced; `cost_summary`
  * (Cost Explorer) is the always-available fallback otherwise.
  */
-export type BillingCostSource = "cost_usage" | "cost_summary";
+export type CostDataSource = "cost_usage" | "cost_summary";
 
 /**
- * Mirrors Core's `UnifiedCostTotalsResponse` (`BillingQueryService`) — the
- * coverage-aware, source-selecting total for a caller-chosen period. Never mixes
- * `billing.cost_usage` and `billing.cost_summary` within one answer; `source`
- * always discloses which one actually did.
+ * Cost management module (`src/modules/cost` in Core) — Budgets, Allocations,
+ * Anomalies, Saved Views, and Reports. Gated by both an org-level RBAC
+ * permission (`cost.read` / `cost.manage`) and the `product.cost` entitlement;
+ * unlike `billing.read`-gated cost data above, this is pure configuration —
+ * definitions, not spend rows — and none of it is paginated (every list route
+ * returns every row for the organization).
  */
-export interface CoreUnifiedCostTotals {
-  source: BillingCostSource;
+export type ScopeDimension =
+  | "provider_name"
+  | "billing_account_id"
+  | "sub_account_id"
+  | "service_category"
+  | "service_name"
+  | "region_id"
+  | "resource_id"
+  | "resource_type"
+  | "charge_category"
+  | "tag";
+
+export type ScopeOperator = "eq" | "in" | "not_in";
+
+/** `tag_key` must be set iff `dimension === "tag"`, and omitted otherwise. */
+export interface CoreScopeCondition {
+  dimension: ScopeDimension;
+  tag_key?: string | null;
+  operator: ScopeOperator;
+  value: string | string[];
+}
+
+export type BudgetPeriod = "monthly" | "quarterly" | "annual" | "custom";
+
+export interface CoreBudget {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string | null;
+  amount: string;
+  currency: string;
+  period: BudgetPeriod;
+  period_start: string | null;
+  period_end: string | null;
+  alert_thresholds: number[];
+  /** Which `alert_thresholds` have already fired an email for the current
+   * period — job-managed, read-only. */
+  notified_thresholds: number[];
+  recipients: string[];
+  enabled: boolean;
+  scope: CoreScopeCondition[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreBudgetListResponse {
+  items: CoreBudget[];
+}
+
+export interface CreateBudgetInput {
+  name: string;
+  description?: string | null;
+  amount: string;
+  currency: string;
+  period?: BudgetPeriod;
+  period_start?: string | null;
+  period_end?: string | null;
+  alert_thresholds?: number[];
+  recipients?: string[];
+  scope?: CoreScopeCondition[];
+}
+
+export interface UpdateBudgetInput {
+  name?: string;
+  description?: string | null;
+  amount?: string;
+  currency?: string;
+  period?: BudgetPeriod;
+  period_start?: string | null;
+  period_end?: string | null;
+  alert_thresholds?: number[];
+  recipients?: string[];
+  enabled?: boolean;
+  scope?: CoreScopeCondition[];
+}
+
+export function listBudgets(organizationId: string, token: string) {
+  return costReadRequest<CoreBudgetListResponse>(
+    `/v1/organizations/${organizationId}/cost/budgets`,
+    token,
+  );
+}
+
+export type BudgetHealth = "on_track" | "at_risk" | "over_budget" | "no_data";
+export type BudgetPeriodState = "upcoming" | "active" | "ended";
+
+/** Read-time budget visibility — mirrors Core's `BudgetStatusRead`. Spend is
+ * the same read the hourly evaluation uses; `remaining` goes negative after
+ * an overrun; `forecast_amount` is the period-to-date run-rate projection
+ * (`null` before the first complete day or for an upcoming period). */
+export interface CoreBudgetStatus {
+  budget_id: string;
+  name: string;
+  enabled: boolean;
+  currency: string;
+  limit: string;
   period_start: string;
   period_end: string;
-  total_amount: string;
-  currency: string | null;
-  is_estimated: boolean;
+  period_state: BudgetPeriodState;
+  spent: string;
+  remaining: string;
+  usage_percent: number;
+  forecast_amount: string | null;
+  forecast_usage_percent: number | null;
+  forecasted_overrun: string | null;
+  health: BudgetHealth;
+  crossed_thresholds: number[];
+  notified_thresholds: number[];
+  source: CostDataSource;
+  data_through: string | null;
+  /** Currencies with spend in the budget's scope other than its own —
+   * surfaced, never converted. */
+  other_currencies: string[];
+  evaluated_at: string;
 }
 
-export interface GetUnifiedCostTotalsParams {
-  periodStart: string;
-  periodEnd: string;
-  targetId?: string | null;
-  serviceName?: string | null;
+export function listBudgetStatuses(organizationId: string, token: string) {
+  return costReadRequest<{ items: CoreBudgetStatus[] }>(
+    `/v1/organizations/${organizationId}/cost/budgets/status`,
+    token,
+  );
 }
 
-/**
- * The single "best available total" read — never branches on provider/source
- * itself (`BillingQueryService.get_cost_totals` in Core). Requires
- * `billing.read`, exactly like the dataset-specific totals endpoints.
- */
-export function getUnifiedCostTotals(
+export function createBudget(
   organizationId: string,
-  connectionId: string,
   token: string,
-  params: GetUnifiedCostTotalsParams,
+  input: CreateBudgetInput,
+) {
+  return coreRequest<CoreBudget>(
+    `/v1/organizations/${organizationId}/cost/budgets`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateBudget(
+  organizationId: string,
+  budgetId: string,
+  token: string,
+  input: UpdateBudgetInput,
+) {
+  return coreRequest<CoreBudget>(
+    `/v1/organizations/${organizationId}/cost/budgets/${budgetId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function deleteBudget(
+  organizationId: string,
+  budgetId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/cost/budgets/${budgetId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export interface CoreAllocation {
+  id: string;
+  organization_id: string;
+  name: string;
+  target_label: string;
+  priority: number;
+  enabled: boolean;
+  scope: CoreScopeCondition[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreAllocationListResponse {
+  items: CoreAllocation[];
+}
+
+export interface CreateAllocationInput {
+  name: string;
+  target_label: string;
+  priority?: number;
+  scope?: CoreScopeCondition[];
+}
+
+export interface UpdateAllocationInput {
+  name?: string;
+  target_label?: string;
+  priority?: number;
+  enabled?: boolean;
+  scope?: CoreScopeCondition[];
+}
+
+export function listAllocations(organizationId: string, token: string) {
+  return costReadRequest<CoreAllocationListResponse>(
+    `/v1/organizations/${organizationId}/cost/allocations`,
+    token,
+  );
+}
+
+export interface CoreAllocationTotal {
+  target_label: string;
+  currency: string;
+  amount: string;
+}
+
+export interface CoreAllocationBreakdown {
+  period_start: string;
+  period_end: string;
+  items: CoreAllocationTotal[];
+}
+
+export function getAllocationBreakdown(
+  organizationId: string,
+  token: string,
+  params: {
+    periodStart: string;
+    periodEnd: string;
+    metric?: CostUsageMetric;
+    connectionId?: string | null;
+    targetId?: string | null;
+  },
 ) {
   const query = new URLSearchParams({
     period_start: params.periodStart,
     period_end: params.periodEnd,
   });
+  if (params.metric) query.set("metric", params.metric);
+  if (params.connectionId) query.set("connection_id", params.connectionId);
   if (params.targetId) query.set("target_id", params.targetId);
-  if (params.serviceName) query.set("service_name", params.serviceName);
-  return coreRequest<CoreUnifiedCostTotals>(
-    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/costs/totals?${query.toString()}`,
+  return costReadRequest<CoreAllocationBreakdown>(
+    `/v1/organizations/${organizationId}/cost/allocations/breakdown?${query.toString()}`,
     token,
+  );
+}
+
+export function createAllocation(
+  organizationId: string,
+  token: string,
+  input: CreateAllocationInput,
+) {
+  return coreRequest<CoreAllocation>(
+    `/v1/organizations/${organizationId}/cost/allocations`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateAllocation(
+  organizationId: string,
+  allocationId: string,
+  token: string,
+  input: UpdateAllocationInput,
+) {
+  return coreRequest<CoreAllocation>(
+    `/v1/organizations/${organizationId}/cost/allocations/${allocationId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function deleteAllocation(
+  organizationId: string,
+  allocationId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/cost/allocations/${allocationId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export type AnomalySeverity = "low" | "medium" | "high";
+export type AnomalyStatus = "open" | "acknowledged" | "resolved";
+
+export interface CoreAnomaly {
+  id: string;
+  organization_id: string;
+  detected_at: string;
+  period_start: string;
+  period_end: string;
+  expected_amount: string;
+  actual_amount: string;
+  currency: string;
+  deviation_percent: string;
+  severity: AnomalySeverity;
+  status: AnomalyStatus;
+  acknowledged_at: string | null;
+  resolved_at: string | null;
+  /** Always `[]` today — anomaly detection only ever runs at the
+   * whole-organization level, despite this column existing for future
+   * per-scope detection. */
+  scope: CoreScopeCondition[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreAnomalyListResponse {
+  items: CoreAnomaly[];
+}
+
+export function listAnomalies(
+  organizationId: string,
+  token: string,
+  statusFilter?: AnomalyStatus | null,
+) {
+  const query = statusFilter
+    ? `?${new URLSearchParams({ status_filter: statusFilter }).toString()}`
+    : "";
+  return costReadRequest<CoreAnomalyListResponse>(
+    `/v1/organizations/${organizationId}/cost/anomalies${query}`,
+    token,
+  );
+}
+
+/** `status` must not be `"open"` — only the detection job may set that. */
+export function updateAnomalyStatus(
+  organizationId: string,
+  anomalyId: string,
+  token: string,
+  status: "acknowledged" | "resolved",
+) {
+  return coreRequest<CoreAnomaly>(
+    `/v1/organizations/${organizationId}/cost/anomalies/${anomalyId}/status`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    },
+  );
+}
+
+export type RecommendationStatus = "active" | "dismissed" | "resolved";
+export type RecommendationPriority = "low" | "medium" | "high";
+
+export interface CoreRecommendationTarget {
+  target_type: string;
+  target_id: string;
+  role: string;
+}
+
+export interface CoreRecommendationEvidence {
+  evidence_key: string;
+  value: Record<string, unknown>;
+  source_type: string;
+  source_ref: string | null;
+  observed_at: string;
+}
+
+export interface CoreRecommendationImpact {
+  impact_type: string;
+  amount: string | null;
+  currency: string | null;
+  period: string;
+  estimated: boolean;
+  calculation_method: string;
+  calculation_version: string;
+}
+
+/** How Core's internal review concluded on a recommendation — only
+ * `completed` recommendations are listed by default. */
+export type RecommendationAIOutcome =
+  "completed" | "rejected" | "insufficient_evidence" | "needs_input";
+
+export interface CoreRecommendationOption {
+  title: string;
+  description: string;
+  pros: string[];
+  cons: string[];
+  risk_level: string | null;
+  is_preferred: boolean;
+  action_type: string | null;
+  expected_monthly_savings: string | null;
+  prerequisites: string[];
+  validation_steps: string[];
+  rollback: string[];
+}
+
+/** `outcome`/`monthly_savings` preview what picking this answer leads to
+ * (e.g. "Run it on a schedule", "231.87") — `null` when another question
+ * decides first. */
+export interface CoreRecommendationQuestionOption {
+  value: string;
+  label: string;
+  outcome?: string | null;
+  monthly_savings?: string | null;
+}
+
+/** A targeted question a paused review asks. `applies_when` makes it a
+ * conditional follow-up: show it only when every named fact's selected
+ * answer is one of the listed values. */
+export interface CoreRecommendationQuestion {
+  fact_key: string;
+  prompt: string;
+  options: CoreRecommendationQuestionOption[];
+  context: string | null;
+  applies_when: Record<string, string[]> | null;
+  /** The answer the evidence points to (e.g. an environment tag) — shown
+   * preselected; the user still confirms it. */
+  suggested_value?: string | null;
+  suggestion_reason?: string | null;
+}
+
+export interface CoreRecommendationReviewFact {
+  fact_key: string;
+  description: string;
+  source: string;
+}
+
+export interface CoreRecommendationAIReview {
+  outcome: RecommendationAIOutcome;
+  summary: string;
+  reasoning: string | null;
+  detected_issue: string | null;
+  evidence_summary: string[];
+  confidence: string | null;
+  evidence_quality: string | null;
+  risk_level: string | null;
+  risk_notes: string[];
+  open_questions: string[];
+  questions: CoreRecommendationQuestion[];
+  options: CoreRecommendationOption[];
+  facts: CoreRecommendationReviewFact[];
+  analysis_rounds: number;
+  critic_rounds: number;
+  tool_calls: number;
+  model: string;
+  reviewed_at: string;
+}
+
+export interface CoreRecommendation {
+  id: string;
+  analyzer_key: string;
+  analyzer_version: string;
+  recommendation_type: string;
+  status: RecommendationStatus;
+  title: string;
+  summary: string | null;
+  priority: RecommendationPriority | null;
+  confidence: string | null;
+  evidence_valid_until: string | null;
+  first_detected_at: string;
+  last_detected_at: string;
+  dismissed_at: string | null;
+  resolved_at: string | null;
+  targets: CoreRecommendationTarget[];
+  evidence: CoreRecommendationEvidence[];
+  impacts: CoreRecommendationImpact[];
+  ai_review: CoreRecommendationAIReview | null;
+  /** 1 = act on it first; `null` when not ranked (not shown, not active). */
+  rank?: number | null;
+  rank_score?: string | null;
+  /** The higher-ranked recommendation that already covers every resource of
+   * this one — such rows are listed only with `includeSuperseded`. */
+  superseded_by_id?: string | null;
+}
+
+/**
+ * The cross-product recommendation inbox (`GET
+ * /v1/organizations/{organization_id}/recommendations`) — reads across
+ * every product's recommendations for the organization, gated only by the
+ * `recommendations.read` permission (granted to every role including
+ * Member/Viewer by default), never by any one product's own `product.*`
+ * access. `product_key` is present here (it's implicit — always `"cost"` —
+ * on the product-scoped `dismiss`/`restore` endpoints below, so
+ * it isn't repeated on their own response shape).
+ */
+export interface CoreUnifiedRecommendation extends CoreRecommendation {
+  product_key: string;
+}
+
+export interface CoreUnifiedRecommendationListResponse {
+  items: CoreUnifiedRecommendation[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export function listAllRecommendations(
+  organizationId: string,
+  token: string,
+  options?: {
+    productKey?: string | null;
+    status?: RecommendationStatus | null;
+    analyzerKey?: string | null;
+    recommendationType?: string | null;
+    includeSuperseded?: boolean;
+    limit?: number;
+    offset?: number;
+  },
+) {
+  const params = new URLSearchParams();
+  if (options?.includeSuperseded) params.set("include_superseded", "true");
+  if (options?.productKey) params.set("product_key", options.productKey);
+  if (options?.status) params.set("status", options.status);
+  if (options?.analyzerKey) params.set("analyzer_key", options.analyzerKey);
+  if (options?.recommendationType)
+    params.set("recommendation_type", options.recommendationType);
+  params.set("limit", String(options?.limit ?? 50));
+  params.set("offset", String(options?.offset ?? 0));
+  return coreRequest<CoreUnifiedRecommendationListResponse>(
+    `/v1/organizations/${organizationId}/recommendations?${params.toString()}`,
+    token,
+  );
+}
+
+export function getUnifiedRecommendation(
+  organizationId: string,
+  recommendationId: string,
+  token: string,
+) {
+  return coreRequest<CoreUnifiedRecommendation>(
+    `/v1/organizations/${organizationId}/recommendations/${recommendationId}`,
+    token,
+  );
+}
+
+/** Dismiss/restore remain product-owned (only Cost exists today) — the
+ * dashboard routes each row's action to its own `product_key`'s endpoint;
+ * these two always call Cost's. */
+export function dismissRecommendation(
+  organizationId: string,
+  recommendationId: string,
+  token: string,
+) {
+  return coreRequest<CoreRecommendation>(
+    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/dismiss`,
+    token,
+    { method: "POST" },
+  );
+}
+
+export function restoreRecommendation(
+  organizationId: string,
+  recommendationId: string,
+  token: string,
+) {
+  return coreRequest<CoreRecommendation>(
+    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/restore`,
+    token,
+    { method: "POST" },
+  );
+}
+
+export type RecommendationReviewStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "rejected"
+  | "insufficient_evidence"
+  | "needs_input"
+  | "failed";
+
+export interface CoreRecommendationReviewStage {
+  key: string;
+  label: string;
+  state: "completed" | "current" | "pending";
+}
+
+/** A review session's user-facing progress — fixed stages and activity
+ * messages only, never model reasoning. */
+export interface CoreRecommendationReview {
+  id: string;
+  recommendation_id: string;
+  trigger: "scheduled" | "recheck" | "answer";
+  status: RecommendationReviewStatus;
+  activity: string | null;
+  stages: CoreRecommendationReviewStage[];
+  error_code: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+/** Queues a fresh review of one recommendation (202); poll
+ * `getRecommendationReview` for progress. 409 when one is already running
+ * or the recommendation is resolved. */
+export function requestRecommendationReview(
+  organizationId: string,
+  recommendationId: string,
+  token: string,
+) {
+  return coreRequest<CoreRecommendationReview>(
+    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/review`,
+    token,
+    { method: "POST" },
+  );
+}
+
+export function getRecommendationReview(
+  organizationId: string,
+  recommendationId: string,
+  token: string,
+) {
+  return coreRequest<CoreRecommendationReview>(
+    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/review`,
+    token,
+  );
+}
+
+/** Stores the answers as structured facts about the resource and resumes
+ * the review (202). */
+export function answerRecommendationReview(
+  organizationId: string,
+  recommendationId: string,
+  answers: Record<string, string>,
+  token: string,
+) {
+  return coreRequest<CoreRecommendationReview>(
+    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/review/answers`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answers }),
+    },
+  );
+}
+
+export type FixGuideMethodKind = "console" | "terraform" | "cli";
+
+export interface CoreFixGuideLink {
+  label: string;
+  url: string;
+  kind: "console" | "documentation" | "cli_reference" | "terraform_registry";
+}
+
+export interface CoreFixGuideStep {
+  title: string;
+  detail: string | null;
+  code: {
+    language: "bash" | "hcl";
+    content: string;
+    /** `<UPPER_CASE>` values the user fills in — never invented by Core. */
+    placeholders: string[];
+  } | null;
+}
+
+export interface CoreFixGuideMethod {
+  method: FixGuideMethodKind;
+  available: boolean;
+  unavailable_reason: string | null;
+  /** `generic_example`: an illustration to adapt (Terraform — Core never
+   * sees the customer's Terraform code or state). */
+  scope: "customer_resource" | "generic_example";
+  note: string | null;
+  links: CoreFixGuideLink[];
+  steps: CoreFixGuideStep[];
+  validation: CoreFixGuideStep[];
+  rollback: CoreFixGuideStep[];
+}
+
+/** A validated "How to fix" guide for one option of a reviewed
+ * recommendation — instructions only; nothing is ever run for the user. */
+export interface CoreRecommendationFixGuide {
+  status: "ready" | "insufficient";
+  provider: string;
+  provider_label: string;
+  option_index: number;
+  option_title: string;
+  action_type: string;
+  summary: string;
+  resource: {
+    provider: string;
+    resource_type: string | null;
+    external_id: string | null;
+    name: string | null;
+    region: string | null;
+    arn: string | null;
+  } | null;
+  prerequisites: string[];
+  warnings: string[];
+  methods: CoreFixGuideMethod[];
+  documentation: CoreFixGuideLink[];
+  /** What verification removed from the generated guide, in plain words. */
+  omitted: string[];
+  model: string | null;
+  generated_at: string | null;
+}
+
+export function getRecommendationFixGuide(
+  organizationId: string,
+  recommendationId: string,
+  input: { option_index: number | null; regenerate: boolean },
+  token: string,
+) {
+  return coreRequest<CoreRecommendationFixGuide>(
+    `/v1/organizations/${organizationId}/cost/recommendations/${recommendationId}/fix-guide`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export type ExplorerGranularity = "daily" | "weekly" | "monthly";
+
+export interface CostExplorerGroupByField {
+  dimension: ScopeDimension;
+  tag_key?: string | null;
+}
+
+export interface CostExplorerQueryInput {
+  period_start: string;
+  period_end: string;
+  metric?: CostUsageMetric;
+  connection_id?: string | null;
+  target_id?: string | null;
+  granularity?: ExplorerGranularity | null;
+  group_by?: CostExplorerGroupByField[];
+  scope?: CoreScopeCondition[];
+}
+
+export interface CoreCostExplorerPoint {
+  bucket_start: string;
+  bucket_end: string;
+  currency: string;
+  amount: string;
+  group: Record<string, string | null>;
+}
+
+export interface CoreCostExplorerResponse {
+  items: CoreCostExplorerPoint[];
+}
+
+export function queryCostExplorer(
+  organizationId: string,
+  token: string,
+  input: CostExplorerQueryInput,
+) {
+  return costReadRequest<CoreCostExplorerResponse>(
+    `/v1/organizations/${organizationId}/cost/explorer/query`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+/** Mirrors Core's `SpendTrendGranularity` (`modules/cost/schemas/spend_trends.py`). */
+export type SpendTrendGranularity = "daily" | "monthly";
+
+/** One bucket of the current period aligned to its equal-length bucket in
+ * the immediately preceding period — mirrors Core's `SpendTrendPoint`. */
+export interface CoreSpendTrendPoint {
+  bucket_start: string;
+  bucket_end: string;
+  previous_bucket_start: string;
+  previous_bucket_end: string;
+  current_amount: string;
+  previous_amount: string;
+  current_cumulative_amount: string;
+  previous_cumulative_amount: string;
+  absolute_delta: string;
+  change_percent: number | null;
+}
+
+/** Mirrors Core's `CurrencySpendTrend` — currencies are never blended. */
+export interface CoreCurrencySpendTrend {
+  currency: string;
+  current_total: string;
+  previous_total: string;
+  absolute_delta: string;
+  change_percent: number | null;
+  items: CoreSpendTrendPoint[];
+}
+
+/** Mirrors Core's `SpendTrendsResponse`. `source` discloses which dataset
+ * answered the whole comparison window (`cost_summary` only for unscoped
+ * `effective_cost` trends without complete FOCUS coverage). */
+export interface CoreSpendTrends {
+  period_start: string;
+  period_end: string;
+  previous_period_start: string;
+  previous_period_end: string;
+  metric: CostUsageMetric;
+  granularity: SpendTrendGranularity;
+  source: CostDataSource;
+  by_currency: CoreCurrencySpendTrend[];
+}
+
+/** Mirrors Core's `SpendTrendsQuery`. Periods are UTC-midnight aligned and
+ * include only completed days (daily) or completed months (monthly). */
+export interface SpendTrendsQueryInput {
+  period_start: string;
+  period_end: string;
+  granularity: SpendTrendGranularity;
+  metric?: CostUsageMetric;
+  connection_id?: string | null;
+  target_id?: string | null;
+  scope?: CoreScopeCondition[];
+}
+
+export function querySpendTrends(
+  organizationId: string,
+  token: string,
+  input: SpendTrendsQueryInput,
+) {
+  return costReadRequest<CoreSpendTrends>(
+    `/v1/organizations/${organizationId}/cost/spend-trends/query`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function runCostExplorerSavedView(
+  organizationId: string,
+  savedViewId: string,
+  token: string,
+  params: {
+    periodStart: string;
+    periodEnd: string;
+    connectionId?: string | null;
+    targetId?: string | null;
+  },
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  if (params.connectionId) query.set("connection_id", params.connectionId);
+  if (params.targetId) query.set("target_id", params.targetId);
+  return costReadRequest<CoreCostExplorerResponse>(
+    `/v1/organizations/${organizationId}/cost/explorer/saved-views/${savedViewId}?${query.toString()}`,
+    token,
+  );
+}
+
+export interface CoreCostOverviewService {
+  service_name: string | null;
+  amount: string;
+}
+
+export interface CoreCostOverviewChargeCategory {
+  category: string;
+  amount: string;
+}
+
+export interface CoreCostOverviewFinancialBreakdown {
+  gross_usage: string;
+  tax: string;
+  credits: string;
+  other_adjustments: string;
+  /** Always equals `current_total` — the four fields above reconcile to it
+   * exactly. */
+  net_cost: string;
+  /** This period's `list_cost` total minus `current_total` — informational
+   * only, deliberately excluded from the four reconciling fields above (it
+   * would double-count a discount `current_total` already reflects). `null`
+   * when the selected metric already is `list_cost`, or no row in this
+   * currency has a `list_cost` to compare against. */
+  discount_amount: string | null;
+}
+
+export interface CoreCostOverviewCurrency {
+  currency: string;
+  current_total: string;
+  previous_total: string;
+  absolute_delta: string;
+  change_percent: number | null;
+  top_services: CoreCostOverviewService[];
+  /** `current_total` minus the sum of `top_services` — always present, so
+   * `top_services` + `other_total` reconciles exactly to `current_total`. Can
+   * be negative (e.g. a credit/refund sorts outside the top-N). */
+  other_total: string;
+  /** FOCUS `charge_category` split (`Usage`, `Credit`, `Tax`, ...) — sums
+   * exactly to `current_total`. Surfaces why a total can be near-zero (a
+   * credit netting out usage) directly in the Cost product. */
+  by_charge_category: CoreCostOverviewChargeCategory[];
+  /** `null` only when `CoreCostOverview.source` is `"cost_summary"` — Cost
+   * Explorer data has no FOCUS `charge_category` to reconcile from. */
+  financial_breakdown: CoreCostOverviewFinancialBreakdown | null;
+  /** The same reconciled split for the previous period (`net_cost` equals
+   * `previous_total`); `null` under the same condition as above. */
+  previous_financial_breakdown?: CoreCostOverviewFinancialBreakdown | null;
+}
+
+export interface CoreCostOverview {
+  /** The effective range that answered the request. When `source` is
+   * `"cost_usage"`, Core may move `period_start` forward to the largest
+   * trailing calendar-month-aligned sub-range with complete FOCUS coverage.
+   * When `source` is `"cost_summary"`, the requested range is preserved. */
+  period_start: string;
+  period_end: string;
+  previous_period_start: string;
+  previous_period_end: string;
+  /** Which dataset actually answered — `"cost_summary"` when this organization
+   * doesn't have `billing.cost_usage`'s `aws.billing.cost_usage` grant yet, OR
+   * when no complete trailing FOCUS sub-range exists for the targets in scope.
+   * In that case `by_currency[].financial_breakdown` is `null` and
+   * `by_charge_category` is empty because Cost Explorer can't provide either.
+   * Always disclosed. */
+  source: CostDataSource;
+  by_currency: CoreCostOverviewCurrency[];
+}
+
+export function getCostOverview(
+  organizationId: string,
+  token: string,
+  params: {
+    periodStart: string;
+    periodEnd: string;
+    connectionId?: string | null;
+    targetId?: string | null;
+    topN?: number;
+  },
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  if (params.connectionId) query.set("connection_id", params.connectionId);
+  if (params.targetId) query.set("target_id", params.targetId);
+  if (params.topN !== undefined) query.set("top_n", String(params.topN));
+  return costReadRequest<CoreCostOverview>(
+    `/v1/organizations/${organizationId}/cost/overview?${query.toString()}`,
+    token,
+  );
+}
+
+export interface CoreCostDriver {
+  dimension: string;
+  value: string | null;
+  currency: string;
+  current_amount: string;
+  previous_amount: string;
+  absolute_delta: string;
+  /** `null` when `previous_amount` is zero — never an invented percentage. */
+  percentage_change: number | null;
+}
+
+export interface CoreCostDrivers {
+  period_start: string;
+  period_end: string;
+  previous_period_start: string;
+  previous_period_end: string;
+  metric: string;
+  /** Fixed to `"service_name"` for now — see `DriversService`'s own docstring
+   * in Core for why this isn't yet caller-selectable. */
+  dimension: string;
+  /** Ranked by `absolute_delta` descending, capped at the caller's `top_n`. */
+  increases: CoreCostDriver[];
+  /** Ranked by `absolute_delta` ascending (most negative first), capped at
+   * the caller's `top_n`. */
+  decreases: CoreCostDriver[];
+}
+
+export function getCostDrivers(
+  organizationId: string,
+  token: string,
+  params: {
+    periodStart: string;
+    periodEnd: string;
+    connectionId?: string | null;
+    targetId?: string | null;
+    topN?: number;
+  },
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  if (params.connectionId) query.set("connection_id", params.connectionId);
+  if (params.targetId) query.set("target_id", params.targetId);
+  if (params.topN !== undefined) query.set("top_n", String(params.topN));
+  return costReadRequest<CoreCostDrivers>(
+    `/v1/organizations/${organizationId}/cost/drivers?${query.toString()}`,
+    token,
+  );
+}
+
+export type CostBreakdownChangeStatus =
+  "new" | "removed" | "increased" | "decreased" | "unchanged";
+
+export interface CoreCostBreakdownItem {
+  /** `null` is the explicit unattributed bucket (e.g. shared charges with no
+   * resource id) — never dropped. */
+  value: string | null;
+  current_amount: string;
+  previous_amount: string;
+  absolute_delta: string;
+  /** `null` when `previous_amount` is zero. */
+  change_percent: number | null;
+  status: CostBreakdownChangeStatus;
+  share_percent: number | null;
+}
+
+export interface CoreCostBreakdownCurrency {
+  currency: string;
+  current_total: string;
+  previous_total: string;
+  absolute_delta: string;
+  change_percent: number | null;
+  items: CoreCostBreakdownItem[];
+  /** Everything outside `top_n`, so `items` + `other` reconcile to the totals. */
+  other: {
+    count: number;
+    current_amount: string;
+    previous_amount: string;
+    absolute_delta: string;
+  } | null;
+}
+
+export interface CoreCostBreakdown {
+  period_start: string;
+  period_end: string;
+  previous_period_start: string;
+  previous_period_end: string;
+  metric: string;
+  dimension: ScopeDimension;
+  tag_key: string | null;
+  source: CostDataSource;
+  by_currency: CoreCostBreakdownCurrency[];
+}
+
+export interface CostBreakdownQueryInput {
+  period_start: string;
+  period_end: string;
+  dimension: ScopeDimension;
+  tag_key?: string | null;
+  connection_id?: string | null;
+  target_id?: string | null;
+  scope: CoreScopeCondition[];
+  top_n?: number;
+}
+
+/** Comparison-ready breakdown of one dimension (current vs. previous period,
+ * delta, new/removed status). Drill down by passing the selected value back
+ * as a `scope` condition with the next `dimension`. Core answers 409 when
+ * complete FOCUS coverage is required and missing. */
+export function queryCostBreakdown(
+  organizationId: string,
+  token: string,
+  input: CostBreakdownQueryInput,
+) {
+  return costReadRequest<CoreCostBreakdown>(
+    `/v1/organizations/${organizationId}/cost/breakdown/query`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export interface CoreCostOverviewHighlights {
+  period_start: string;
+  period_end: string;
+  /** Only while the period is in progress. */
+  forecast: CoreCostForecast | null;
+  budgets: {
+    total: number;
+    on_track: number;
+    at_risk: number;
+    over_budget: number;
+    no_data: number;
+    /** Over or forecast-to-overrun budgets, worst first (at most 5). */
+    attention: CoreBudgetStatus[];
+  };
+  anomalies: { open: number; acknowledged: number };
+}
+
+export function getCostOverviewHighlights(
+  organizationId: string,
+  token: string,
+  params: { periodStart: string; periodEnd: string },
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  return costReadRequest<CoreCostOverviewHighlights>(
+    `/v1/organizations/${organizationId}/cost/overview/highlights?${query.toString()}`,
+    token,
+  );
+}
+
+export interface CoreCostForecastCurrency {
+  currency: string;
+  /** Sum of every *complete* day in the period so far — today itself is
+   * never "complete" (Core's totals query only returns a whole day once
+   * queried through that day's own end boundary), so this excludes today
+   * even though it may already have some spend recorded. */
+  observed_amount: string;
+  /** `observed_amount` divided by `complete_days` — `null` exactly when
+   * `CoreCostForecast.insufficient_data` is `true`. */
+  daily_rate: string | null;
+  /** `observed_amount` plus `daily_rate` times the period's remaining
+   * days — `null` alongside `daily_rate`. */
+  forecast_amount: string | null;
+}
+
+export interface CoreCostForecast {
+  period_start: string;
+  period_end: string;
+  /** Which dataset actually answered — same disclosed, never-inferred
+   * convention as `CoreCostOverview.source`. */
+  source: CostDataSource;
+  /** Start of the current UTC day — the boundary between complete history
+   * and today's own not-yet-queryable charges. */
+  data_through: string;
+  complete_days: number;
+  /** Calendar days, today included, still ahead of `data_through`. */
+  remaining_days: number;
+  method: string;
+  method_version: string;
+  /** `true` when `complete_days` is zero (too early in the period to
+   * compute any daily rate) — `by_currency` is empty in that case rather
+   * than a fabricated zero for an unknown currency set. */
+  insufficient_data: boolean;
+  by_currency: CoreCostForecastCurrency[];
+}
+
+export function getCostForecast(
+  organizationId: string,
+  token: string,
+  params: {
+    periodStart: string;
+    periodEnd: string;
+    connectionId?: string | null;
+    targetId?: string | null;
+  },
+) {
+  const query = new URLSearchParams({
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+  if (params.connectionId) query.set("connection_id", params.connectionId);
+  if (params.targetId) query.set("target_id", params.targetId);
+  return costReadRequest<CoreCostForecast>(
+    `/v1/organizations/${organizationId}/cost/forecast?${query.toString()}`,
+    token,
+  );
+}
+
+export type SavedViewVisibility = "private" | "organization";
+
+export interface CoreSavedView {
+  id: string;
+  organization_id: string;
+  created_by_user_id: string | null;
+  name: string;
+  description: string | null;
+  group_by: ScopeDimension[];
+  granularity: ExplorerGranularity;
+  visibility: SavedViewVisibility;
+  scope: CoreScopeCondition[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreSavedViewListResponse {
+  items: CoreSavedView[];
+}
+
+export interface CreateSavedViewInput {
+  name: string;
+  description?: string | null;
+  /** Must not include `"tag"` — tag has no `tag_key` to group by. */
+  group_by?: ScopeDimension[];
+  granularity?: ExplorerGranularity;
+  visibility?: SavedViewVisibility;
+  scope?: CoreScopeCondition[];
+}
+
+export interface UpdateSavedViewInput {
+  name?: string;
+  description?: string | null;
+  group_by?: ScopeDimension[];
+  granularity?: ExplorerGranularity;
+  visibility?: SavedViewVisibility;
+  scope?: CoreScopeCondition[];
+}
+
+export function listSavedViews(organizationId: string, token: string) {
+  return costReadRequest<CoreSavedViewListResponse>(
+    `/v1/organizations/${organizationId}/cost/saved-views`,
+    token,
+  );
+}
+
+export function createSavedView(
+  organizationId: string,
+  token: string,
+  input: CreateSavedViewInput,
+) {
+  return coreRequest<CoreSavedView>(
+    `/v1/organizations/${organizationId}/cost/saved-views`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateSavedView(
+  organizationId: string,
+  savedViewId: string,
+  token: string,
+  input: UpdateSavedViewInput,
+) {
+  return coreRequest<CoreSavedView>(
+    `/v1/organizations/${organizationId}/cost/saved-views/${savedViewId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function deleteSavedView(
+  organizationId: string,
+  savedViewId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/cost/saved-views/${savedViewId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export type ReportFormat = "csv" | "pdf";
+
+/** The relative cost window a report's generation (scheduled, or on-demand
+ * with no explicit override) reads — recomputed from "now" on every run, so a
+ * recurring report never drifts toward a fixed range. Mirrors Core's
+ * `ReportPeriodPreset`. */
+export type ReportPeriodPreset =
+  | "last_7_days"
+  | "last_30_days"
+  | "last_month"
+  | "month_to_date"
+  | "last_quarter"
+  | "last_year";
+
+export interface CoreReport {
+  id: string;
+  organization_id: string;
+  created_by_user_id: string | null;
+  name: string;
+  description: string | null;
+  format: ReportFormat;
+  recipients: string[];
+  /** Shared Notification destinations explicitly selected for this report. */
+  destination_ids: string[];
+  period_preset: ReportPeriodPreset;
+  schedule_cron: string | null;
+  /** Set by Core (`ReportService`, via `croniter`) whenever `schedule_cron` is
+   * non-null and `enabled` — the next occurrence `cost.dispatch_due_reports`
+   * will claim and generate. `null` when on-demand-only or disabled. */
+  next_run_at: string | null;
+  enabled: boolean;
+  scope: CoreScopeCondition[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreReportListResponse {
+  items: CoreReport[];
+}
+
+export interface CreateReportInput {
+  name: string;
+  description?: string | null;
+  format?: ReportFormat;
+  recipients?: string[];
+  destination_ids?: string[];
+  period_preset?: ReportPeriodPreset;
+  schedule_cron?: string | null;
+  scope?: CoreScopeCondition[];
+}
+
+export interface UpdateReportInput {
+  name?: string;
+  description?: string | null;
+  format?: ReportFormat;
+  recipients?: string[];
+  destination_ids?: string[];
+  period_preset?: ReportPeriodPreset;
+  schedule_cron?: string | null;
+  enabled?: boolean;
+  scope?: CoreScopeCondition[];
+}
+
+export function listReports(organizationId: string, token: string) {
+  return costReadRequest<CoreReportListResponse>(
+    `/v1/organizations/${organizationId}/cost/reports`,
+    token,
+  );
+}
+
+export function createReport(
+  organizationId: string,
+  token: string,
+  input: CreateReportInput,
+) {
+  return coreRequest<CoreReport>(
+    `/v1/organizations/${organizationId}/cost/reports`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateReport(
+  organizationId: string,
+  reportId: string,
+  token: string,
+  input: UpdateReportInput,
+) {
+  return coreRequest<CoreReport>(
+    `/v1/organizations/${organizationId}/cost/reports/${reportId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function deleteReport(
+  organizationId: string,
+  reportId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/cost/reports/${reportId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export interface GenerateReportInput {
+  /** Both omitted defaults to the report's own `period_preset` — a one-off
+   * override for this call only, never persisted onto the report. */
+  period_start?: string | null;
+  period_end?: string | null;
+}
+
+/** Mirrors Core's `GenerateReportResponse`. `notification_request_id` is the
+ * published `NotificationRequest.id` — delivery status is visible under
+ * `.../notifications/deliveries`. */
+export interface GenerateReportResult {
+  notification_request_id: string;
+}
+
+/**
+ * Builds the report's CSV or PDF now and delivers it through the shared
+ * Notification platform (`cost.report.generated`) rather than emailing
+ * `Report.recipients` directly. Only the report's explicitly selected
+ * Slack/Telegram/Email/Webhook destinations receive it
+ * (`ReportGenerationService.generate_now` in Core).
+ */
+export function generateReport(
+  organizationId: string,
+  reportId: string,
+  token: string,
+  input: GenerateReportInput = {},
+) {
+  return coreRequest<GenerateReportResult>(
+    `/v1/organizations/${organizationId}/cost/reports/${reportId}/generate`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
   );
 }
 
@@ -1850,19 +3319,6 @@ export function listTelemetrySources(
   );
 }
 
-export function getTelemetrySource(
-  organizationId: string,
-  applicationId: string,
-  environmentId: string,
-  sourceId: string,
-  token: string,
-) {
-  return coreRequest<CoreTelemetrySource>(
-    `${telemetrySourcesPath(organizationId, applicationId, environmentId)}/${sourceId}`,
-    token,
-  );
-}
-
 export function createTelemetrySource(
   organizationId: string,
   applicationId: string,
@@ -2013,5 +3469,706 @@ export function deleteTelemetryIngestionToken(
     `${telemetryTokensPath(organizationId, applicationId, environmentId, sourceId)}/${ingestionTokenId}`,
     token,
     { method: "DELETE" },
+  );
+}
+
+/**
+ * Notification platform module (`src/modules/notifications` in Core) —
+ * independent of `modules.integrations` on the backend: a `NotificationChannel`
+ * is a provider connection (Slack/Telegram/Email/Webhook) in its own right,
+ * never tied to an Integration connection. Gated by RBAC permissions
+ * (`notifications.read` / `notifications.manage` / `notifications.send_test`)
+ * rather than a product entitlement, so the backend 403s rather than this
+ * client pre-filtering — same pattern `CoreApiError` already handles.
+ */
+export type NotificationProvider = "email" | "slack" | "telegram" | "webhook";
+export type NotificationChannelStatus = "active" | "disabled";
+
+export interface CoreNotificationChannel {
+  id: string;
+  organization_id: string;
+  provider: NotificationProvider;
+  name: string;
+  status: NotificationChannelStatus;
+  is_enabled: boolean;
+  configuration: Record<string, unknown>;
+  /** Whether a credential (bot token, ...) is stored — the ciphertext itself
+   * is never returned by Core. */
+  has_credential: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreNotificationChannelListResponse {
+  items: CoreNotificationChannel[];
+  total: number;
+}
+
+export interface CreateNotificationChannelInput {
+  provider: NotificationProvider;
+  name: string;
+  configuration?: Record<string, unknown>;
+  /** Plaintext credential (bot token, ...); encrypted server-side, never
+   * echoed back. */
+  credential?: string | null;
+}
+
+export interface UpdateNotificationChannelInput {
+  name?: string;
+  configuration?: Record<string, unknown> | null;
+  is_enabled?: boolean;
+  /** Set to rotate the stored credential; omitted leaves it unchanged. */
+  credential?: string | null;
+}
+
+export function listNotificationChannels(
+  organizationId: string,
+  token: string,
+) {
+  return coreRequest<CoreNotificationChannelListResponse>(
+    `/v1/organizations/${organizationId}/notifications/channels`,
+    token,
+  );
+}
+
+export function createNotificationChannel(
+  organizationId: string,
+  token: string,
+  input: CreateNotificationChannelInput,
+) {
+  return coreRequest<CoreNotificationChannel>(
+    `/v1/organizations/${organizationId}/notifications/channels`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateNotificationChannel(
+  organizationId: string,
+  channelId: string,
+  token: string,
+  input: UpdateNotificationChannelInput,
+) {
+  return coreRequest<CoreNotificationChannel>(
+    `/v1/organizations/${organizationId}/notifications/channels/${channelId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+/** Permanently deletes the channel and cascades through every one of its
+ * destinations and their delivery history. Use
+ * `updateNotificationChannel(..., { is_enabled: false })` instead to pause a
+ * channel reversibly without losing it or its history. */
+export function deleteNotificationChannel(
+  organizationId: string,
+  channelId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/notifications/channels/${channelId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+/**
+ * Sends one real test notification through `channelId` to `destinationId` and
+ * waits for the result — Core dispatches synchronously through the same path
+ * a background worker uses, so this resolves to a real `delivered`/`failed`
+ * `CoreNotificationDelivery`, not a queued placeholder.
+ */
+export function sendTestNotification(
+  organizationId: string,
+  channelId: string,
+  token: string,
+  destinationId: string,
+) {
+  return coreRequest<CoreNotificationDelivery>(
+    `/v1/organizations/${organizationId}/notifications/channels/${channelId}/test`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ destination_id: destinationId }),
+    },
+  );
+}
+
+export interface CoreNotificationDestination {
+  id: string;
+  organization_id: string;
+  channel_id: string;
+  /** The provider-specific address: a Slack channel id/name, a Telegram chat
+   * id, an email address, or a webhook URL. */
+  external_identifier: string;
+  name: string;
+  /** Which `Notification.event_type`s this destination receives — empty
+   * subscribes to every event type (a catch-all). */
+  event_types: string[];
+  configuration: Record<string, unknown>;
+  /** Whether a per-destination secret (e.g. webhook signing secret) is
+   * stored — the ciphertext itself is never returned. */
+  has_secret: boolean;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreNotificationDestinationListResponse {
+  items: CoreNotificationDestination[];
+  total: number;
+}
+
+export interface CreateNotificationDestinationInput {
+  channel_id: string;
+  name: string;
+  external_identifier: string;
+  event_types?: string[];
+  configuration?: Record<string, unknown>;
+  /** Plaintext per-destination secret (e.g. webhook signing secret);
+   * encrypted server-side. */
+  secret?: string | null;
+}
+
+export interface UpdateNotificationDestinationInput {
+  name?: string;
+  external_identifier?: string;
+  event_types?: string[];
+  configuration?: Record<string, unknown> | null;
+  is_enabled?: boolean;
+  /** Set to rotate the stored secret; omitted leaves it unchanged. */
+  secret?: string | null;
+}
+
+export function listNotificationDestinations(
+  organizationId: string,
+  token: string,
+) {
+  return coreRequest<CoreNotificationDestinationListResponse>(
+    `/v1/organizations/${organizationId}/notifications/destinations`,
+    token,
+  );
+}
+
+export function createNotificationDestination(
+  organizationId: string,
+  token: string,
+  input: CreateNotificationDestinationInput,
+) {
+  return coreRequest<CoreNotificationDestination>(
+    `/v1/organizations/${organizationId}/notifications/destinations`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateNotificationDestination(
+  organizationId: string,
+  destinationId: string,
+  token: string,
+  input: UpdateNotificationDestinationInput,
+) {
+  return coreRequest<CoreNotificationDestination>(
+    `/v1/organizations/${organizationId}/notifications/destinations/${destinationId}`,
+    token,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+/** Permanently deletes the destination and cascades through its delivery
+ * history. Use `updateNotificationDestination(..., { is_enabled: false })`
+ * instead to pause a destination reversibly without losing it or its
+ * history. */
+export function deleteNotificationDestination(
+  organizationId: string,
+  destinationId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/notifications/destinations/${destinationId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export type NotificationDeliveryStatus =
+  "pending" | "processing" | "retrying" | "delivered" | "failed";
+
+export interface CoreNotificationDelivery {
+  id: string;
+  organization_id: string;
+  notification_id: string;
+  destination_id: string;
+  status: NotificationDeliveryStatus;
+  attempt_count: number;
+  scheduled_at: string;
+  delivered_at: string | null;
+  provider_message_id: string | null;
+  last_error_code: string | null;
+  last_error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoreNotificationDeliveryListResponse {
+  items: CoreNotificationDelivery[];
+  total: number;
+}
+
+/** Recent delivery history across every channel — mirrors Core's own
+ * newest-first ordering. */
+export function listNotificationDeliveries(
+  organizationId: string,
+  token: string,
+  params: { limit: number; offset: number },
+) {
+  return coreRequest<CoreNotificationDeliveryListResponse>(
+    `/v1/organizations/${organizationId}/notifications/deliveries?limit=${params.limit}&offset=${params.offset}`,
+    token,
+  );
+}
+
+export interface CoreNotificationAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+  expires_at: string | null;
+}
+
+export type NotificationStatus =
+  "pending" | "processing" | "completed" | "failed";
+
+export interface CoreNotification {
+  id: string;
+  organization_id: string;
+  event_type: string;
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+  status: NotificationStatus;
+  idempotency_key: string;
+  created_at: string;
+  processed_at: string | null;
+  attachments: CoreNotificationAttachment[];
+}
+
+export interface CoreNotificationListResponse {
+  items: CoreNotification[];
+  total: number;
+}
+
+/** Every generated artifact a product publishes (e.g. a Cost report via
+ * `cost.report.generated`) is just a `Notification` with attachments —
+ * filtering by `event_type` here is how a product reads its own generation
+ * history back without a second, duplicate history table. */
+export function listNotifications(
+  organizationId: string,
+  token: string,
+  params: { limit: number; offset: number; eventType?: string },
+) {
+  const query = new URLSearchParams({
+    limit: String(params.limit),
+    offset: String(params.offset),
+  });
+  if (params.eventType) query.set("event_type", params.eventType);
+  return coreRequest<CoreNotificationListResponse>(
+    `/v1/organizations/${organizationId}/notifications?${query.toString()}`,
+    token,
+  );
+}
+
+/** Permanently removes a notification and its delivery/attachment metadata.
+ * The underlying S3 attachment object is left in place. */
+export function deleteNotification(
+  organizationId: string,
+  notificationId: string,
+  token: string,
+) {
+  return coreRequest<void>(
+    `/v1/organizations/${organizationId}/notifications/${notificationId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export interface NotificationAttachmentDownloadResult {
+  url: string;
+  expires_in_seconds: number;
+}
+
+/** Resolves a fresh, short-lived presigned URL for one attachment — never
+ * cached, since it expires (`expires_in_seconds`). */
+export function getNotificationAttachmentDownloadUrl(
+  organizationId: string,
+  notificationId: string,
+  attachmentId: string,
+  token: string,
+) {
+  return coreRequest<NotificationAttachmentDownloadResult>(
+    `/v1/organizations/${organizationId}/notifications/${notificationId}/attachments/${attachmentId}/download`,
+    token,
+  );
+}
+
+/** A resource as a node of the shared Resource Graph (Infrastructure → Graph). */
+export interface CoreGraphNode {
+  id: string;
+  target_id: string;
+  provider: string;
+  provider_resource_type: string;
+  resource_type: string;
+  category: string;
+  external_id: string;
+  name: string | null;
+  region: string;
+  status: string;
+  lifecycle_status: string;
+}
+
+/**
+ * `service` nodes form the Architecture view; `network`/`security` nodes join
+ * in the Network/Security views; `detail` nodes appear only when expanded.
+ * Derived by Core from the normalized resource type, never the provider.
+ */
+export type CoreGraphLayer = "service" | "network" | "security" | "detail";
+
+/**
+ * `configured` — configuration declares it; `permitted` — configuration allows
+ * it ("can reach"); `observed` — telemetry saw it; `inferred` — contextual
+ * analysis suggests it; `user_confirmed` — a member asserted it.
+ */
+export type CoreEvidenceKind =
+  "configured" | "permitted" | "observed" | "inferred" | "user_confirmed";
+
+export interface CoreGraphEdgeSummary {
+  id: string;
+  source_resource_id: string;
+  target_resource_id: string;
+  relationship_type: string;
+  evidence_kinds: CoreEvidenceKind[];
+  ports: {
+    protocol: string | null;
+    from_port: number | null;
+    to_port: number | null;
+  }[];
+  last_seen_at: string;
+  /** Latest time telemetry (X-Ray, flow logs) saw this interaction; null if never. */
+  last_observed_at: string | null;
+}
+
+/** Why one runtime-interaction source did or did not contribute, per region. */
+export interface CoreInteractionSourceStatus {
+  source: string;
+  region: string;
+  state:
+    | "collected"
+    | "empty"
+    | "partial"
+    | "not_enabled"
+    | "not_permitted"
+    | "failed";
+  detail: string | null;
+  /** What a source that ran read and missed, e.g. flow-log windows not read. */
+  coverage: Record<string, number> | null;
+  /** Facts written by the last successful run (`last_succeeded_at`). */
+  evidence_count: number;
+  /** The latest attempt, whatever its outcome. */
+  collected_at: string;
+  /** The latest run that wrote evidence; null if none has. */
+  last_succeeded_at: string | null;
+  /** The latest attempt did not run: the facts shown are from an earlier run. */
+  stale: boolean;
+}
+
+export interface CoreGraphResolution {
+  status: "succeeded" | "failed";
+  resolved_at: string;
+  inventory_watermark: string;
+  relationship_count: number;
+}
+
+/**
+ * Whether a resource's traffic could be seen at all: `covered` — every flow /
+ * request of the period was read; `partial` — part of it, or the resource is
+ * only matched heuristically; `none` — nothing that can see it was read;
+ * `not_observable` — no signal Dilanix reads can show it. No observed
+ * traffic means nothing unless `covered`.
+ */
+export type CoreTrafficState =
+  "covered" | "partial" | "none" | "not_observable";
+
+/** A scope resource's own call or traffic with an external endpoint (never a
+ *  lookup alone); `provider` only when its documentation lists the host. */
+export interface CoreScopeExternalInteraction {
+  resource_id: string;
+  endpoint_kind: "host" | "ip_address";
+  endpoint: string;
+  provider: string | null;
+  relationship_type: string;
+  evidence_kinds: CoreEvidenceKind[];
+  exact: boolean;
+  observed: boolean;
+  last_observed_at: string;
+}
+
+/** Addresses/hosts no collected resource held that a scope resource exchanged
+ *  traffic with over the last 7 days (flow and access logs). */
+export interface CoreUnresolvedContacts {
+  resource_id: string;
+  addresses: number;
+  bytes: number;
+  requests: number;
+  last_seen_at: string;
+}
+
+export interface CoreScopeGraph {
+  nodes: {
+    node: CoreGraphNode;
+    layer: CoreGraphLayer;
+    /** Service-layer nodes only, over the last 7 days. */
+    traffic?: CoreTrafficState | null;
+  }[];
+  edges: CoreGraphEdgeSummary[];
+  total_nodes: number;
+  truncated: boolean;
+  resolution: CoreGraphResolution | null;
+  sources: CoreInteractionSourceStatus[];
+  external?: CoreScopeExternalInteraction[];
+  unresolved?: CoreUnresolvedContacts[];
+}
+
+/** One signal that could show the resource's traffic (`network_traffic`: VPC
+ *  flow logs; `load_balancer_requests`: access logs) or its name lookups
+ *  (`name_lookups`, never counted as traffic). */
+export interface CoreSignalCoverage {
+  signal: "network_traffic" | "load_balancer_requests" | "name_lookups";
+  state: "covered" | "partial" | "none" | "not_applicable";
+  reasons: string[];
+  source: string | null;
+  visible_from: string | null;
+  visible_until: string | null;
+  read_ratio: number;
+  gaps: number;
+}
+
+export interface CoreResourceTrafficCoverage {
+  resource: CoreGraphNode;
+  coverage: {
+    state: CoreTrafficState;
+    since: string;
+    until: string;
+    signals: CoreSignalCoverage[];
+  };
+}
+
+/** One layer of a reachability verdict; `not_evaluated` layers (e.g. network
+ *  ACLs) are listed but never decide it. */
+export interface CoreReachabilityCheck {
+  name:
+    | "ingress_rule"
+    | "egress_rule"
+    | "network_path"
+    | "network_acl"
+    | "internet_path"
+    | "observed_traffic";
+  result: "pass" | "fail" | "unknown" | "not_evaluated";
+  detail: string;
+}
+
+/** Whether traffic can get across an edge, from evidence that exists only —
+ *  a missing fact is `unknown`, never reachable. */
+export interface CoreReachability {
+  state: "reachable" | "blocked" | "unknown" | "not_applicable";
+  checks: CoreReachabilityCheck[];
+}
+
+export interface CoreGraphEvidence {
+  kind: CoreEvidenceKind;
+  producer: string;
+  attributes: Record<string, unknown>;
+  confidence: number | null;
+  /** `heuristic`: one resource was matched by a rule that is not proof
+   *  (e.g. a flow-log interface by security groups and subnet). */
+  endpoint_identity: "exact" | "heuristic";
+  first_observed_at: string;
+  last_observed_at: string;
+}
+
+export interface CoreGraphEdge {
+  id: string;
+  source_resource_id: string;
+  target_resource_id: string;
+  relationship_type: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  evidence: CoreGraphEvidence[];
+}
+
+export interface CoreGraphNodeDetail {
+  node: CoreGraphNode;
+  connection_id: string;
+  provider_resource_key: string;
+  zone: string | null;
+  tags: Record<string, string>;
+  extra: Record<string, unknown>;
+  capacity: Record<string, unknown>;
+  first_seen_at: string;
+  last_seen_at: string;
+}
+
+export interface CoreResourceNeighborhood {
+  resource: CoreGraphNode;
+  edges: CoreGraphEdge[];
+  peers: CoreGraphNode[];
+  total_edges: number;
+}
+
+/** One edge of a chain towards an external endpoint; `resource_id` is the
+ *  resource it leads to. */
+export interface CoreExternalHop {
+  resource_id: string;
+  relationship_type: string;
+  evidence_kinds: CoreEvidenceKind[];
+  exact: boolean;
+  observed: boolean;
+}
+
+/** An external endpoint the resource calls itself (`hops` empty) or through
+ *  the resources `hops` lead to (a proxy, AI gateway, load balancer);
+ *  `via_resource_id` makes the call and `evidence` explains it. `provider`
+ *  only when the provider documents the host; `observed` only when every
+ *  hop and the call were observed. */
+export interface CoreExternalReachItem {
+  endpoint_kind: "host" | "ip_address";
+  endpoint: string;
+  provider: string | null;
+  relationship_type: string;
+  via_resource_id: string;
+  hops: CoreExternalHop[];
+  evidence: CoreGraphEvidence[];
+  observed: boolean;
+  identity: "exact" | "heuristic";
+}
+
+export interface CoreResourceExternalReach {
+  resource: CoreGraphNode;
+  items: CoreExternalReachItem[];
+  nodes: CoreGraphNode[];
+  truncated: boolean;
+}
+
+export interface CoreConnectionDetail {
+  edge: CoreGraphEdge;
+  source: CoreGraphNode;
+  target: CoreGraphNode;
+  path: CoreGraphNode[];
+  status: {
+    configured: boolean;
+    permitted: boolean;
+    reachability: CoreReachability;
+    observed: boolean;
+    /** `heuristic` when every observation names a resource only by a guess. */
+    observed_identity: "exact" | "heuristic" | null;
+    inferred: boolean;
+    user_confirmed: boolean;
+    internet_exposed: boolean;
+    last_observed_at: string | null;
+    confidence: number | null;
+  };
+}
+
+function infrastructureGraphPath(organizationId: string) {
+  return `/v1/organizations/${organizationId}/infrastructure/graph`;
+}
+
+export function getInfrastructureGraph(
+  organizationId: string,
+  token: string,
+  params: { targetId: string; region?: string | null; limit?: number },
+) {
+  const query = new URLSearchParams({ target_id: params.targetId });
+  if (params.region) query.set("region", params.region);
+  if (params.limit) query.set("limit", String(params.limit));
+  return coreRequest<CoreScopeGraph>(
+    `${infrastructureGraphPath(organizationId)}?${query.toString()}`,
+    token,
+  );
+}
+
+export function getInfrastructureResource(
+  organizationId: string,
+  resourceId: string,
+  token: string,
+) {
+  return coreRequest<CoreGraphNodeDetail>(
+    `${infrastructureGraphPath(organizationId)}/resources/${resourceId}`,
+    token,
+  );
+}
+
+export function listInfrastructureRelationships(
+  organizationId: string,
+  resourceId: string,
+  token: string,
+  params: { limit?: number } = {},
+) {
+  const query = new URLSearchParams({ limit: String(params.limit ?? 200) });
+  return coreRequest<CoreResourceNeighborhood>(
+    `${infrastructureGraphPath(organizationId)}/resources/${resourceId}/relationships?${query.toString()}`,
+    token,
+  );
+}
+
+export function listInfrastructureExternalEndpoints(
+  organizationId: string,
+  resourceId: string,
+  token: string,
+) {
+  return coreRequest<CoreResourceExternalReach>(
+    `${infrastructureGraphPath(organizationId)}/resources/${resourceId}/external-endpoints`,
+    token,
+  );
+}
+
+export function getInfrastructureResourceCoverage(
+  organizationId: string,
+  resourceId: string,
+  token: string,
+  params: { days?: number } = {},
+) {
+  const query = new URLSearchParams({ days: String(params.days ?? 7) });
+  return coreRequest<CoreResourceTrafficCoverage>(
+    `${infrastructureGraphPath(organizationId)}/resources/${resourceId}/coverage?${query.toString()}`,
+    token,
+  );
+}
+
+export function getInfrastructureConnection(
+  organizationId: string,
+  relationshipId: string,
+  token: string,
+) {
+  return coreRequest<CoreConnectionDetail>(
+    `${infrastructureGraphPath(organizationId)}/relationships/${relationshipId}`,
+    token,
   );
 }

@@ -59,15 +59,6 @@ export interface DashboardRecommendation {
   metrics: DashboardMetric[];
 }
 
-export interface ProductDashboardSnapshot {
-  monthlySpendUsd: number;
-  potentialSavingsUsd: number;
-  /** Trailing daily spend, oldest first — drives the sparkline. */
-  spendTrend: number[];
-  breakdown: CostBreakdownItem[];
-  recommendation: DashboardRecommendation;
-}
-
 export interface DashboardOverview {
   monthlySpendUsd: number;
   potentialSavingsUsd: number;
@@ -90,23 +81,6 @@ export interface UsageRow {
   trendPct: number;
 }
 
-export type PhilosophyIcon = "target" | "wrench" | "sparkles" | "gauge";
-
-export interface PhilosophyPrinciple {
-  title: string;
-  description: string;
-  icon: PhilosophyIcon;
-}
-
-export type TechnologyIcon =
-  "ai" | "cloud" | "data" | "automation" | "developer-tools";
-
-export interface TechnologyCategory {
-  label: string;
-  description: string;
-  icon: TechnologyIcon;
-}
-
 export interface BlogPost {
   slug: string;
   title: string;
@@ -126,13 +100,6 @@ export interface BlogPost {
 export interface ProductFaqItem {
   question: string;
   answer: string;
-}
-
-export interface CompanyPage {
-  headline: string;
-  body: string;
-  ctaLabel: string;
-  ctaHref: string;
 }
 
 export interface SiteSocialLinks {

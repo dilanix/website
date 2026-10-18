@@ -8,7 +8,5 @@ export const siteConfig = {
   domain: "dilanix.org",
   url: "https://dilanix.org",
   description:
-    "Dilanix builds AWS cost optimization and multicloud cost visibility software, starting with Dilanix CostOps — built on FOCUS 1.2 billing data.",
+    "Dilanix maps your cloud resources, reads your real bill, and ranks the savings that are safe to make — with verified Console, Terraform, and CLI steps to make them.",
 } as const;
-
-export type SiteConfig = typeof siteConfig;

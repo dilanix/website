@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound, redirect } from "next/navigation";
 import { TrendingDown, TrendingUp, Minus } from "lucide-react";
 import { getProductBySlug } from "@/lib/data/products";
 import { getUsageBreakdown } from "@/lib/data/dashboard";
@@ -19,6 +20,13 @@ export default async function ProductUsagePage({
   params,
 }: PageProps<"/dashboard/products/[slug]/usage">) {
   const { slug } = await params;
+
+  if (slug === "cost") {
+    redirect("/dashboard/products/cost/explorer");
+  }
+  // Infrastructure's sections are exactly Graph and Resources.
+  if (slug === "infrastructure") notFound();
+
   const rows = await getUsageBreakdown(slug);
 
   if (!rows) {

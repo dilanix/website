@@ -17,6 +17,7 @@ import {
   getConnectionAwsSetup,
   listTargets,
   disableTarget,
+  renameTarget,
   replaceTargetIdentity,
   startSync,
   getSyncHealth,
@@ -25,16 +26,9 @@ import {
   getSyncJobAttempts,
   cancelSync,
   setSyncPolicy,
-  listSyncPolicies,
-  deleteSyncPolicy,
   listResources,
   listResourceFilters,
   listMetricDatapoints,
-  listCostSummaries,
-  getCostSummaryTotals,
-  listCostUsage,
-  getCostUsageTotals,
-  getUnifiedCostTotals,
   CoreApiError,
   type CoreIntegrationConnection,
   type UpdateConnectionInput,
@@ -49,23 +43,12 @@ import {
   type CoreSyncRunListResponse,
   type CoreSyncJobAttempt,
   type CoreSyncPolicy,
-  type CoreSyncPolicyListResponse,
   type SetSyncPolicyInput,
   type CoreResourceListResponse,
   type CoreResourceFilterOptions,
   type ListResourcesParams,
   type CoreMetricDatapointListResponse,
   type ListMetricDatapointsParams,
-  type CoreCostSummaryListResponse,
-  type ListCostSummariesParams,
-  type CoreCostSummaryTotals,
-  type GetCostSummaryTotalsParams,
-  type CoreCostUsageListResponse,
-  type ListCostUsageParams,
-  type CoreCostUsageTotals,
-  type GetCostUsageTotalsParams,
-  type CoreUnifiedCostTotals,
-  type GetUnifiedCostTotalsParams,
   type CorePurgeConnectionResult,
 } from "@/lib/core/api";
 
@@ -284,6 +267,27 @@ export async function disableTargetAction(
   }
 }
 
+export async function renameTargetAction(
+  connectionId: string,
+  targetId: string,
+  displayName: string,
+): Promise<ActionResult<CoreIntegrationTarget>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await renameTarget(
+      organizationId,
+      connectionId,
+      targetId,
+      token,
+      displayName,
+    );
+    revalidatePath(`/dashboard/integrations/${connectionId}`);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
 export async function replaceTargetIdentityAction(
   connectionId: string,
   targetId: string,
@@ -457,32 +461,6 @@ export async function setSyncPolicyAction(
   }
 }
 
-export async function listSyncPoliciesAction(
-  connectionId: string,
-): Promise<ActionResult<CoreSyncPolicyListResponse>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await listSyncPolicies(organizationId, connectionId, token);
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function deleteSyncPolicyAction(
-  connectionId: string,
-  syncPolicyId: string,
-): Promise<ActionResult> {
-  try {
-    const { token, organizationId } = await context();
-    await deleteSyncPolicy(organizationId, connectionId, syncPolicyId, token);
-    revalidatePath(`/dashboard/integrations/${connectionId}`);
-    return {};
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
 export async function listResourcesAction(
   connectionId: string,
   params: ListResourcesParams,
@@ -503,10 +481,16 @@ export async function listResourcesAction(
 
 export async function listResourceFiltersAction(
   connectionId: string,
+  targetId?: string | null,
 ): Promise<ActionResult<CoreResourceFilterOptions>> {
   try {
     const { token, organizationId } = await context();
-    const data = await listResourceFilters(organizationId, connectionId, token);
+    const data = await listResourceFilters(
+      organizationId,
+      connectionId,
+      token,
+      targetId,
+    );
     return { data };
   } catch (error) {
     return { error: message(error) };
@@ -520,96 +504,6 @@ export async function listMetricDatapointsAction(
   try {
     const { token, organizationId } = await context();
     const data = await listMetricDatapoints(
-      organizationId,
-      connectionId,
-      token,
-      params,
-    );
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function listCostSummariesAction(
-  connectionId: string,
-  params: ListCostSummariesParams,
-): Promise<ActionResult<CoreCostSummaryListResponse>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await listCostSummaries(
-      organizationId,
-      connectionId,
-      token,
-      params,
-    );
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function getCostSummaryTotalsAction(
-  connectionId: string,
-  params: GetCostSummaryTotalsParams,
-): Promise<ActionResult<CoreCostSummaryTotals>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await getCostSummaryTotals(
-      organizationId,
-      connectionId,
-      token,
-      params,
-    );
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function listCostUsageAction(
-  connectionId: string,
-  params: ListCostUsageParams,
-): Promise<ActionResult<CoreCostUsageListResponse>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await listCostUsage(
-      organizationId,
-      connectionId,
-      token,
-      params,
-    );
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function getCostUsageTotalsAction(
-  connectionId: string,
-  params: GetCostUsageTotalsParams,
-): Promise<ActionResult<CoreCostUsageTotals>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await getCostUsageTotals(
-      organizationId,
-      connectionId,
-      token,
-      params,
-    );
-    return { data };
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-export async function getUnifiedCostTotalsAction(
-  connectionId: string,
-  params: GetUnifiedCostTotalsParams,
-): Promise<ActionResult<CoreUnifiedCostTotals>> {
-  try {
-    const { token, organizationId } = await context();
-    const data = await getUnifiedCostTotals(
       organizationId,
       connectionId,
       token,

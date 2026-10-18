@@ -7,6 +7,7 @@ import {
   customRange,
   formatCostAmount,
   formatCostPeriod,
+  monthToDateRange,
   presetRange,
   previousRange,
 } from "./cost-summaries";
@@ -81,6 +82,15 @@ describe("presetRange", () => {
     expect(presetRange("30d", now).start.toISOString()).toBe(
       "2026-08-02T00:00:00.000Z",
     );
+  });
+});
+
+describe("monthToDateRange", () => {
+  it("starts at the current UTC month's boundary and includes today", () => {
+    const range = monthToDateRange(new Date("2026-09-14T18:30:00-04:00"));
+
+    expect(range.start.toISOString()).toBe("2026-09-01T00:00:00.000Z");
+    expect(range.end.toISOString()).toBe("2026-09-15T00:00:00.000Z");
   });
 });
 

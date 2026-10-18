@@ -2,10 +2,29 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { coreRequest } from "./api";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("coreRequest", () => {
+  it("times out when Core does not respond within 10 seconds", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+
+    const request = coreRequest<unknown>("/v1/resource", "token", undefined, {
+      timeoutMs: 10_000,
+    });
+    const expectation = expect(request).rejects.toThrow(
+      "Dilanix Core did not respond within 10 seconds. Please try again.",
+    );
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expectation;
+  });
+
   it("handles successful 204 responses without parsing JSON", async () => {
     const response = new Response(null, { status: 204 });
     const json = vi.spyOn(response, "json");
@@ -88,6 +107,151 @@ describe("coreRequest", () => {
       }),
     );
     expect(result).toEqual(mockConnection);
+  });
+});
+
+describe("cost analytics", () => {
+  it("posts an organization-wide Explorer query", async () => {
+    const mockResponse = { items: [] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { queryCostExplorer } = await import("./api");
+    const input = {
+      period_start: "2026-09-01T00:00:00.000Z",
+      period_end: "2026-09-12T00:00:00.000Z",
+      metric: "effective_cost" as const,
+      connection_id: "connection-1",
+      target_id: "target-1",
+      granularity: "daily" as const,
+      group_by: [{ dimension: "service_name" as const }],
+      scope: [],
+    };
+    const result = await queryCostExplorer("org-123", "test-token", input);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/v1/organizations/org-123/cost/explorer/query"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify(input),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("runs a saved Explorer view within the selected account scope", async () => {
+    const mockResponse = { items: [] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { runCostExplorerSavedView } = await import("./api");
+    await runCostExplorerSavedView("org-123", "view-1", "test-token", {
+      periodStart: "2026-09-01T00:00:00Z",
+      periodEnd: "2026-09-12T00:00:00Z",
+      connectionId: "connection-1",
+      targetId: "target-1",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/explorer/saved-views/view-1?period_start=2026-09-01T00%3A00%3A00Z&period_end=2026-09-12T00%3A00%3A00Z&connection_id=connection-1&target_id=target-1",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+  });
+
+  it("requests the overview period and top-services limit", async () => {
+    const mockResponse = {
+      period_start: "2026-09-01T00:00:00Z",
+      period_end: "2026-09-11T00:00:00Z",
+      previous_period_start: "2026-08-22T00:00:00Z",
+      previous_period_end: "2026-09-01T00:00:00Z",
+      by_currency: [],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCostOverview } = await import("./api");
+    const result = await getCostOverview("org-123", "test-token", {
+      periodStart: "2026-09-01T00:00:00Z",
+      periodEnd: "2026-09-11T00:00:00Z",
+      connectionId: "connection-1",
+      targetId: "target-1",
+      topN: 5,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/overview?period_start=2026-09-01T00%3A00%3A00Z&period_end=2026-09-11T00%3A00%3A00Z&connection_id=connection-1&target_id=target-1&top_n=5",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("requests the allocation breakdown for a metric and period", async () => {
+    const mockResponse = {
+      period_start: "2026-09-01T00:00:00Z",
+      period_end: "2026-09-12T00:00:00Z",
+      items: [
+        {
+          target_label: "Platform",
+          currency: "USD",
+          amount: "42.000000",
+        },
+      ],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getAllocationBreakdown } = await import("./api");
+    const result = await getAllocationBreakdown("org-123", "test-token", {
+      periodStart: "2026-09-01T00:00:00Z",
+      periodEnd: "2026-09-12T00:00:00Z",
+      metric: "effective_cost",
+      connectionId: "connection-1",
+      targetId: "target-1",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/allocations/breakdown?period_start=2026-09-01T00%3A00%3A00Z&period_end=2026-09-12T00%3A00%3A00Z&metric=effective_cost&connection_id=connection-1&target_id=target-1",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
   });
 });
 
@@ -393,27 +557,6 @@ describe("sync", () => {
     );
     expect(result).toEqual(mockRun);
   });
-
-  it("deletes a sync policy by id", async () => {
-    const response = new Response(null, { status: 204 });
-    const fetchMock = vi.fn().mockResolvedValue(response);
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { deleteSyncPolicy } = await import("./api");
-    await deleteSyncPolicy("org-123", "conn-1", "policy-1", "test-token");
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "/v1/organizations/org-123/integrations/connections/conn-1/sync-policies/policy-1",
-      ),
-      expect.objectContaining({
-        method: "DELETE",
-        headers: expect.objectContaining({
-          Authorization: "Bearer test-token",
-        }),
-      }),
-    );
-  });
 });
 
 describe("targets", () => {
@@ -568,6 +711,25 @@ describe("resources", () => {
     expect(calledUrl).not.toContain("category=");
   });
 
+  it("sends targetId as a target_id query param", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResources } = await import("./api");
+    await listResources("org-123", "conn-1", "test-token", {
+      limit: 20,
+      offset: 0,
+      targetId: "target-1",
+    });
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).toContain("target_id=target-1");
+  });
+
   it("sends lifecycleStatus as a lifecycle_status query param", async () => {
     const mockResponse = { items: [], total: 0 };
     const response = new Response(JSON.stringify(mockResponse), {
@@ -657,6 +819,21 @@ describe("resources", () => {
     );
     expect(result).toEqual(mockResponse);
   });
+
+  it("scopes the filter options to a target when one is given", async () => {
+    const mockResponse = { category_types: [], regions: [] };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResourceFilters } = await import("./api");
+    await listResourceFilters("org-123", "conn-1", "test-token", "target-1");
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).toContain("resources/filters?target_id=target-1");
+  });
 });
 
 describe("cost summaries", () => {
@@ -678,7 +855,7 @@ describe("cost summaries", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/v1/organizations/org-123/integrations/connections/conn-1/cost-summaries?limit=25&offset=0&service_name=Amazon+EC2&cost_basis=amortized",
+        "/v1/organizations/org-123/cost/data/connections/conn-1/summaries?limit=25&offset=0&service_name=Amazon+EC2&cost_basis=amortized",
       ),
       expect.objectContaining({
         headers: expect.objectContaining({
@@ -902,7 +1079,7 @@ describe("cost summary totals", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/v1/organizations/org-123/integrations/connections/conn-1/cost-summaries/totals?period_start=2026-08-01T00%3A00%3A00Z&period_end=2026-08-02T00%3A00%3A00Z&cost_basis=net_unblended",
+        "/v1/organizations/org-123/cost/data/connections/conn-1/summaries/totals?period_start=2026-08-01T00%3A00%3A00Z&period_end=2026-08-02T00%3A00%3A00Z&cost_basis=net_unblended",
       ),
       expect.objectContaining({
         headers: expect.objectContaining({
@@ -980,7 +1157,7 @@ describe("cost usage", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/v1/organizations/org-123/integrations/connections/conn-1/cost-usage?limit=25&offset=0&service_name=Amazon+EC2&billing_account_id=123456789012",
+        "/v1/organizations/org-123/cost/data/connections/conn-1/usage?limit=25&offset=0&service_name=Amazon+EC2&billing_account_id=123456789012",
       ),
       expect.objectContaining({
         headers: expect.objectContaining({
@@ -1059,7 +1236,7 @@ describe("cost usage totals", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/v1/organizations/org-123/integrations/connections/conn-1/cost-usage/totals?period_start=2026-08-01T00%3A00%3A00Z&period_end=2026-08-02T00%3A00%3A00Z&metric=effective_cost",
+        "/v1/organizations/org-123/cost/data/connections/conn-1/usage/totals?period_start=2026-08-01T00%3A00%3A00Z&period_end=2026-08-02T00%3A00%3A00Z&metric=effective_cost",
       ),
       expect.objectContaining({
         headers: expect.objectContaining({
@@ -1110,68 +1287,6 @@ describe("cost usage totals", () => {
 
     await expect(
       getCostUsageTotals("org-123", "conn-1", "test-token", {
-        periodStart: "2026-08-01T00:00:00Z",
-        periodEnd: "2026-08-02T00:00:00Z",
-      }),
-    ).rejects.toBeInstanceOf(CoreApiError);
-  });
-});
-
-describe("unified cost totals", () => {
-  it("requests totals with the period query params and no source branching", async () => {
-    const mockResponse = {
-      source: "cost_usage",
-      period_start: "2026-08-01T00:00:00Z",
-      period_end: "2026-08-02T00:00:00Z",
-      total_amount: "12.50",
-      currency: "USD",
-      is_estimated: false,
-    };
-    const response = new Response(JSON.stringify(mockResponse), {
-      status: 200,
-    });
-    const fetchMock = vi.fn().mockResolvedValue(response);
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { getUnifiedCostTotals } = await import("./api");
-    const result = await getUnifiedCostTotals(
-      "org-123",
-      "conn-1",
-      "test-token",
-      {
-        periodStart: "2026-08-01T00:00:00Z",
-        periodEnd: "2026-08-02T00:00:00Z",
-      },
-    );
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "/v1/organizations/org-123/integrations/connections/conn-1/costs/totals?period_start=2026-08-01T00%3A00%3A00Z&period_end=2026-08-02T00%3A00%3A00Z",
-      ),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer test-token",
-        }),
-      }),
-    );
-    expect(result).toEqual(mockResponse);
-  });
-
-  it("surfaces a 403 as a CoreApiError when billing.read is not enabled", async () => {
-    const response = new Response(
-      JSON.stringify({
-        detail:
-          "Connection conn-1 does not have the billing.read capability enabled.",
-      }),
-      { status: 403 },
-    );
-    const fetchMock = vi.fn().mockResolvedValue(response);
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { getUnifiedCostTotals, CoreApiError } = await import("./api");
-
-    await expect(
-      getUnifiedCostTotals("org-123", "conn-1", "test-token", {
         periodStart: "2026-08-01T00:00:00Z",
         periodEnd: "2026-08-02T00:00:00Z",
       }),
@@ -1281,5 +1396,37 @@ describe("submitContactMessage", () => {
         message: "Hello there.",
       }),
     ).rejects.toThrow("Message too long.");
+  });
+
+  it("sends review answers as a JSON body", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: "review-1" }), { status: 202 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { answerRecommendationReview } = await import("./api");
+    await answerRecommendationReview(
+      "org-123",
+      "rec-1",
+      { "resource.purpose": "vpn_gateway" },
+      "test-token",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/recommendations/rec-1/review/answers",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          answers: { "resource.purpose": "vpn_gateway" },
+        }),
+      }),
+    );
   });
 });

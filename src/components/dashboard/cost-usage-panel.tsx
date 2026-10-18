@@ -1,10 +1,22 @@
 "use client";
-import { type FormEvent, useState, useTransition } from "react";
+import {
+  type FormEvent,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { ChevronDown, RefreshCw, Search } from "lucide-react";
-import type { CoreCostUsage, CostUsageMetric } from "@/lib/core/api";
-import { listCostUsageAction } from "@/app/dashboard/integrations/actions";
+import type {
+  CoreCostUsage,
+  CoreIntegrationTarget,
+  CostUsageMetric,
+} from "@/lib/core/api";
+import { listCostUsageAction } from "@/app/dashboard/products/cost-actions";
 import {
   COST_USAGE_METRIC_FILTER_ORDER,
   COST_USAGE_PAGE_SIZE,
@@ -18,6 +30,7 @@ import { EmptyState, StatusBadge } from "./primitives";
 import { FilterChip } from "./cost-summary-panel";
 import { cn } from "@/lib/utils";
 import { ResourceMetadata } from "./resource-metadata";
+import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 
 function costValue(value: string | null, currency: string | null) {
   if (value === null) return null;
@@ -147,11 +160,17 @@ function costUsageDetails(costUsage: CoreCostUsage): Record<string, unknown> {
 function CostUsageRow({
   costUsage,
   metric,
+  targetLabel,
   expanded,
   onToggle,
 }: {
   costUsage: CoreCostUsage;
   metric: CostUsageMetric;
+  /** `display_name ?? external_id` of the `IntegrationTarget` this charge row
+   * belongs to — distinct from `billing_account_id` (the FOCUS export's own
+   * provider account field, shown regardless): `null` when the connection
+   * only ever resolved to a single target. */
+  targetLabel: string | null;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -181,6 +200,9 @@ function CostUsageRow({
           <span className="mt-0.5 block truncate">
             {costUsage.billing_account_id}
           </span>
+          {targetLabel !== null ? (
+            <span className="mt-0.5 block truncate">{targetLabel}</span>
+          ) : null}
         </div>
         <div className="text-muted-foreground hidden truncate text-xs md:block">
           {costUsage.sku_id ?? costUsage.sku_meter ?? "—"}
@@ -214,45 +236,101 @@ interface CostUsageFilters {
   billingAccountId: string;
 }
 
+function isCostUsageFilters(value: unknown): value is CostUsageFilters {
+  if (!value || typeof value !== "object") return false;
+  const filters = value as Record<string, unknown>;
+  return (
+    typeof filters.serviceName === "string" &&
+    typeof filters.billingAccountId === "string"
+  );
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isCostUsageMetric(value: unknown): value is CostUsageMetric {
+  return COST_USAGE_METRIC_FILTER_ORDER.includes(value as CostUsageMetric);
+}
+
 /**
  * Raw FOCUS detail-row browser — the `billing.cost_usage` counterpart to
  * `CostSummaryPanel`. Deliberately simpler: no URL-persisted filter state (this
- * panel's filters are independent of, and would otherwise collide in the query
- * string with, `CostSummaryPanel`'s own `service`/`basis` params), and no period
- * picker of its own — FOCUS rows are browsed by service/account here, with
- * period-level totals already covered by `UnifiedCostTotals` above.
+ * panel's filters are independent of `CostSummaryPanel`'s own filters and are
+ * persisted under their own localStorage key. There is no period picker of its
+ * own.
  */
 export function CostUsagePanel({
   connectionId,
+  targetId = null,
+  targets = [],
   costReadEnabled,
+  focusExportEnabled,
   connectionSettingsHref,
   initialCostUsage,
   initialTotal,
 }: {
   connectionId: string;
+  /** Narrows every fetch to one `IntegrationTarget` (provider account) within
+   * this connection — `null` reads every target the connection currently
+   * holds. Set from the `target` URL param via `CostDataScopeSelector`. */
+  targetId?: string | null;
+  /** This connection's own targets, for resolving each row's `target_id` to a
+   * human label — never fetched here, since the page already loads them for
+   * `CostDataScopeSelector`. */
+  targets?: CoreIntegrationTarget[];
   /** Whether `billing.read` is enabled on this connection — Core's read API
    * 403s rather than returning an empty page when it isn't
    * (`CostUsageService.list_cost_usages`), so this panel never even attempts
    * to fetch until it's true. */
   costReadEnabled: boolean;
+  /** Whether the organization holds the `aws.billing.cost_usage` platform
+   * capability grant (`OrganizationCapabilityGrantAdmin`) — distinct from
+   * `costReadEnabled`, and not something the organization can self-serve
+   * from Access: AWS FOCUS export is not yet generally supported, so this
+   * defaults to disabled for every organization until Dilanix enables it. */
+  focusExportEnabled: boolean;
   connectionSettingsHref: string;
   initialCostUsage: CoreCostUsage[];
   initialTotal: number;
 }) {
+  const targetLabelById = useMemo(() => {
+    const result = new Map<string, string>();
+    for (const target of targets) {
+      result.set(target.id, target.display_name ?? target.external_id);
+    }
+    return result;
+  }, [targets]);
+  const showTargetLabel = targets.length > 1;
   const [costUsage, setCostUsage] = useState(initialCostUsage);
   const [total, setTotal] = useState(initialTotal);
-  const [metric, setMetric] = useState<CostUsageMetric>("effective_cost");
-  const [filters, setFilters] = useState<CostUsageFilters>({
-    serviceName: "",
-    billingAccountId: "",
-  });
-  const [serviceNameInput, setServiceNameInput] = useState("");
-  const [billingAccountInput, setBillingAccountInput] = useState("");
+  const [metric, setMetric] = useDashboardFilterState<CostUsageMetric>(
+    `costs:${connectionId}:usage-metric`,
+    "effective_cost",
+    isCostUsageMetric,
+  );
+  const [filters, setFilters, { restored: filtersRestored }] =
+    useDashboardFilterState<CostUsageFilters>(
+      `costs:${connectionId}:usage-filters`,
+      { serviceName: "", billingAccountId: "" },
+      isCostUsageFilters,
+    );
+  const [serviceNameInput, setServiceNameInput] = useDashboardFilterState(
+    `costs:${connectionId}:usage-service-input`,
+    "",
+    isString,
+  );
+  const [billingAccountInput, setBillingAccountInput] = useDashboardFilterState(
+    `costs:${connectionId}:usage-account-input`,
+    "",
+    isString,
+  );
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const restoredFiltersApplied = useRef(false);
 
   function reload(next: CostUsageFilters) {
     setRefreshing(true);
@@ -261,6 +339,7 @@ export function CostUsagePanel({
       const result = await listCostUsageAction(connectionId, {
         limit: COST_USAGE_PAGE_SIZE,
         offset: 0,
+        targetId,
         serviceName: next.serviceName || null,
         billingAccountId: next.billingAccountId || null,
       });
@@ -272,6 +351,17 @@ export function CostUsagePanel({
       }
     });
   }
+  const restoreFilters = useEffectEvent((next: CostUsageFilters) => {
+    reload(next);
+  });
+
+  useEffect(() => {
+    if (!filtersRestored || restoredFiltersApplied.current) return;
+    restoredFiltersApplied.current = true;
+    if (filters.serviceName || filters.billingAccountId) {
+      window.setTimeout(() => restoreFilters(filters), 0);
+    }
+  }, [filters, filtersRestored]);
 
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -289,6 +379,7 @@ export function CostUsagePanel({
       const result = await listCostUsageAction(connectionId, {
         limit: COST_USAGE_PAGE_SIZE,
         offset: costUsage.length,
+        targetId,
         serviceName: filters.serviceName || null,
         billingAccountId: filters.billingAccountId || null,
       });
@@ -298,6 +389,15 @@ export function CostUsagePanel({
         setCostUsage((current) => [...current, ...result.data!.items]);
       }
     });
+  }
+
+  if (!focusExportEnabled) {
+    return (
+      <EmptyState
+        title="FOCUS billing export is not enabled"
+        description="AWS FOCUS 1.2 billing export is not yet available for your organization. Contact Dilanix to have it enabled."
+      />
+    );
   }
 
   if (!costReadEnabled) {
@@ -433,6 +533,11 @@ export function CostUsagePanel({
                 key={row.id}
                 costUsage={row}
                 metric={metric}
+                targetLabel={
+                  showTargetLabel
+                    ? (targetLabelById.get(row.target_id) ?? null)
+                    : null
+                }
                 expanded={expandedId === row.id}
                 onToggle={() =>
                   setExpandedId((current) =>

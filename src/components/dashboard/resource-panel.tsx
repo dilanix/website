@@ -1,9 +1,21 @@
 "use client";
 import type { Route } from "next";
 import Link from "next/link";
-import { type ReactNode, useMemo, useState, useTransition } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { ArrowUpDown, ChevronDown, RefreshCw, Search } from "lucide-react";
-import type { CoreResource, CoreResourceFilterOptions } from "@/lib/core/api";
+import type {
+  CoreResource,
+  CoreResourceFilterOptions,
+  CoreIntegrationTarget,
+} from "@/lib/core/api";
 import {
   listResourcesAction,
   listResourceFiltersAction,
@@ -20,6 +32,7 @@ import {
 import { EmptyState, StatusBadge } from "./primitives";
 import { ResourceCategoryIcon } from "./resource-category-icon";
 import { cn } from "@/lib/utils";
+import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 
 /** One labeled cluster of filter chips (e.g. "Category" or "Status") — grouping
  * keeps unrelated filter dimensions visually distinct instead of reading as one
@@ -112,14 +125,25 @@ function FilterSelect({
 function ResourceRow({
   resource,
   href,
+  targetLabel,
 }: {
   resource: CoreResource;
   href: Route;
+  /** `display_name ?? external_id` of the `IntegrationTarget` this resource
+   * belongs to (the provider account/subscription/project) — `null` when the
+   * connection only ever resolved to a single target, where a per-row label
+   * would be redundant with the connection scope already shown above. */
+  targetLabel: string | null;
 }) {
   return (
     <Link
       href={href}
-      className="hover:bg-foreground/[0.025] grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)]"
+      className={cn(
+        "hover:bg-foreground/[0.025] grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors",
+        targetLabel !== null
+          ? "md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(8rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)]"
+          : "md:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)]",
+      )}
     >
       <span className="flex min-w-0 items-center gap-3">
         <span className="bg-foreground/5 text-muted-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
@@ -145,6 +169,11 @@ function ResourceRow({
       <span className="text-muted-foreground hidden truncate font-mono text-xs md:block">
         {resource.region}
       </span>
+      {targetLabel !== null ? (
+        <span className="text-muted-foreground hidden truncate text-xs md:block">
+          {targetLabel}
+        </span>
+      ) : null}
       <span className="justify-self-end md:justify-self-start">
         <StatusBadge status={resourceStatusTone(resource.status)}>
           {resource.status}
@@ -169,6 +198,35 @@ export interface ResourcePanelFilters {
 
 export type ResourceSortKey =
   "name" | "provider" | "region" | "status" | "lastSeen";
+
+function isNullableString(value: unknown) {
+  return value === null || typeof value === "string";
+}
+
+function isResourcePanelFilters(value: unknown): value is ResourcePanelFilters {
+  if (!value || typeof value !== "object") return false;
+  const filters = value as Record<string, unknown>;
+  return (
+    isNullableString(filters.category) &&
+    isNullableString(filters.resourceType) &&
+    isNullableString(filters.region) &&
+    typeof filters.lifecycleStatus === "string"
+  );
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isResourceSortKey(value: unknown): value is ResourceSortKey {
+  return ["name", "provider", "region", "status", "lastSeen"].includes(
+    String(value),
+  );
+}
+
+function isSortDirection(value: unknown): value is "asc" | "desc" {
+  return value === "asc" || value === "desc";
+}
 
 function updateResourceUrl(values: Record<string, string | null>) {
   const url = new URL(window.location.href);
@@ -208,6 +266,8 @@ const ALL_VALUE = "all";
 
 export function ResourcePanel({
   connectionId,
+  targetId = null,
+  targets = [],
   initialResources,
   initialTotal,
   initialFilterOptions,
@@ -215,8 +275,17 @@ export function ResourcePanel({
   initialSearchQuery = "",
   initialSort = "lastSeen",
   initialSortDirection,
+  preferInitialFilters = false,
 }: {
   connectionId: string;
+  /** Narrows every fetch to one `IntegrationTarget` (provider account) within
+   * this connection — `null` reads every target the connection currently
+   * holds. Set from the `target` URL param via `CloudConnectionSelector`. */
+  targetId?: string | null;
+  /** This connection's own targets, for resolving each row's `target_id` to a
+   * human label (`display_name ?? external_id`) — never fetched here, since
+   * the page already loads them for `CloudConnectionSelector`. */
+  targets?: CoreIntegrationTarget[];
   initialResources: CoreResource[];
   initialTotal: number;
   /** What category/type/region options this connection's resources actually
@@ -232,28 +301,63 @@ export function ResourcePanel({
   initialSearchQuery?: string;
   initialSort?: ResourceSortKey;
   initialSortDirection?: "asc" | "desc";
+  preferInitialFilters?: boolean;
 }) {
+  const targetLabelById = useMemo(() => {
+    const result = new Map<string, string>();
+    for (const target of targets) {
+      result.set(target.id, target.display_name ?? target.external_id);
+    }
+    return result;
+  }, [targets]);
+  // Only worth a dedicated column once this connection actually has more
+  // than one target — with zero or one, every row shares the same target as
+  // the connection scope already shown above, so a per-row label is inert.
+  const showTargetColumn = targets.length > 1;
   const [resources, setResources] = useState(initialResources);
   const [total, setTotal] = useState(initialTotal);
   const [filterOptions, setFilterOptions] = useState(initialFilterOptions);
-  const [filters, setFilters] = useState<ResourcePanelFilters>({
+  const initialResolvedFilters: ResourcePanelFilters = {
     category: initialFilters?.category ?? null,
     resourceType: initialFilters?.resourceType ?? null,
     region: initialFilters?.region ?? null,
     // Mirrors the backend's own default (PR #6): the common view is "what
     // exists right now" — `missing`/`out_of_scope` history is opt-in.
     lifecycleStatus: initialFilters?.lifecycleStatus ?? "active",
-  });
-  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
-  const [sortKey, setSortKey] = useState<ResourceSortKey>(initialSort);
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">(
+  };
+  const [filters, setFilters, { restored: filtersRestored }] =
+    useDashboardFilterState<ResourcePanelFilters>(
+      `resources:${connectionId}:filters`,
+      initialResolvedFilters,
+      isResourcePanelFilters,
+      { fallbackPriority: preferInitialFilters },
+    );
+  const [searchQuery, setSearchQuery] = useDashboardFilterState(
+    `resources:${connectionId}:search`,
+    initialSearchQuery,
+    isString,
+    { fallbackPriority: preferInitialFilters },
+  );
+  const [sortKey, setSortKey] = useDashboardFilterState<ResourceSortKey>(
+    `resources:${connectionId}:sort`,
+    initialSort,
+    isResourceSortKey,
+    { fallbackPriority: preferInitialFilters },
+  );
+  const [sortDirection, setSortDirection] = useDashboardFilterState<
+    "asc" | "desc"
+  >(
+    `resources:${connectionId}:direction`,
     initialSortDirection ?? (initialSort === "lastSeen" ? "desc" : "asc"),
+    isSortDirection,
+    { fallbackPriority: preferInitialFilters },
   );
   const [pending, startTransition] = useTransition();
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+  const restoredFiltersApplied = useRef(false);
 
   function reload(next: ResourcePanelFilters) {
     setRefreshing(true);
@@ -263,12 +367,13 @@ export function ResourcePanel({
         listResourcesAction(connectionId, {
           limit: RESOURCES_PAGE_SIZE,
           offset: 0,
+          targetId,
           category: next.category,
           resourceType: next.resourceType,
           region: next.region,
           lifecycleStatus: next.lifecycleStatus,
         }),
-        listResourceFiltersAction(connectionId),
+        listResourceFiltersAction(connectionId, targetId),
       ]);
       setRefreshing(false);
       if (resourcesResult.error || filtersResult.error) {
@@ -289,6 +394,42 @@ export function ResourcePanel({
       }
     });
   }
+  const restoreFilters = useEffectEvent((next: ResourcePanelFilters) => {
+    reload(next);
+  });
+
+  useEffect(() => {
+    if (!filtersRestored || restoredFiltersApplied.current) return;
+    restoredFiltersApplied.current = true;
+    updateResourceUrl({
+      category: filters.category,
+      type: filters.resourceType,
+      region: filters.region,
+      lifecycle:
+        filters.lifecycleStatus === "active" ? null : filters.lifecycleStatus,
+      q: searchQuery.trim() || null,
+      sort: sortKey,
+      direction: sortDirection,
+    });
+    if (
+      filters.category !== initialResolvedFilters.category ||
+      filters.resourceType !== initialResolvedFilters.resourceType ||
+      filters.region !== initialResolvedFilters.region ||
+      filters.lifecycleStatus !== initialResolvedFilters.lifecycleStatus
+    ) {
+      window.setTimeout(() => restoreFilters(filters), 0);
+    }
+  }, [
+    filters,
+    filtersRestored,
+    initialResolvedFilters.category,
+    initialResolvedFilters.lifecycleStatus,
+    initialResolvedFilters.region,
+    initialResolvedFilters.resourceType,
+    searchQuery,
+    sortDirection,
+    sortKey,
+  ]);
 
   function selectCategory(next: string | null) {
     // A type chosen under the previous category may not exist under the new
@@ -328,6 +469,7 @@ export function ResourcePanel({
       const result = await listResourcesAction(connectionId, {
         limit: RESOURCES_PAGE_SIZE,
         offset: resources.length,
+        targetId,
         category: filters.category,
         resourceType: filters.resourceType,
         region: filters.region,
@@ -575,7 +717,14 @@ export function ResourcePanel({
         />
       ) : (
         <div className="border-border-soft overflow-hidden rounded-2xl border">
-          <div className="border-border-soft bg-foreground/[0.025] hidden grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)] items-center gap-3 border-b px-4 py-3 md:grid">
+          <div
+            className={cn(
+              "border-border-soft bg-foreground/[0.025] hidden items-center gap-3 border-b px-4 py-3 md:grid",
+              showTargetColumn
+                ? "grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(8rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)]"
+                : "grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(6rem,0.7fr)]",
+            )}
+          >
             <SortHeader
               label="Resource"
               active={sortKey === "name"}
@@ -591,6 +740,11 @@ export function ResourcePanel({
               active={sortKey === "region"}
               onClick={() => selectSort("region")}
             />
+            {showTargetColumn ? (
+              <span className="text-muted-foreground text-left text-[11px] font-semibold tracking-wide uppercase">
+                Target account
+              </span>
+            ) : null}
             <SortHeader
               label="Status"
               active={sortKey === "status"}
@@ -607,19 +761,28 @@ export function ResourcePanel({
               <ResourceRow
                 key={resource.id}
                 resource={resource}
+                targetLabel={
+                  showTargetColumn
+                    ? (targetLabelById.get(resource.target_id) ?? null)
+                    : null
+                }
                 href={
-                  `/dashboard/resources/${resource.id}?${new URLSearchParams({
-                    connection: connectionId,
-                    ...(filters.category ? { category: filters.category } : {}),
-                    ...(filters.resourceType
-                      ? { type: filters.resourceType }
-                      : {}),
-                    ...(filters.region ? { region: filters.region } : {}),
-                    lifecycle: resource.lifecycle_status,
-                    ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
-                    sort: sortKey,
-                    direction: sortDirection,
-                  }).toString()}` as Route
+                  `/dashboard/products/infrastructure/resources/${resource.id}?${new URLSearchParams(
+                    {
+                      connection: connectionId,
+                      ...(filters.category
+                        ? { category: filters.category }
+                        : {}),
+                      ...(filters.resourceType
+                        ? { type: filters.resourceType }
+                        : {}),
+                      ...(filters.region ? { region: filters.region } : {}),
+                      lifecycle: resource.lifecycle_status,
+                      ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
+                      sort: sortKey,
+                      direction: sortDirection,
+                    },
+                  ).toString()}` as Route
                 }
               />
             ))}

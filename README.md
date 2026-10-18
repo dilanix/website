@@ -30,31 +30,101 @@ a frontend availability allowlist. The static sync dataset list (`src/lib/sync/d
 mirrors only Core's currently runnable `DEFAULT_DATASETS` entries (`inventory.resources`,
 `billing.cost_summary`, and `billing.cost_usage` today).
 
-The `/dashboard/costs` page reads both of Core's billing datasets for the
-selected connection, deliberately narrower/richer siblings never summed against
-each other (`docs/SYNC_INGESTION_ARCHITECTURE.md` "Cost data" in the Core repo):
+The Cost product dashboard at `/dashboard/products/cost` is the only cost
+workspace. Its Overview provides Summary, Services, Resources, and Trends
+views (`?view=`) while preserving the selected connection/target in the URL:
 
-- **Cost overview** — `GET .../costs/totals` (`src/components/dashboard/unified-cost-totals.tsx`),
-  Core's coverage-aware `BillingQueryService` read. Never branches on source
-  itself; always shows which dataset actually answered (a `FOCUS` or
-  `Cost Explorer` badge) and a rolling-30-day total plus previous-period diff.
-- **Cost Explorer breakdown** — `GET .../cost-summaries`(`/totals`) — Core's AWS
-  Cost Explorer-sourced `billing.cost_summary` data
-  (`src/lib/billing/cost-summaries.ts`, `src/components/dashboard/cost-summary-panel.tsx`):
-  period presets/custom range, per-cost-basis totals and daily chart, and raw
-  paginated rows filterable by service.
-- **FOCUS cost usage** — `GET .../cost-usage`(`/totals`) — Core's AWS FOCUS 1.2
-  Data-Export-sourced `billing.cost_usage` data (`src/lib/billing/cost-usage.ts`,
-  `src/components/dashboard/cost-usage-panel.tsx`): raw FOCUS detail rows
-  (service, resource, region, SKU, charge category) filterable by service and
-  billing account, with a `CostUsageMetric` selector (billed/effective/list/
-  contracted — all four already present per row, so switching metric never
-  re-fetches).
+- **Summary** — `cost/overview` plus Explorer series (`CostOverview`,
+  `SpendOverviewClient`) and the cost-management entry points.
+- **Services** — Cost Explorer-sourced service rows and per-cost-basis totals
+  from `GET .../cost/data/connections/{connection_id}/summaries`(`/totals`)
+  (`CostSummaryPanel`).
+- **Resources** — normalized FOCUS charge rows (resource, region, SKU, charge
+  category) from `GET .../cost/data/connections/{connection_id}/usage`
+  (`CostUsagePanel`); shown only when the organization has the FOCUS export
+  capability.
+- **Trends** — `POST .../cost/spend-trends/query` (`CostTrends`): 30/90 completed
+  days or 12 completed months (`?range=`), each bucket against the equal-length
+  previous period, with the answering source (FOCUS or Cost Explorer) disclosed.
 
-All three read paths 403 when `billing.read` isn't enabled on the connection
-rather than returning an empty page (unlike the Resources tab), so the page only
-fetches them server-side once that capability is already known to be enabled;
-each panel explains the gap otherwise.
+Services and Resources are connection-scoped and require `billing.read` on the
+connection. Billing remains an internal normalized-data boundary with no
+frontend-facing routes of its own.
+
+The Infrastructure product dashboard has exactly two sections (`ProductTabs`):
+**Graph** at `/dashboard/products/infrastructure` (default) — an interactive
+React Flow canvas laid out and edge-routed by ELK in a Web Worker
+(`src/lib/infrastructure/graph-layout.ts`, `elk.worker.ts`)
+over Core's scoped graph (`?connection=&target=&region=`), with two modes —
+Provisioned (Architecture/Network/Security views) and Runtime (service
+interactions filtered by evidence kind, with a per-source status panel) —
+search, category filters, expand/collapse, semantic zoom, path tracing,
+fullscreen, minimap,
+and resource/connection inspectors loaded lazily through
+`infrastructure-actions.ts`. View logic is provider-neutral and unit-tested
+(`src/lib/infrastructure/graph-model.ts`); nothing is drawn without a Core
+resource or relationship behind it — and
+**Resources** at `/dashboard/products/infrastructure/resources[/{resourceId}]`,
+the normalized inventory UI. The former `/dashboard/resources` routes redirect
+there (`next.config.ts`); Resources is no longer a Workspace sidebar item.
+
+Cost Overview (`SpendOverviewClient`) defaults to calendar
+month-to-date, with explicit rolling 1 day/3 days/Week/30 days presets plus a
+custom range. It queries `GET .../cost/overview` first to resolve the actual
+source and the largest complete trailing FOCUS range. The FOCUS-only current
+spend and dimension widgets then query `POST .../cost/explorer/query` only for
+that disclosed effective range; when Overview falls back to `cost_summary`,
+they render an explicit unavailable state instead of a misleading zero or
+partial total. The page also renders current-vs-equal-length-previous-period
+comparison, a daily "Spend trend" line/area chart, per-currency top
+services (with an explicit "Other services & credits" remainder so the
+visible breakdown always reconciles to the header total), a "By charge
+type" panel (the FOCUS `Usage`/`Credit`/`Tax`/... split, `by_charge_category`)
+that makes a near-zero net total's usage/credit offsetting visible directly,
+and a "Net cost breakdown" panel (`financial_breakdown`) reconciling the
+header total into named `gross_usage`/`tax`/`credits`/`other_adjustments`
+buckets down to `net_cost`, plus an informational discount-vs-list-price
+figure shown only when Core reports one (never folded into the reconciling
+buckets, to avoid double-counting a discount the header total already
+reflects) — while retaining the Budget/Allocation/Anomaly
+management summary below. The header stat cards also show each currency's
+absolute change (`absolute_delta`) alongside the existing percentage. The
+dedicated Explorer route at
+`/dashboard/products/cost/explorer` reads `POST .../cost/explorer/query` and the
+saved-view execution endpoint, with metric, daily/weekly/monthly granularity,
+multi-dimension grouping (including tag keys), and the shared Cost scope-filter
+DSL. The former Cost `/usage` route redirects to Explorer. Every query also
+fires a second, parallel `cost/explorer/query` grouped only by
+`charge_category` (`granularity: null`, i.e. one total per category for the
+whole period) to render its own "By charge type" panel — the same
+Usage/Credit/Tax context Overview shows, now available for any Explorer query
+too, so a near-zero or unexpectedly small result is never a mystery. Results
+render in one of two view modes (`Summary`/`Detailed` tabs, persisted like the
+other Explorer controls): `Summary` is the existing grouped bar-chart table;
+`Detailed` is a flat, spreadsheet-style table with one column per group
+dimension actually present on the rows (read from the results themselves, not
+the current `group_by` selection, so a saved view's own grouping renders
+correctly too) plus `Currency` and `Amount`. Both views share one "Load more" control (250 rows
+at a time) instead of a hard first-250 cutoff.
+
+The Cost Allocations screen also reads
+`GET .../cost/allocations/breakdown` for a period/metric showback or chargeback
+view. It displays allocated and unallocated spend per currency, following
+Core's first-enabled-rule-by-priority semantics, and recalculates after a rule
+is created, edited, enabled/disabled, or deleted.
+
+Overview, Explorer, saved-view execution, and Allocation breakdown forward the
+shared Cost data scope as optional `connection_id`/`target_id` backend filters.
+The selector only offers connections with an active per-connection
+`billing.read` capability; the default combines all accessible connections,
+while preserving the selected scope in the URL across Cost product tabs.
+
+Dashboard data filters are also persisted in browser `localStorage`, scoped by
+the effective organization. This includes connection/target scope, Resources
+search and filters, billing filters, Cost Explorer and Allocation breakdown
+controls, anomaly status, and resource metric selectors. Restored filters are
+re-applied after refresh and when navigating between dashboard pages; explicit
+URL query parameters take precedence so shared deep links remain deterministic.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

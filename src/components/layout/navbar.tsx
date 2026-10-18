@@ -24,7 +24,12 @@ export function Navbar({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
+  // null = not resolved yet. The session cookie is httpOnly, so the real
+  // state is only known after the /api/auth/session round trip below —
+  // defaulting to a guess (signed in or out) causes a visible flash from
+  // the wrong state to the right one on every load. Rendering nothing for
+  // this slot until resolved avoids that flash entirely.
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [scrolled, setScrolled] = useState(false);
   const scrolledRef = useRef(false);
 
@@ -92,7 +97,7 @@ export function Navbar({
       <Container className="flex h-16 items-center justify-between">
         <BrandLogo className="h-7 w-auto" priority />
 
-        <nav className="hidden items-center gap-8 md:flex">
+        <nav className="hidden items-center gap-8 lg:flex">
           {links.map((link) => {
             const active = isActiveLink(pathname, link.href);
             return (
@@ -119,15 +124,15 @@ export function Navbar({
           })}
         </nav>
 
-        <div className="hidden items-center gap-4 md:flex">
-          {authenticated ? (
+        <div className="hidden items-center gap-4 lg:flex">
+          {authenticated === true ? (
             <Link
               href="/dashboard"
               className="text-muted-foreground hover:text-foreground text-sm transition-colors"
             >
               Dashboard
             </Link>
-          ) : (
+          ) : authenticated === false ? (
             <>
               <Link
                 href="/sign-in"
@@ -144,11 +149,11 @@ export function Navbar({
                 Book a demo
               </Button>
             </>
-          )}
+          ) : null}
           <ThemeToggle />
         </div>
 
-        <div className="flex items-center gap-1 md:hidden">
+        <div className="flex items-center gap-1 lg:hidden">
           <ThemeToggle />
           <button
             type="button"
@@ -164,7 +169,7 @@ export function Navbar({
 
       {open ? (
         <div
-          className="border-foreground/10 bg-background animate-menu-reveal border-t motion-reduce:animate-none md:hidden"
+          className="border-foreground/10 bg-background animate-menu-reveal border-t motion-reduce:animate-none lg:hidden"
           style={{ transformOrigin: "top" }}
         >
           <Container className="flex flex-col gap-1 py-6">
@@ -189,7 +194,7 @@ export function Navbar({
             })}
 
             <div className="border-foreground/10 mt-3 flex flex-col gap-3 border-t pt-4">
-              {authenticated ? (
+              {authenticated === true ? (
                 <Link
                   href="/dashboard"
                   onClick={() => setOpen(false)}
@@ -197,7 +202,7 @@ export function Navbar({
                 >
                   Dashboard
                 </Link>
-              ) : (
+              ) : authenticated === false ? (
                 <>
                   <Link
                     href="/sign-in"
@@ -216,7 +221,7 @@ export function Navbar({
                     Book a demo
                   </Button>
                 </>
-              )}
+              ) : null}
             </div>
           </Container>
         </div>

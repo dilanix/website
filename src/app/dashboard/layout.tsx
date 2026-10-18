@@ -1,5 +1,9 @@
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-import { listOrganizationProducts } from "@/lib/core/api";
+import { DashboardFilterStorageProvider } from "@/lib/dashboard/filter-storage";
+import {
+  listOrganizationCapabilities,
+  listOrganizationProducts,
+} from "@/lib/core/api";
 import { toDashboardProduct } from "@/lib/dashboard/products";
 import { getDashboardSession } from "@/lib/dashboard/session";
 
@@ -7,11 +11,14 @@ export default async function DashboardLayout({
   children,
 }: LayoutProps<"/dashboard">) {
   const { token, me, organization } = await getDashboardSession();
-  const products = organization
-    ? (await listOrganizationProducts(organization.organization_id, token)).map(
-        (product) => toDashboardProduct(product),
-      )
-    : [];
+  const [products, organizationCapabilities] = organization
+    ? await Promise.all([
+        listOrganizationProducts(organization.organization_id, token).then(
+          (items) => items.map((product) => toDashboardProduct(product)),
+        ),
+        listOrganizationCapabilities(organization.organization_id, token),
+      ])
+    : [[], []];
 
   return (
     <DashboardShell
@@ -28,8 +35,15 @@ export default async function DashboardLayout({
           : null
       }
       products={products}
+      activeCapabilityCodes={organizationCapabilities
+        .filter((capability) => capability.access_status === "active")
+        .map((capability) => capability.code)}
     >
-      {children}
+      <DashboardFilterStorageProvider
+        namespace={organization?.organization_id ?? `user:${me.email}`}
+      >
+        {children}
+      </DashboardFilterStorageProvider>
     </DashboardShell>
   );
 }

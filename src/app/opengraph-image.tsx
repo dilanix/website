@@ -83,7 +83,7 @@ export default function Image() {
             color: "#26425f",
           }}
         >
-          Software for problems worth solving.
+          Cloud cost and infrastructure intelligence
         </div>
       </div>
       <div

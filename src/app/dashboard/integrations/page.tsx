@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
-import { listIntegrations, listConnections } from "@/lib/core/api";
+import {
+  listIntegrations,
+  listConnections,
+  listOrganizationCapabilities,
+} from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { PageHeader } from "@/components/dashboard/primitives";
 import { IntegrationsClient } from "@/components/dashboard/integrations-client";
@@ -11,10 +15,12 @@ export const metadata: Metadata = {
 
 export default async function IntegrationsPage() {
   const { token, organization } = await requireDashboardOrganization();
-  const [integrations, connections] = await Promise.all([
-    listIntegrations(token, "active"),
-    listConnections(organization.organization_id, token),
-  ]);
+  const [integrations, connections, organizationCapabilities] =
+    await Promise.all([
+      listIntegrations(token, "active"),
+      listConnections(organization.organization_id, token),
+      listOrganizationCapabilities(organization.organization_id, token),
+    ]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -25,6 +31,7 @@ export default async function IntegrationsPage() {
       <IntegrationsClient
         integrations={integrations}
         initialConnections={connections}
+        organizationCapabilities={organizationCapabilities}
       />
     </div>
   );
