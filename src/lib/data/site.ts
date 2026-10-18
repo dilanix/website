@@ -11,12 +11,44 @@ const defaultSettings: SiteSettings = {
   calendlyUrl: "https://calendly.com",
   social: {},
   nav: [
-    { label: "Products", href: "/products" },
+    {
+      label: "Product",
+      children: [
+        {
+          label: "Overview",
+          href: "/products",
+          description: "Cost and Infrastructure on one platform",
+        },
+        {
+          label: "How it works",
+          href: "/#platform",
+          description: "From a read-only connection to ranked savings",
+        },
+        {
+          label: "Product tour",
+          href: "/#demo",
+          description: "Click through the real dashboard",
+        },
+        {
+          label: "Security",
+          href: "/#trust",
+          description: "Read-only access and verified commands",
+        },
+      ],
+    },
     { label: "Solutions", href: "/solutions/aws-cost-optimization" },
-    { label: "How it works", href: "/#platform" },
-    { label: "Product tour", href: "/#demo" },
-    { label: "Security", href: "/#trust" },
-    { label: "Contact", href: "/contact" },
+    {
+      label: "Company",
+      children: [
+        {
+          label: "About",
+          href: "/company",
+          description: "What we build and how we build it",
+        },
+        { label: "Blog", href: "/blog", description: "Notes from the team" },
+        { label: "Contact", href: "/contact", description: "Talk to us" },
+      ],
+    },
   ],
 };
 
