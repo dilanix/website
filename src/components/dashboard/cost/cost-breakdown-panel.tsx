@@ -13,6 +13,7 @@ import type {
 import { StatusBadge } from "@/components/dashboard/primitives";
 import { formatAmount } from "@/components/dashboard/cost/format";
 import { SCOPE_DIMENSION_LABELS } from "@/components/dashboard/cost/scope-editor";
+import { costOverviewAnchors } from "@/lib/tours/definitions/cost-overview";
 
 /** The dimensions offered for an Overview breakdown, in drill-down order:
  * clicking a value narrows to it and moves to the next dimension not yet
@@ -192,7 +193,10 @@ export function CostBreakdownPanel({
     dimension !== "resource_id" && nextDimension(dimension, path) !== null;
 
   return (
-    <div className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
+    <div
+      data-tour={costOverviewAnchors.breakdown}
+      className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">

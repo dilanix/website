@@ -15,7 +15,11 @@ import {
 } from "@/app/dashboard/products/cost-actions";
 import type { CoreCostOverview } from "@/lib/core/api";
 import { monthToDateRange, presetRange } from "@/lib/billing/cost-summaries";
+import { COST_OVERVIEW_TOUR_KEY } from "@/lib/tours/definitions/cost-overview";
 import { SpendOverviewClient } from "./spend-overview-client";
+
+const { usePageTour } = vi.hoisted(() => ({ usePageTour: vi.fn() }));
+vi.mock("@/components/tours/tour-provider", () => ({ usePageTour }));
 
 vi.mock("@/app/dashboard/products/cost-actions", () => ({
   getCostOverviewAction: vi.fn(),
@@ -598,5 +602,51 @@ describe("SpendOverviewClient", () => {
     expect(
       screen.queryByText("Unable to reach Dilanix Core. Please try again."),
     ).toBeNull();
+  });
+
+  describe("product tour", () => {
+    const offer = () => usePageTour.mock.calls.at(-1);
+
+    it("offers the Cost tour once this period's spend is on screen", () => {
+      renderClient();
+      expect(offer()).toEqual([
+        COST_OVERVIEW_TOUR_KEY,
+        { ready: true, available: true },
+      ]);
+    });
+
+    it.each([
+      ["the organization has no cost analytics", null],
+      ["the period has no cost data", { ...overview, by_currency: [] }],
+    ])("withdraws the tour when %s", (_reason, initialOverview) => {
+      renderClient({ initialOverview });
+      expect(offer()).toEqual([
+        COST_OVERVIEW_TOUR_KEY,
+        { ready: false, available: false },
+      ]);
+    });
+
+    it("keeps offering the tour while a period loads, and withdraws it if the read fails", async () => {
+      let fail: (value: { error: string }) => void = () => {};
+      vi.mocked(getCostOverviewAction).mockReturnValue(
+        new Promise((resolve) => {
+          fail = resolve;
+        }),
+      );
+      renderClient();
+
+      fireEvent.click(screen.getByRole("button", { name: "1 day" }));
+      expect(offer()).toEqual([
+        COST_OVERVIEW_TOUR_KEY,
+        { ready: false, available: true },
+      ]);
+
+      fail({ error: "fetch failed" });
+      expect(await screen.findByText("Cost data unavailable")).toBeTruthy();
+      expect(offer()).toEqual([
+        COST_OVERVIEW_TOUR_KEY,
+        { ready: false, available: false },
+      ]);
+    });
   });
 });

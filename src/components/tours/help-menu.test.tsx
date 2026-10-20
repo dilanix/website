@@ -86,6 +86,18 @@ describe("HelpMenu", () => {
     );
     openMenu();
 
+    expect(screen.getByText("Cost Overview")).toBeTruthy();
+    expect(screen.queryByText("Infrastructure Graph")).toBeNull();
+  });
+
+  it("leaves out the tours section when no tour applies", () => {
+    render(
+      <TourProvider progress={[]} activeProductSlugs={[]}>
+        <HelpMenu />
+      </TourProvider>,
+    );
+    openMenu();
+
     expect(screen.queryByText("Product tours")).toBeNull();
     expect(
       screen.getByRole("link", { name: "Documentation" }).getAttribute("href"),

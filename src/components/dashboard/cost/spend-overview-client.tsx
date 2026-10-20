@@ -40,6 +40,11 @@ import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 import { formatAmount } from "@/components/dashboard/cost/format";
+import { usePageTour } from "@/components/tours/tour-provider";
+import {
+  COST_OVERVIEW_TOUR_KEY,
+  costOverviewAnchors as tourAnchors,
+} from "@/lib/tours/definitions/cost-overview";
 import { CostAttentionStrip } from "@/components/dashboard/cost/cost-attention-strip";
 import { CostBreakdownPanel } from "@/components/dashboard/cost/cost-breakdown-panel";
 import {
@@ -612,6 +617,21 @@ export function SpendOverviewClient({
       anomaly.period_start < displayedPeriodEnd,
   );
 
+  // The product tour runs once this period's spend is on screen. With no cost
+  // data (or a failed read) the page has nothing to show it on, so it stops
+  // offering the tour rather than leaving a started one waiting.
+  const loadingSpend =
+    !requestError && (restoringStoredCostScope || !resultMatchesDisplayedRange);
+  const showsSpend =
+    !requestError &&
+    !loadingSpend &&
+    overview !== null &&
+    overview.by_currency.length > 0;
+  usePageTour(COST_OVERVIEW_TOUR_KEY, {
+    ready: showsSpend,
+    available: showsSpend || loadingSpend,
+  });
+
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-2">
@@ -644,7 +664,10 @@ export function SpendOverviewClient({
         scopeSuffix={scopeSuffix}
       />
 
-      <div className="border-border-soft bg-dashboard-panel mt-4 flex flex-wrap items-center gap-3 rounded-2xl border p-3 shadow-[0_16px_44px_var(--shadow-card)]">
+      <div
+        data-tour={tourAnchors.period}
+        className="border-border-soft bg-dashboard-panel mt-4 flex flex-wrap items-center gap-3 rounded-2xl border p-3 shadow-[0_16px_44px_var(--shadow-card)]"
+      >
         <div className="flex flex-wrap gap-1.5">
           {OVERVIEW_PERIOD_PRESETS.map((option) => (
             <button
@@ -780,7 +803,10 @@ export function SpendOverviewClient({
               </span>
             )}
           </p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div
+            data-tour={tourAnchors.totals}
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
             {overview.by_currency.map((currency, index) => {
               const currentTotal = sumAmounts(
                 trendByCurrency.get(currency.currency) ?? [],
@@ -879,6 +905,7 @@ export function SpendOverviewClient({
               return (
                 <div
                   key={`${result.rangeKey}-pacing-${currency}`}
+                  data-tour={tourAnchors.pacing}
                   className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -966,7 +993,10 @@ export function SpendOverviewClient({
             />
           ) : null}
 
-          <div className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
+          <div
+            data-tour={tourAnchors.drivers}
+            className="border-border-soft bg-dashboard-panel mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
+          >
             <div>
               <h3 className="text-sm font-semibold">
                 Cost Drivers — why did spend change?
@@ -1104,7 +1134,10 @@ export function SpendOverviewClient({
             )}
           </div>
 
-          <div className="border-border-soft bg-dashboard-panel dashboard-panel-highlight mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
+          <div
+            data-tour={tourAnchors.trajectory}
+            className="border-border-soft bg-dashboard-panel dashboard-panel-highlight mt-4 rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
+          >
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-semibold">
                 Spend trajectory — trend, forecast &amp; anomalies

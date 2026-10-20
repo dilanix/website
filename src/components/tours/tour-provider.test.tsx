@@ -30,9 +30,16 @@ vi.mock("./tour-runner", () => ({ runTour }));
 const stop = vi.fn();
 const openDetails = vi.fn();
 
-function GraphPage({ ready = true }: { ready?: boolean }) {
+function GraphPage({
+  ready = true,
+  available = true,
+}: {
+  ready?: boolean;
+  available?: boolean;
+}) {
   usePageTour(KEY, {
     ready,
+    available,
     actions: { "open-resource-details": openDetails },
   });
   return null;
@@ -256,5 +263,39 @@ describe("TourProvider", () => {
     expect(screen.getByRole("status").textContent).toContain(
       "The Infrastructure Graph tour is available once this page has data to show.",
     );
+  });
+
+  it("explains when the page withdraws the tour because it has nothing to show", async () => {
+    renderProvider({ page: <GraphPage ready={false} available={false} /> });
+    startTour();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3100);
+    });
+    expect(runTour).not.toHaveBeenCalled();
+    expect(screen.getByRole("status").textContent).toContain(
+      "The Infrastructure Graph tour is available once this page has data to show.",
+    );
+  });
+
+  it("waits for a page that is still loading, then starts", async () => {
+    const { rerender } = renderProvider({
+      progress: null,
+      page: <GraphPage ready={false} />,
+    });
+    startTour();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3100);
+    });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(runTour).not.toHaveBeenCalled();
+
+    rerender(
+      <TourProvider progress={null} activeProductSlugs={["infrastructure"]}>
+        <StartButton />
+        <GraphPage />
+      </TourProvider>,
+    );
+    await settle();
+    expect(runTour).toHaveBeenCalledTimes(1);
   });
 });

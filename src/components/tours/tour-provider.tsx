@@ -281,12 +281,18 @@ export function useTours() {
 
 /**
  * Offers a tour on the current page. `ready` turns true once every element
- * the tour points at can render; `actions` are the page's handlers for the
- * tour's `prepare` steps (the latest ones are always used).
+ * the tour points at can render; `available: false` withdraws the offer once
+ * the page knows it has nothing to show the tour on (e.g. no data), so a
+ * started tour explains why instead of waiting. `actions` are the page's
+ * handlers for the tour's `prepare` steps (the latest ones are always used).
  */
 export function usePageTour(
   key: string,
-  { ready, actions = {} }: { ready: boolean; actions?: TourActions },
+  {
+    ready,
+    available = true,
+    actions = {},
+  }: { ready: boolean; available?: boolean; actions?: TourActions },
 ) {
   const context = useContext(TourContext);
   const latest = useRef(actions);
@@ -295,6 +301,11 @@ export function usePageTour(
   });
   const register = context?.register;
   const setReady = context?.setReady;
-  useEffect(() => register?.(key, () => latest.current), [register, key]);
-  useEffect(() => setReady?.(key, ready), [setReady, key, ready]);
+  useEffect(
+    () => (available ? register?.(key, () => latest.current) : undefined),
+    [register, key, available],
+  );
+  useEffect(() => {
+    if (available) setReady?.(key, ready);
+  }, [setReady, key, ready, available]);
 }

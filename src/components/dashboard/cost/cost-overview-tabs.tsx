@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Route } from "next";
+import { costOverviewAnchors } from "@/lib/tours/definitions/cost-overview";
 
 export type CostOverviewView = "summary" | "services" | "resources" | "trends";
 
@@ -28,6 +29,7 @@ export function CostOverviewTabs({
   return (
     <nav
       aria-label="Cost overview views"
+      data-tour={costOverviewAnchors.views}
       className="border-border-soft bg-dashboard-panel flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl border p-1"
     >
       {VIEWS.map((view) => {

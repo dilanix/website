@@ -23,6 +23,7 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { StatusBadge } from "@/components/dashboard/primitives";
 import { SpendOverviewClient } from "@/components/dashboard/cost/spend-overview-client";
 import { formatAmount } from "@/components/dashboard/cost/format";
+import { costOverviewAnchors } from "@/lib/tours/definitions/cost-overview";
 
 export async function CostOverview({
   organizationId,
@@ -168,7 +169,7 @@ export async function CostOverview({
         anomalies={anomalies.items}
       />
 
-      <div>
+      <div data-tour={costOverviewAnchors.management}>
         <h2 className="mb-4 text-lg font-semibold tracking-tight">
           Cost management
         </h2>

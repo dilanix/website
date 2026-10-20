@@ -9,6 +9,7 @@ import type {
   CoreIntegrationTarget,
 } from "@/lib/core/api";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
+import { costOverviewAnchors } from "@/lib/tours/definitions/cost-overview";
 
 const COST_ANALYTICS_PATHS = new Set([
   "/dashboard/products/cost",
@@ -176,7 +177,10 @@ export function CostDataScopeSelector({
   if (!COST_ANALYTICS_PATHS.has(pathname)) return null;
 
   return (
-    <section className="border-border-soft bg-dashboard-panel flex flex-col justify-between gap-3 rounded-2xl border p-4 shadow-[0_16px_44px_var(--shadow-card)] sm:flex-row sm:items-center">
+    <section
+      data-tour={costOverviewAnchors.scope}
+      className="border-border-soft bg-dashboard-panel flex flex-col justify-between gap-3 rounded-2xl border p-4 shadow-[0_16px_44px_var(--shadow-card)] sm:flex-row sm:items-center"
+    >
       <div className="flex min-w-0 items-center gap-3">
         <span className="bg-accent/10 text-accent flex size-10 shrink-0 items-center justify-center rounded-xl">
           <Cloud size={17} />
