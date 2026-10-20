@@ -28,6 +28,7 @@ import type {
 } from "@/lib/core/api";
 import { StatusBadge } from "@/components/dashboard/primitives";
 import { HowToFixButton, hasFixGuide } from "@/components/dashboard/fix-guide";
+import { recommendationsAnchors as tourAnchors } from "@/lib/tours/definitions/recommendations";
 import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 1000;
@@ -213,7 +214,10 @@ export function ReviewQuestions({
   }
 
   return (
-    <div className="border-accent/30 bg-accent/5 rounded-lg border p-3 text-xs">
+    <div
+      data-tour={tourAnchors.questions}
+      className="border-accent/30 bg-accent/5 rounded-lg border p-3 text-xs"
+    >
       <p className="text-sm font-medium">
         {visible.length > 1
           ? "We need a few details before completing this recommendation"
@@ -223,8 +227,12 @@ export function ReviewQuestions({
         <p className="text-muted-foreground mt-1 leading-5">{context}</p>
       ) : null}
       <div className="mt-3 flex flex-col gap-3">
-        {visible.map((question) => (
-          <fieldset key={question.fact_key} className="animate-toast-in">
+        {visible.map((question, index) => (
+          <fieldset
+            key={question.fact_key}
+            data-tour={index === 0 ? tourAnchors.questionAnswers : undefined}
+            className="animate-toast-in"
+          >
             <legend className="mb-1.5 font-medium">{question.prompt}</legend>
             {question.suggestion_reason &&
             answers[question.fact_key] === question.suggested_value ? (
@@ -276,6 +284,7 @@ export function ReviewQuestions({
       </div>
       <button
         type="button"
+        data-tour={tourAnchors.continueAnalysis}
         disabled={!complete || pending}
         onClick={submit}
         className="bg-accent text-accent-foreground mt-3 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-40"
@@ -394,7 +403,10 @@ export function RecommendationInsight({
 
   return (
     <div className="flex flex-col gap-5 text-sm">
-      <section aria-label="Why this matters">
+      <section
+        aria-label="Why this matters"
+        data-tour={tourAnchors.whyThisMatters}
+      >
         <SectionTitle>Why this matters</SectionTitle>
         {review.detected_issue ? (
           <p className="mt-1.5 font-medium">{review.detected_issue}</p>
@@ -421,6 +433,7 @@ export function RecommendationInsight({
       {preferred ? (
         <section
           aria-label="Recommended action"
+          data-tour={tourAnchors.recommendedAction}
           className="border-border-soft border-t pt-5"
         >
           <div className="flex flex-wrap items-center gap-2">
@@ -453,6 +466,7 @@ export function RecommendationInsight({
       {review.evidence_summary.length > 0 ? (
         <section
           aria-label="Evidence"
+          data-tour={tourAnchors.evidence}
           className="border-border-soft border-t pt-5"
         >
           <SectionTitle>
@@ -472,7 +486,10 @@ export function RecommendationInsight({
       ) : null}
 
       {alternatives.length > 0 ? (
-        <section className="border-border-soft border-t pt-4 text-xs">
+        <section
+          data-tour={tourAnchors.alternatives}
+          className="border-border-soft border-t pt-4 text-xs"
+        >
           <button
             type="button"
             aria-expanded={showAlternatives}
@@ -562,6 +579,7 @@ export function BeforeYouContinue({
   return (
     <section
       aria-label="Before you continue"
+      data-tour={tourAnchors.beforeYouContinue}
       className="rounded-xl border border-amber-500/45 bg-amber-500/[0.06] p-5"
     >
       <div className="flex gap-3">
@@ -616,7 +634,7 @@ export function BeforeYouContinue({
       ) : null}
 
       {recommendationId && preferred && hasFixGuide(preferred.action_type) ? (
-        <div className="mt-5">
+        <div data-tour={tourAnchors.howToFix} className="mt-5 w-fit">
           <HowToFixButton
             recommendationId={recommendationId}
             optionIndex={review.options.indexOf(preferred)}

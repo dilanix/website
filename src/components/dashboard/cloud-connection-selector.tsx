@@ -12,6 +12,7 @@ import type {
 } from "@/lib/core/api";
 import { StatusBadge } from "./primitives";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
+import { infrastructureResourcesAnchors as tourAnchors } from "@/lib/tours/definitions/infrastructure-resources";
 
 function isString(value: unknown): value is string {
   return typeof value === "string";
@@ -186,7 +187,10 @@ export function CloudConnectionSelector({
 
   return (
     <section className="border-border-soft bg-card-strong/60 flex flex-col justify-between gap-4 rounded-2xl border p-4 shadow-[0_16px_40px_var(--shadow-card)] sm:flex-row sm:items-center">
-      <div className="flex min-w-0 items-center gap-3">
+      <div
+        data-tour={tourAnchors.connection}
+        className="flex min-w-0 items-center gap-3"
+      >
         <span className="bg-accent/10 text-accent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
           <Cloud size={18} />
         </span>
@@ -210,7 +214,10 @@ export function CloudConnectionSelector({
       </div>
 
       <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
-        <div className="border-foreground/10 bg-background flex w-fit rounded-lg border p-1 text-xs">
+        <div
+          data-tour={tourAnchors.views}
+          className="border-foreground/10 bg-background flex w-fit rounded-lg border p-1 text-xs"
+        >
           {[
             showResources
               ? {
@@ -243,7 +250,10 @@ export function CloudConnectionSelector({
               </Link>
             ))}
         </div>
-        <label className="relative block w-full sm:w-72">
+        <label
+          data-tour={tourAnchors.connectionSelect}
+          className="relative block w-full sm:w-72"
+        >
           <span className="sr-only">Select cloud connection</span>
           <select
             value={selectedConnectionId}
@@ -283,7 +293,10 @@ export function CloudConnectionSelector({
           )}
         </label>
         {connectionTargets.length > 1 ? (
-          <label className="relative block w-full sm:w-72">
+          <label
+            data-tour={tourAnchors.target}
+            className="relative block w-full sm:w-72"
+          >
             <span className="sr-only">Select target account</span>
             <select
               value={selectedTarget ? selectedTarget.id : ALL_TARGETS_VALUE}

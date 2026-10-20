@@ -11,6 +11,8 @@ import type {
   CoreIntegrationConnection,
   CoreIntegrationTarget,
 } from "@/lib/core/api";
+import { tourTargetSelector } from "@/lib/tours/anchors";
+import { infrastructureResourcesAnchors } from "@/lib/tours/definitions/infrastructure-resources";
 import { CloudConnectionSelector } from "./cloud-connection-selector";
 
 const { navigation } = vi.hoisted(() => ({
@@ -148,6 +150,18 @@ describe("CloudConnectionSelector", () => {
     );
 
     expect(screen.getByLabelText("Select target account")).toBeTruthy();
+    // The Resources tour points at each of the selector's controls.
+    for (const name of [
+      "connection",
+      "connectionSelect",
+      "target",
+      "views",
+    ] as const)
+      expect(
+        document.querySelectorAll(
+          tourTargetSelector(infrastructureResourcesAnchors[name]),
+        ),
+      ).toHaveLength(1);
   });
 
   it("writes the selected target to the URL", async () => {

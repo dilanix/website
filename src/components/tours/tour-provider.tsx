@@ -67,10 +67,13 @@ const TourContext = createContext<TourContextValue | null>(null);
 export function TourProvider({
   progress: initialProgress,
   activeProducts,
+  hasOrganization,
   children,
 }: {
   progress: readonly TourProgress[] | null;
   activeProducts: readonly TourProduct[];
+  /** Tours of platform pages need one. */
+  hasOrganization: boolean;
   children: ReactNode;
 }) {
   const router = useRouter();
@@ -107,8 +110,13 @@ export function TourProvider({
     activeProducts.map(({ slug, name }) => ({ slug, name })),
   );
   const groups = useMemo(
-    () => tourGroups(TOURS, JSON.parse(productsKey) as TourProduct[]),
-    [productsKey],
+    () =>
+      tourGroups(
+        TOURS,
+        JSON.parse(productsKey) as TourProduct[],
+        hasOrganization,
+      ),
+    [productsKey, hasOrganization],
   );
   const tours = useMemo(() => groups.flatMap((group) => group.tours), [groups]);
 
@@ -260,9 +268,9 @@ export function TourProvider({
   const dismissNotice = useCallback(() => setNotice(null), []);
   const entries = useMemo(
     () =>
-      groups.map(({ product, tours: own }) => ({
-        product,
-        tours: own.map((tour) => ({
+      groups.map((group) => ({
+        ...group,
+        tours: group.tours.map((tour) => ({
           tour,
           state: progress ? tourState(tour, progress.get(tour.key)) : null,
         })),
@@ -284,7 +292,7 @@ export function TourProvider({
   );
 }
 
-/** Tours for Help & Support, grouped by product; `null` outside a
+/** Tours for Help & Support, grouped like the sidebar; `null` outside a
  *  `TourProvider`. */
 export function useTours() {
   const context = useContext(TourContext);

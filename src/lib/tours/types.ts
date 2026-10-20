@@ -23,7 +23,10 @@ export interface TourStep {
   prepare?: string;
 }
 
-export interface TourDefinition {
+/** A sidebar section of platform pages every organization has. */
+export type TourSection = "workspace" | "manage";
+
+interface TourDefinitionBase {
   /** Persisted identifier, `<area>.<page>` (Core stores it opaquely). */
   key: string;
   /** Bump when the steps change materially: users who finished or skipped an
@@ -31,12 +34,19 @@ export interface TourDefinition {
   version: number;
   title: string;
   description: string;
-  /** Slug of the product whose active access the tour requires. */
-  product: string;
   /** The page the tour runs on. */
   route: Route;
   steps: readonly TourStep[];
 }
+
+/** A tour runs on a product's page (`product`: the slug of the product whose
+ *  active access it requires) or on a platform page every organization has
+ *  (`section`: the sidebar section the page sits in). */
+export type TourDefinition = TourDefinitionBase &
+  (
+    | { product: string; section?: never }
+    | { section: TourSection; product?: never }
+  );
 
 /** What the UI needs from a stored progress record. */
 export type TourProgress = Pick<

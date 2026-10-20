@@ -36,6 +36,12 @@ import {
 } from "@/components/dashboard/recommendation-review";
 import { cn } from "@/lib/utils";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
+import { usePageTour } from "@/components/tours/tour-provider";
+import {
+  RECOMMENDATIONS_TOUR_KEY,
+  recommendationsActions,
+  recommendationsAnchors as tourAnchors,
+} from "@/lib/tours/definitions/recommendations";
 
 const STATUS_FILTERS: { id: RecommendationStatus | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -371,6 +377,7 @@ function RecommendationRow({
       <div className="text-xs">
         <button
           type="button"
+          data-tour={tourAnchors.rawEvidence}
           onClick={onToggleDetails}
           className="text-accent underline-offset-2 hover:underline"
         >
@@ -444,6 +451,7 @@ function RecommendationRow({
             {recommendation.rank ? (
               <span
                 aria-label={`Rank ${recommendation.rank}`}
+                data-tour={tourAnchors.rank}
                 className={cn(
                   "mt-px inline-flex h-5 min-w-7 shrink-0 items-center justify-center rounded-md px-1.5 font-mono text-[11px] font-semibold",
                   recommendation.rank <= 3
@@ -463,7 +471,10 @@ function RecommendationRow({
               {summary}
             </span>
           ) : null}
-          <span className="mt-2 flex flex-wrap gap-1.5">
+          <span
+            data-tour={tourAnchors.tags}
+            className="mt-2 flex flex-wrap gap-1.5"
+          >
             <RowTag>{recommendation.product_key}</RowTag>
             {recommendation.priority && showsSavings(recommendation) ? (
               <RowTag
@@ -491,7 +502,10 @@ function RecommendationRow({
       }
       cells={[
         resource ? (
-          <div className="flex items-start gap-3">
+          <div
+            data-tour={tourAnchors.resource}
+            className="flex items-start gap-3"
+          >
             <span
               className={cn(
                 "flex size-9 shrink-0 items-center justify-center rounded-lg border",
@@ -529,7 +543,7 @@ function RecommendationRow({
           <span className="text-muted-foreground text-xs">—</span>
         ),
         savings ? (
-          <div>
+          <div data-tour={tourAnchors.savings}>
             <span className="text-muted-foreground block text-[11px]">
               Up to
             </span>
@@ -541,12 +555,23 @@ function RecommendationRow({
             </span>
           </div>
         ) : (
-          <span className="text-muted-foreground text-xs">No estimate</span>
+          <span
+            data-tour={tourAnchors.savings}
+            className="text-muted-foreground text-xs"
+          >
+            No estimate
+          </span>
         ),
-        <StatePill key="state" tone={state.tone} spinning={state.spinning}>
-          {state.label}
-        </StatePill>,
-        <div key="actions" className="flex items-center justify-end gap-1">
+        <span key="state" data-tour={tourAnchors.state} className="inline-flex">
+          <StatePill tone={state.tone} spinning={state.spinning}>
+            {state.label}
+          </StatePill>
+        </span>,
+        <div
+          key="actions"
+          data-tour={tourAnchors.rowActions}
+          className="flex items-center justify-end gap-1"
+        >
           <button
             type="button"
             onClick={onToggleOpen}
@@ -770,6 +795,43 @@ export function RecommendationsInboxClient({
   const limited = !showAll && !search.trim() && visible.length > TOP_COUNT;
   const shown = limited ? visible.slice(0, TOP_COUNT) : visible;
 
+  /** Opens the first active recommendation whose review ended in `outcome`
+   *  for the tour's detail steps (listing every row if it's past the top 10);
+   *  the cleanup puts the list back as it was. */
+  function openForTour(outcome: "completed" | "needs_input") {
+    const index = visible.findIndex(
+      (item) =>
+        item.status === "active" &&
+        item.ai_review?.outcome === outcome &&
+        (outcome === "completed" || item.ai_review.questions.length > 0),
+    );
+    if (index < 0) return false;
+    const { id } = visible[index];
+    const wasOpen = openIds.has(id);
+    const wasShowingAll = showAll;
+    if (!wasOpen) toggleOpen(id);
+    if (index >= shown.length) setShowAll(true);
+    return () => {
+      if (!wasOpen)
+        setOpenIds((current) => {
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        });
+      setShowAll(wasShowingAll);
+    };
+  }
+
+  // The tour runs with any list: per-row and detail steps are skipped when
+  // there's nothing to show them on.
+  usePageTour(RECOMMENDATIONS_TOUR_KEY, {
+    ready: true,
+    actions: {
+      [recommendationsActions.openReady]: () => openForTour("completed"),
+      [recommendationsActions.openNeedsInput]: () => openForTour("needs_input"),
+    },
+  });
+
   const needsInput = recommendations.filter(
     (item) =>
       item.status === "active" && item.ai_review?.outcome === "needs_input",
@@ -781,7 +843,10 @@ export function RecommendationsInboxClient({
 
   return (
     <div className="flex flex-col gap-5">
-      <dl className="flex flex-wrap items-center gap-x-6 gap-y-2">
+      <dl
+        data-tour={tourAnchors.stats}
+        className="flex flex-wrap items-center gap-x-6 gap-y-2"
+      >
         {[
           { value: total, label: "recommendations", className: "text-accent" },
           {
@@ -815,6 +880,7 @@ export function RecommendationsInboxClient({
         <div
           role="tablist"
           aria-label="Filter recommendations by status"
+          data-tour={tourAnchors.statusFilter}
           className="flex flex-wrap gap-2"
         >
           {STATUS_FILTERS.map((item) => {
@@ -841,6 +907,7 @@ export function RecommendationsInboxClient({
 
         <select
           aria-label="Product"
+          data-tour={tourAnchors.productFilter}
           value={productFilter}
           onChange={(event) => onProductChange(event.target.value)}
           className="border-border-soft bg-card-strong/60 rounded-xl border px-3 py-2 text-xs"
@@ -855,6 +922,7 @@ export function RecommendationsInboxClient({
 
         <select
           aria-label="Analyzer"
+          data-tour={tourAnchors.analyzerFilter}
           value={analyzerFilter}
           onChange={(event) => onAnalyzerChange(event.target.value)}
           className="border-border-soft bg-card-strong/60 rounded-xl border px-3 py-2 text-xs"
@@ -867,7 +935,10 @@ export function RecommendationsInboxClient({
           ))}
         </select>
 
-        <label className="text-muted-foreground flex items-center gap-2 text-xs">
+        <label
+          data-tour={tourAnchors.showCovered}
+          className="text-muted-foreground flex items-center gap-2 text-xs"
+        >
           <input
             type="checkbox"
             checked={showCovered}
@@ -885,7 +956,10 @@ export function RecommendationsInboxClient({
           Show covered
         </label>
 
-        <label className="border-border-soft bg-card-strong/60 ml-auto flex min-w-56 flex-1 items-center gap-2 rounded-xl border px-3 py-2 text-xs sm:max-w-sm">
+        <label
+          data-tour={tourAnchors.search}
+          className="border-border-soft bg-card-strong/60 ml-auto flex min-w-56 flex-1 items-center gap-2 rounded-xl border px-3 py-2 text-xs sm:max-w-sm"
+        >
           <Search size={14} className="text-muted-foreground shrink-0" />
           <input
             value={search}
@@ -907,7 +981,7 @@ export function RecommendationsInboxClient({
       ) : visible.length === 0 ? (
         <EmptyState
           title="No matching recommendations"
-          description="Analyzers run on an hourly schedule against every verified cloud connection. A finding shows up here once its review has checked what the resource is for, or try clearing a filter."
+          description="Analyzers run every 6 hours, and right after a connection's first successful sync. A finding shows up here once its review has checked what the resource is for, or try clearing a filter."
         />
       ) : (
         <ExpandableTable
@@ -926,7 +1000,10 @@ export function RecommendationsInboxClient({
                 <Info size={13} aria-hidden /> Estimates may change after a
                 re-check.
               </span>
-              <span className="flex items-center gap-3">
+              <span
+                data-tour={tourAnchors.footer}
+                className="flex items-center gap-3"
+              >
                 {limited ? `Top ${TOP_COUNT}` : `Showing ${shown.length}`} of{" "}
                 {total} recommendations
                 {limited ? (

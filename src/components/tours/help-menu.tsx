@@ -33,7 +33,7 @@ function isUnder(pathname: string, route: string) {
 }
 
 /** The group open when the menu opens: the only one, else the current
- *  page's product. */
+ *  page's. */
 function initialGroup(
   groups: readonly TourGroup<TourEntry>[],
   pathname: string,
@@ -44,11 +44,11 @@ function initialGroup(
       : groups.find((item) =>
           item.tours.some(({ tour }) => isUnder(pathname, tour.route)),
         );
-  return group?.product.slug ?? null;
+  return group?.key ?? null;
 }
 
-/** Header Help & Support menu: product tours grouped by product (one group
- *  open at a time), documentation and contact. */
+/** Header Help & Support menu: product tours grouped like the sidebar (one
+ *  group open at a time), documentation and contact. */
 export function HelpMenu() {
   const tours = useTours();
   const pathname = usePathname();
@@ -125,21 +125,19 @@ export function HelpMenu() {
                 Product tours
               </h2>
               <ul className="flex max-h-[min(26rem,calc(100dvh-15rem))] flex-col overflow-y-auto">
-                {tours.groups.map(({ product, tours: entries }) => {
-                  const expanded = openGroup === product.slug;
-                  const listId = `${groupsId}-${product.slug}`;
+                {tours.groups.map(({ key, name, tours: entries }, index) => {
+                  const expanded = openGroup === key;
+                  const listId = `${groupsId}-${index}`;
                   const fresh = entries.filter(
                     ({ state }) => state === "new",
                   ).length;
                   return (
-                    <li key={product.slug}>
+                    <li key={key}>
                       <button
                         type="button"
                         aria-expanded={expanded}
                         aria-controls={listId}
-                        onClick={() =>
-                          setOpenGroup(expanded ? null : product.slug)
-                        }
+                        onClick={() => setOpenGroup(expanded ? null : key)}
                         className="hover:bg-foreground/5 focus-visible:ring-accent/35 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left outline-none focus-visible:ring-2"
                       >
                         <ChevronRight
@@ -153,7 +151,7 @@ export function HelpMenu() {
                           )}
                         />
                         <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
-                          {product.name}
+                          {name}
                         </span>
                         {fresh > 0 ? (
                           <span className="bg-accent/12 text-accent shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium">
@@ -169,7 +167,7 @@ export function HelpMenu() {
                       {expanded ? (
                         <ul
                           id={listId}
-                          aria-label={`${product.name} tours`}
+                          aria-label={`${name} tours`}
                           className="border-border-soft mb-1 ml-[1.15rem] flex flex-col border-l pl-1"
                         >
                           {entries.map(({ tour, state }) => (

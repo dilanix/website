@@ -6,12 +6,16 @@ import { costOverviewTour } from "./definitions/cost-overview";
 import { costReportsTour } from "./definitions/cost-reports";
 import { costSavedViewsTour } from "./definitions/cost-saved-views";
 import { infrastructureGraphTour } from "./definitions/infrastructure-graph";
+import { infrastructureResourcesTour } from "./definitions/infrastructure-resources";
+import { recommendationsTour } from "./definitions/recommendations";
 import type { TourDefinition } from "./types";
 
 /** Every product tour. Add a product's tours here; nothing else in the tour
  *  system names a product. */
 export const TOURS: readonly TourDefinition[] = [
+  recommendationsTour,
   infrastructureGraphTour,
+  infrastructureResourcesTour,
   costOverviewTour,
   costExplorerTour,
   costBudgetsTour,
