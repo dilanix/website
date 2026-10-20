@@ -35,9 +35,9 @@ export default async function DashboardLayout({
   return (
     <TourProvider
       progress={tourProgress}
-      activeProductSlugs={products
+      activeProducts={products
         .filter((product) => product.status === "active")
-        .map((product) => product.slug)}
+        .map(({ slug, name }) => ({ slug, name }))}
     >
       <DashboardShell
         user={{

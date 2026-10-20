@@ -27,6 +27,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/dashboard/tour-actions", () => ({ saveTourProgressAction }));
 vi.mock("./tour-runner", () => ({ runTour }));
 
+const INFRASTRUCTURE = [{ slug: "infrastructure", name: "Infrastructure" }];
 const stop = vi.fn();
 const openDetails = vi.fn();
 
@@ -67,7 +68,10 @@ function renderProvider({
   page?: React.ReactNode;
 } = {}) {
   return render(
-    <TourProvider progress={progress} activeProductSlugs={products}>
+    <TourProvider
+      progress={progress}
+      activeProducts={products.map((slug) => ({ slug, name: slug }))}
+    >
       <StartButton />
       {page}
     </TourProvider>,
@@ -107,7 +111,7 @@ describe("TourProvider", () => {
     expect(runTour).not.toHaveBeenCalled();
 
     rerender(
-      <TourProvider progress={[]} activeProductSlugs={["infrastructure"]}>
+      <TourProvider progress={[]} activeProducts={INFRASTRUCTURE}>
         <GraphPage />
       </TourProvider>,
     );
@@ -206,7 +210,7 @@ describe("TourProvider", () => {
     await act(async () => lastRun().onFinish("interrupted", tour.steps[2]));
 
     rerender(
-      <TourProvider progress={[]} activeProductSlugs={["infrastructure"]}>
+      <TourProvider progress={[]} activeProducts={INFRASTRUCTURE}>
         <GraphPage />
       </TourProvider>,
     );
@@ -217,7 +221,7 @@ describe("TourProvider", () => {
     const { rerender } = renderProvider();
     await settle();
     rerender(
-      <TourProvider progress={[]} activeProductSlugs={["infrastructure"]}>
+      <TourProvider progress={[]} activeProducts={INFRASTRUCTURE}>
         {null}
       </TourProvider>,
     );
@@ -241,7 +245,7 @@ describe("TourProvider", () => {
 
     navigation.pathname = tour.route;
     rerender(
-      <TourProvider progress={progress} activeProductSlugs={["infrastructure"]}>
+      <TourProvider progress={progress} activeProducts={INFRASTRUCTURE}>
         <StartButton />
         <GraphPage />
       </TourProvider>,
@@ -290,7 +294,7 @@ describe("TourProvider", () => {
     expect(runTour).not.toHaveBeenCalled();
 
     rerender(
-      <TourProvider progress={null} activeProductSlugs={["infrastructure"]}>
+      <TourProvider progress={null} activeProducts={INFRASTRUCTURE}>
         <StartButton />
         <GraphPage />
       </TourProvider>,

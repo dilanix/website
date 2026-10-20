@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accessibleTours, startIndex, tourState } from "./eligibility";
+import { startIndex, tourGroups, tourState } from "./eligibility";
 import type { TourDefinition, TourProgress } from "./types";
 
 const tour: TourDefinition = {
@@ -27,9 +27,20 @@ function progress(overrides: Partial<TourProgress>): TourProgress {
 }
 
 describe("tour eligibility", () => {
-  it("offers only tours of products the organization can use", () => {
-    expect(accessibleTours([tour], new Set(["widgets"]))).toEqual([tour]);
-    expect(accessibleTours([tour], new Set(["cost"]))).toEqual([]);
+  it("groups the tours of products the organization can use", () => {
+    const gadgets = { ...tour, key: "gadgets.board", product: "gadgets" };
+    const widgetsList = { ...tour, key: "widgets.list" };
+    const products = [
+      { slug: "gadgets", name: "Gadgets" },
+      { slug: "widgets", name: "Widgets" },
+      { slug: "spare", name: "Spare" },
+    ];
+
+    expect(tourGroups([tour, gadgets, widgetsList], products)).toEqual([
+      { product: products[0], tours: [gadgets] },
+      { product: products[1], tours: [tour, widgetsList] },
+    ]);
+    expect(tourGroups([tour], [{ slug: "cost", name: "Cost" }])).toEqual([]);
   });
 
   it("treats a missing or older-version record as new", () => {

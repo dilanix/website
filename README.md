@@ -58,7 +58,8 @@ the same constant, and a step whose anchor is not rendered (permissions,
 layout, missing data) is skipped. `TourProvider` (dashboard layout) gates tours
 on active product access, auto-starts a tour once on the page that offers it
 (`usePageTour`, screens ≥768px), resumes or restarts it from the header
-**Help & Support** menu, and saves progress per user through Core's
+**Help & Support** menu (tours grouped by product, one group open at a time,
+the current page's product opened first), and saves progress per user through Core's
 `/v1/onboarding/tours` (`tour-actions.ts`); bumping a tour's `version` offers
 it again. `tour-runner.ts` is the only module that uses driver.js (pinned).
 Infrastructure → Graph has `infrastructure.graph`, which covers every graph
