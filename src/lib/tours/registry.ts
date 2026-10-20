@@ -1,3 +1,4 @@
+import { costAllocationsTour } from "./definitions/cost-allocations";
 import { costBudgetsTour } from "./definitions/cost-budgets";
 import { costExplorerTour } from "./definitions/cost-explorer";
 import { costOverviewTour } from "./definitions/cost-overview";
@@ -11,6 +12,7 @@ export const TOURS: readonly TourDefinition[] = [
   costOverviewTour,
   costExplorerTour,
   costBudgetsTour,
+  costAllocationsTour,
 ];
 
 export function findTour(key: string) {

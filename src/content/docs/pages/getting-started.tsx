@@ -237,7 +237,7 @@ export function QuickstartPage() {
             {
               question: "Is there a guided tour?",
               answer:
-                "Yes — the Infrastructure graph and Cost's Overview, Explorer and Budgets pages each show a short tour the first time you open them. Replay any of them from Help & Support, the question-mark button at the top of every dashboard page.",
+                "Yes — the Infrastructure graph and Cost's Overview, Explorer, Budgets and Allocations pages each show a short tour the first time you open them. Replay any of them from Help & Support, the question-mark button at the top of every dashboard page.",
             },
             {
               question: "Do I need the FOCUS billing export?",

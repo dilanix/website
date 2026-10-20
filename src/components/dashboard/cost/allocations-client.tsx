@@ -23,6 +23,11 @@ import type {
 import { DestructiveActionDialog } from "@/components/dashboard/destructive-action-dialog";
 import { ModalOverlay } from "@/components/dashboard/modal-overlay";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
+import { usePageTour } from "@/components/tours/tour-provider";
+import {
+  COST_ALLOCATIONS_TOUR_KEY,
+  costAllocationsAnchors as tourAnchors,
+} from "@/lib/tours/definitions/cost-allocations";
 import { AllocationBreakdownPanel } from "./allocation-breakdown-panel";
 import { ScopeEditor, summarizeScope } from "./scope-editor";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
@@ -313,6 +318,13 @@ export function AllocationsClient({
     periodStartRestored,
   ]);
 
+  // The product tour needs no data: rules can be managed without any, and the
+  // breakdown steps are skipped when there is nothing to show. It waits for a
+  // remembered breakdown to re-run and never starts over an open dialog.
+  usePageTour(COST_ALLOCATIONS_TOUR_KEY, {
+    ready: dialogState === "closed" && !deleteTarget && !breakdownPending,
+  });
+
   function toggleEnabled(allocation: CoreAllocation) {
     setError("");
     startTransition(async () => {
@@ -378,6 +390,7 @@ export function AllocationsClient({
           </div>
           <button
             type="button"
+            data-tour={tourAnchors.create}
             onClick={() => setDialogState("create")}
             className="bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium"
           >
@@ -412,6 +425,7 @@ export function AllocationsClient({
             {allocations.map((allocation) => (
               <div
                 key={allocation.id}
+                data-tour={tourAnchors.rule}
                 className="flex flex-wrap items-start justify-between gap-4 p-4"
               >
                 <div className="flex min-w-0 items-start gap-3">
@@ -438,7 +452,10 @@ export function AllocationsClient({
                     </p>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
+                <div
+                  data-tour={tourAnchors.ruleActions}
+                  className="flex shrink-0 items-center gap-3"
+                >
                   <button
                     type="button"
                     disabled={pending}

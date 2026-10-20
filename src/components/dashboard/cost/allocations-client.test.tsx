@@ -11,7 +11,15 @@ import {
   updateAllocationAction,
 } from "@/app/dashboard/products/cost-actions";
 import type { CoreAllocation, CoreAllocationBreakdown } from "@/lib/core/api";
+import { tourTargetSelector } from "@/lib/tours/anchors";
+import {
+  COST_ALLOCATIONS_TOUR_KEY,
+  costAllocationsAnchors,
+} from "@/lib/tours/definitions/cost-allocations";
 import { AllocationsClient } from "./allocations-client";
+
+const { usePageTour } = vi.hoisted(() => ({ usePageTour: vi.fn() }));
+vi.mock("@/components/tours/tour-provider", () => ({ usePageTour }));
 
 vi.mock("@/app/dashboard/products/cost-actions", () => ({
   createAllocationAction: vi.fn(),
@@ -110,4 +118,59 @@ describe("AllocationsClient", () => {
       expect(getAllocationBreakdownAction).toHaveBeenCalledTimes(1),
     );
   }, 20_000);
+
+  describe("product tour", () => {
+    const offer = () => usePageTour.mock.calls.at(-1);
+    const anchor = (name: keyof typeof costAllocationsAnchors) =>
+      document.querySelector(tourTargetSelector(costAllocationsAnchors[name]));
+
+    it("offers the Allocations tour without rules or cost data, leaving out the breakdown", () => {
+      render(
+        <AllocationsClient
+          initialAllocations={[]}
+          initialBreakdown={null}
+          initialPeriodStart="2026-09-01"
+          initialPeriodEnd="2026-09-11"
+          connectionId={null}
+          targetId={null}
+        />,
+      );
+      expect(offer()).toEqual([COST_ALLOCATIONS_TOUR_KEY, { ready: true }]);
+      expect(anchor("create")).not.toBeNull();
+      expect(anchor("controls")).toBeNull();
+      expect(anchor("breakdown")).toBeNull();
+      expect(anchor("rule")).toBeNull();
+    });
+
+    it("waits while a breakdown runs", async () => {
+      let resolve: (value: {
+        data: CoreAllocationBreakdown;
+      }) => void = () => {};
+      vi.mocked(getAllocationBreakdownAction).mockReturnValue(
+        new Promise((settle) => {
+          resolve = settle;
+        }),
+      );
+      renderClient();
+      expect(offer()).toEqual([COST_ALLOCATIONS_TOUR_KEY, { ready: true }]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Run breakdown" }));
+      await waitFor(() =>
+        expect(offer()).toEqual([COST_ALLOCATIONS_TOUR_KEY, { ready: false }]),
+      );
+
+      resolve({ data: breakdown });
+      await waitFor(() =>
+        expect(offer()).toEqual([COST_ALLOCATIONS_TOUR_KEY, { ready: true }]),
+      );
+    });
+
+    it("is not ready while a rule dialog is open", () => {
+      renderClient();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Create allocation" }),
+      );
+      expect(offer()).toEqual([COST_ALLOCATIONS_TOUR_KEY, { ready: false }]);
+    });
+  });
 });

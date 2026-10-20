@@ -6,6 +6,7 @@ import type { CoreAllocationBreakdown, CostUsageMetric } from "@/lib/core/api";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { formatAmount } from "@/components/dashboard/cost/format";
+import { costAllocationsAnchors as tourAnchors } from "@/lib/tours/definitions/cost-allocations";
 
 const METRIC_LABELS: Record<CostUsageMetric, string> = {
   billed_cost: "Billed cost",
@@ -95,7 +96,10 @@ export function AllocationBreakdownPanel({
         />
       ) : (
         <>
-          <div className="border-border-soft bg-dashboard-panel grid gap-3 rounded-2xl border p-4 shadow-[0_16px_44px_var(--shadow-card)] sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
+          <div
+            data-tour={tourAnchors.controls}
+            className="border-border-soft bg-dashboard-panel grid gap-3 rounded-2xl border p-4 shadow-[0_16px_44px_var(--shadow-card)] sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]"
+          >
             <label className="block text-sm">
               <span className="mb-1.5 block font-medium">Start date</span>
               <input
@@ -158,7 +162,10 @@ export function AllocationBreakdownPanel({
             />
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div
+                data-tour={tourAnchors.coverage}
+                className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+              >
                 {currencies.flatMap(([currency, values]) => {
                   const allocated = values.total - values.unallocated;
                   const coverage = values.total
@@ -189,7 +196,10 @@ export function AllocationBreakdownPanel({
                 })}
               </div>
 
-              <div className="border-border-soft bg-dashboard-panel overflow-x-auto rounded-2xl border shadow-[0_16px_44px_var(--shadow-card)]">
+              <div
+                data-tour={tourAnchors.breakdown}
+                className="border-border-soft bg-dashboard-panel overflow-x-auto rounded-2xl border shadow-[0_16px_44px_var(--shadow-card)]"
+              >
                 <table className="w-full min-w-[620px] text-left text-sm">
                   <thead>
                     <tr className="border-foreground/10 border-b">
