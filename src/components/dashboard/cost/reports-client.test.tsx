@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -16,12 +17,22 @@ import {
   createReportAction,
   generateReportAction,
 } from "@/app/dashboard/products/cost-actions";
+import { tourTargetSelector } from "@/lib/tours/anchors";
+import {
+  COST_REPORTS_TOUR_KEY,
+  costReportsActions,
+  costReportsAnchors,
+} from "@/lib/tours/definitions/cost-reports";
 import { ReportsClient } from "./reports-client";
+
+const { usePageTour } = vi.hoisted(() => ({ usePageTour: vi.fn() }));
+vi.mock("@/components/tours/tour-provider", () => ({ usePageTour }));
 
 vi.mock("@/app/dashboard/products/cost-actions", () => ({
   createReportAction: vi.fn(),
   deleteReportAction: vi.fn(),
   generateReportAction: vi.fn(),
+  listGeneratedReportsAction: vi.fn().mockResolvedValue({ data: [] }),
   updateReportAction: vi.fn(),
 }));
 
@@ -131,5 +142,56 @@ describe("ReportsClient", () => {
     expect((await screen.findByRole("status")).textContent).toContain(
       "queued for notification delivery",
     );
+  });
+
+  describe("product tour", () => {
+    const offer = () => usePageTour.mock.calls.at(-1);
+    const anchored = (name: keyof typeof costReportsAnchors) =>
+      document.querySelectorAll(tourTargetSelector(costReportsAnchors[name]));
+    const renderReports = (initialReports: CoreReport[]) =>
+      render(
+        <ReportsClient
+          initialReports={initialReports}
+          channels={[channel]}
+          destinations={[destination]}
+        />,
+      );
+
+    it("opens an empty create form for the tour's form steps, and closes it unsaved", () => {
+      renderReports([]);
+      expect(offer()?.[0]).toBe(COST_REPORTS_TOUR_KEY);
+      expect(offer()?.[1].ready).toBe(true);
+
+      let close: (() => void) | void = undefined;
+      act(() => {
+        close = offer()?.[1].actions[costReportsActions.openForm]();
+      });
+      expect(
+        screen.getByRole("dialog", { name: "Create report" }),
+      ).toBeTruthy();
+      const formAnchors = (
+        Object.keys(costReportsAnchors) as (keyof typeof costReportsAnchors)[]
+      ).filter((name) => name.startsWith("form"));
+      expect(formAnchors.length).toBeGreaterThan(0);
+      for (const name of formAnchors) expect(anchored(name)).toHaveLength(1);
+
+      act(() => (close as (() => void) | void)?.());
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("anchors each report's row and actions, and is not ready while its history is open", () => {
+      renderReports([report]);
+      for (const name of [
+        "report",
+        "generate",
+        "history",
+        "reportActions",
+      ] as const)
+        expect(anchored(name)).toHaveLength(1);
+      expect(anchored("reportActions")[0]?.textContent).toContain("Disable");
+
+      fireEvent.click(screen.getByRole("button", { name: /History/ }));
+      expect(offer()?.[1].ready).toBe(false);
+    });
   });
 });

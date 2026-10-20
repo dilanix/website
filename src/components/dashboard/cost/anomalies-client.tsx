@@ -8,6 +8,11 @@ import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { summarizeScope } from "./scope-editor";
 import { cn } from "@/lib/utils";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
+import { usePageTour } from "@/components/tours/tour-provider";
+import {
+  COST_ANOMALIES_TOUR_KEY,
+  costAnomaliesAnchors as tourAnchors,
+} from "@/lib/tours/definitions/cost-anomalies";
 
 const STATUS_FILTERS: { id: AnomalyStatus | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -65,6 +70,10 @@ export function AnomaliesClient({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
+  // The product tour needs no anomalies: how detection works and the status
+  // filters are always there, and the per-anomaly steps show the first row.
+  usePageTour(COST_ANOMALIES_TOUR_KEY, { ready: true });
+
   const visible = useMemo(
     () =>
       filter === "all"
@@ -95,7 +104,10 @@ export function AnomaliesClient({
 
   return (
     <div className="flex flex-col gap-5">
-      <p className="text-muted-foreground max-w-2xl text-sm leading-6">
+      <p
+        data-tour={tourAnchors.detection}
+        className="text-muted-foreground max-w-2xl text-sm leading-6"
+      >
         Detected hourly by comparing yesterday&apos;s whole-organization spend
         against a trailing 7-day average. Flags a deviation of 50% or more (and
         at least 1 currency unit).
@@ -104,6 +116,7 @@ export function AnomaliesClient({
       <div
         role="tablist"
         aria-label="Filter anomalies by status"
+        data-tour={tourAnchors.filters}
         className="border-foreground/10 flex gap-1 border-b"
       >
         {STATUS_FILTERS.map((item) => {
@@ -171,7 +184,10 @@ export function AnomaliesClient({
                     <TriangleAlert size={16} />
                   </span>
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div
+                      data-tour={tourAnchors.summary}
+                      className="flex flex-wrap items-center gap-2"
+                    >
                       <p className="text-sm font-semibold">
                         {Number(anomaly.actual_amount).toLocaleString("en-US")}{" "}
                         {anomaly.currency} vs.{" "}
@@ -187,18 +203,23 @@ export function AnomaliesClient({
                         {anomaly.status}
                       </StatusBadge>
                     </div>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {formatDate(anomaly.period_start)} · deviation{" "}
-                      {Number(anomaly.deviation_percent).toFixed(0)}% · detected{" "}
-                      {formatDate(anomaly.detected_at)}
-                    </p>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      Scope: {summarizeScope(anomaly.scope)}
-                    </p>
+                    <div data-tour={tourAnchors.details}>
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        {formatDate(anomaly.period_start)} · deviation{" "}
+                        {Number(anomaly.deviation_percent).toFixed(0)}% ·
+                        detected {formatDate(anomaly.detected_at)}
+                      </p>
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        Scope: {summarizeScope(anomaly.scope)}
+                      </p>
+                    </div>
                   </div>
                 </div>
                 {anomaly.status !== "resolved" ? (
-                  <div className="flex shrink-0 items-center gap-3">
+                  <div
+                    data-tour={tourAnchors.actions}
+                    className="flex shrink-0 items-center gap-3"
+                  >
                     {anomaly.status === "open" ? (
                       <button
                         type="button"

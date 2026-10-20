@@ -32,6 +32,12 @@ import {
   type ScheduleMode,
 } from "./report-schedule";
 import { ScopeEditor, summarizeScope } from "./scope-editor";
+import { usePageTour } from "@/components/tours/tour-provider";
+import {
+  COST_REPORTS_TOUR_KEY,
+  costReportsActions,
+  costReportsAnchors as tourAnchors,
+} from "@/lib/tours/definitions/cost-reports";
 
 function sortReports(reports: CoreReport[]) {
   return [...reports].sort((left, right) =>
@@ -165,7 +171,7 @@ function ReportDialog({
             submit();
           }}
         >
-          <label className="block text-sm">
+          <label data-tour={tourAnchors.formName} className="block text-sm">
             <span className="mb-1.5 block font-medium">Name</span>
             <input
               required
@@ -177,7 +183,10 @@ function ReportDialog({
             />
           </label>
 
-          <label className="block text-sm">
+          <label
+            data-tour={tourAnchors.formDescription}
+            className="block text-sm"
+          >
             <span className="mb-1.5 block font-medium">Description</span>
             <textarea
               rows={2}
@@ -190,7 +199,7 @@ function ReportDialog({
           </label>
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="block text-sm">
+            <label data-tour={tourAnchors.formFormat} className="block text-sm">
               <span className="mb-1.5 block font-medium">Format</span>
               <select
                 value={form.format}
@@ -206,7 +215,7 @@ function ReportDialog({
                 <option value="pdf">PDF</option>
               </select>
             </label>
-            <label className="block text-sm">
+            <label data-tour={tourAnchors.formPeriod} className="block text-sm">
               <span className="mb-1.5 block font-medium">Cost period</span>
               <select
                 value={form.periodPreset}
@@ -227,7 +236,10 @@ function ReportDialog({
             </label>
           </div>
 
-          <fieldset className="border-foreground/15 rounded-lg border p-3 text-sm">
+          <fieldset
+            data-tour={tourAnchors.formSchedule}
+            className="border-foreground/15 rounded-lg border p-3 text-sm"
+          >
             <legend className="px-1 font-medium">Schedule</legend>
             <select
               value={form.schedule.mode}
@@ -353,7 +365,10 @@ function ReportDialog({
             </p>
           </fieldset>
 
-          <fieldset className="text-sm">
+          <fieldset
+            data-tour={tourAnchors.formDestinations}
+            className="text-sm"
+          >
             <legend className="mb-1.5 font-medium">
               Notification destinations
             </legend>
@@ -416,7 +431,7 @@ function ReportDialog({
             )}
           </fieldset>
 
-          <div>
+          <div data-tour={tourAnchors.formScope}>
             <span className="mb-1.5 block text-sm font-medium">Scope</span>
             <ScopeEditor initialValue={scope} onChange={setScope} />
           </div>
@@ -428,6 +443,7 @@ function ReportDialog({
           ) : null}
 
           <button
+            data-tour={tourAnchors.formSubmit}
             disabled={pending}
             className="bg-accent text-accent-foreground w-full rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
           >
@@ -460,6 +476,19 @@ export function ReportsClient({
     null,
   );
   const [pending, startTransition] = useTransition();
+
+  // The product tour needs no reports: it walks through the create form and
+  // skips the per-report steps. It never starts over an open dialog, and the
+  // form it opens closes unsaved when it moves on.
+  usePageTour(COST_REPORTS_TOUR_KEY, {
+    ready: dialogState === "closed" && !deleteTarget && !historyTarget,
+    actions: {
+      [costReportsActions.openForm]: () => {
+        setDialogState("create");
+        return () => setDialogState("closed");
+      },
+    },
+  });
 
   function toggleEnabled(report: CoreReport) {
     setError("");
@@ -515,6 +544,7 @@ export function ReportsClient({
         </p>
         <button
           type="button"
+          data-tour={tourAnchors.create}
           onClick={() => setDialogState("create")}
           className="bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium"
         >
@@ -556,6 +586,7 @@ export function ReportsClient({
             {reports.map((report) => (
               <div
                 key={report.id}
+                data-tour={tourAnchors.report}
                 className="flex flex-wrap items-start justify-between gap-4 p-4"
               >
                 <div className="flex min-w-0 items-start gap-3">
@@ -596,6 +627,7 @@ export function ReportsClient({
                 <div className="flex shrink-0 items-center gap-3">
                   <button
                     type="button"
+                    data-tour={tourAnchors.generate}
                     disabled={pending || report.destination_ids.length === 0}
                     onClick={() => generate(report)}
                     title={
@@ -612,37 +644,43 @@ export function ReportsClient({
                   </button>
                   <button
                     type="button"
+                    data-tour={tourAnchors.history}
                     onClick={() => setHistoryTarget(report)}
                     className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
                   >
                     <Clock size={13} /> History
                   </button>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => toggleEnabled(report)}
-                    className="text-muted-foreground hover:text-foreground text-xs disabled:opacity-50"
+                  <div
+                    data-tour={tourAnchors.reportActions}
+                    className="flex items-center gap-3"
                   >
-                    {report.enabled ? "Disable" : "Enable"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDialogState(report)}
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
-                  >
-                    <Pencil size={13} /> Edit
-                  </button>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => {
-                      setError("");
-                      setDeleteTarget(report);
-                    }}
-                    className="text-muted-foreground inline-flex items-center gap-1 text-xs hover:text-red-500 disabled:opacity-50"
-                  >
-                    <Trash2 size={13} /> Delete
-                  </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => toggleEnabled(report)}
+                      className="text-muted-foreground hover:text-foreground text-xs disabled:opacity-50"
+                    >
+                      {report.enabled ? "Disable" : "Enable"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDialogState(report)}
+                      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
+                    >
+                      <Pencil size={13} /> Edit
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => {
+                        setError("");
+                        setDeleteTarget(report);
+                      }}
+                      className="text-muted-foreground inline-flex items-center gap-1 text-xs hover:text-red-500 disabled:opacity-50"
+                    >
+                      <Trash2 size={13} /> Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

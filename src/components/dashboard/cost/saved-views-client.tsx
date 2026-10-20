@@ -22,6 +22,12 @@ import {
   ScopeEditor,
   summarizeScope,
 } from "./scope-editor";
+import { usePageTour } from "@/components/tours/tour-provider";
+import {
+  COST_SAVED_VIEWS_TOUR_KEY,
+  costSavedViewsActions,
+  costSavedViewsAnchors as tourAnchors,
+} from "@/lib/tours/definitions/cost-saved-views";
 
 type GroupByDimension = Exclude<ScopeDimension, "tag">;
 
@@ -136,7 +142,7 @@ function SavedViewDialog({
             submit();
           }}
         >
-          <label className="block text-sm">
+          <label data-tour={tourAnchors.formName} className="block text-sm">
             <span className="mb-1.5 block font-medium">Name</span>
             <input
               required
@@ -148,7 +154,10 @@ function SavedViewDialog({
             />
           </label>
 
-          <label className="block text-sm">
+          <label
+            data-tour={tourAnchors.formDescription}
+            className="block text-sm"
+          >
             <span className="mb-1.5 block font-medium">Description</span>
             <textarea
               rows={2}
@@ -161,7 +170,10 @@ function SavedViewDialog({
           </label>
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="block text-sm">
+            <label
+              data-tour={tourAnchors.formGranularity}
+              className="block text-sm"
+            >
               <span className="mb-1.5 block font-medium">Granularity</span>
               <select
                 value={form.granularity}
@@ -182,7 +194,10 @@ function SavedViewDialog({
                 )}
               </select>
             </label>
-            <label className="block text-sm">
+            <label
+              data-tour={tourAnchors.formVisibility}
+              className="block text-sm"
+            >
               <span className="mb-1.5 block font-medium">Visibility</span>
               <select
                 value={form.visibility}
@@ -200,7 +215,7 @@ function SavedViewDialog({
             </label>
           </div>
 
-          <div>
+          <div data-tour={tourAnchors.formGroupBy}>
             <span className="mb-1.5 block text-sm font-medium">Group by</span>
             <div className="flex flex-wrap gap-1.5">
               {GROUP_BY_DIMENSIONS.map((dimension) => {
@@ -223,7 +238,7 @@ function SavedViewDialog({
             </div>
           </div>
 
-          <div>
+          <div data-tour={tourAnchors.formScope}>
             <span className="mb-1.5 block text-sm font-medium">Scope</span>
             <ScopeEditor initialValue={scope} onChange={setScope} />
           </div>
@@ -235,6 +250,7 @@ function SavedViewDialog({
           ) : null}
 
           <button
+            data-tour={tourAnchors.formSubmit}
             disabled={pending}
             className="bg-accent text-accent-foreground w-full rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
           >
@@ -265,6 +281,19 @@ export function SavedViewsClient({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
+  // The product tour needs no saved views: it walks through the create form
+  // and skips the per-view steps. It never starts over an open dialog, and
+  // the form it opens closes unsaved when it moves on.
+  usePageTour(COST_SAVED_VIEWS_TOUR_KEY, {
+    ready: dialogState === "closed" && !deleteTarget,
+    actions: {
+      [costSavedViewsActions.openForm]: () => {
+        setDialogState("create");
+        return () => setDialogState("closed");
+      },
+    },
+  });
+
   function remove() {
     if (!deleteTarget) return;
     const target = deleteTarget;
@@ -286,6 +315,7 @@ export function SavedViewsClient({
         </p>
         <button
           type="button"
+          data-tour={tourAnchors.create}
           onClick={() => setDialogState("create")}
           className="bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium"
         >
@@ -321,6 +351,7 @@ export function SavedViewsClient({
               return (
                 <div
                   key={view.id}
+                  data-tour={tourAnchors.view}
                   className="flex flex-wrap items-start justify-between gap-4 p-4"
                 >
                   <div className="flex min-w-0 items-start gap-3">
@@ -366,7 +397,10 @@ export function SavedViewsClient({
                     </div>
                   </div>
                   {isOwner ? (
-                    <div className="flex shrink-0 items-center gap-3">
+                    <div
+                      data-tour={tourAnchors.viewActions}
+                      className="flex shrink-0 items-center gap-3"
+                    >
                       <button
                         type="button"
                         onClick={() => setDialogState(view)}
