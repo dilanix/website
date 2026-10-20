@@ -55,17 +55,25 @@ Product tours are a platform feature, not product code. Declarative,
 versioned definitions live in `src/lib/tours` (`definitions/*.ts`, listed in
 `registry.ts`); each step targets a `data-tour` anchor the component sets from
 the same constant, and a step whose anchor is not rendered (permissions,
-layout, missing data) is skipped. `TourProvider` (dashboard layout) gates tours
-on active product access, auto-starts a tour once on the page that offers it
-(`usePageTour`, screens ≥768px), resumes or restarts it from the header
-**Help & Support** menu (tours grouped by product, one group open at a time,
-the current page's product opened first), and saves progress per user through Core's
+layout, missing data) is skipped. A tour belongs to a `product` or, on a
+platform page, to a sidebar `section` (`workspace`/`manage`). `TourProvider`
+(dashboard layout) gates product tours on active product access and platform
+tours on having an organization, auto-starts a tour once on the page that
+offers it (`usePageTour`, screens ≥768px), resumes or restarts it from the
+header **Help & Support** menu (grouped like the sidebar — Workspace, each
+product, Manage — one group open at a time, the current page's opened first),
+and saves progress per user through Core's
 `/v1/onboarding/tours` (`tour-actions.ts`); bumping a tour's `version` offers
 it again. `tour-runner.ts` is the only module that uses driver.js (pinned).
 Infrastructure → Graph has `infrastructure.graph`, which covers every graph
 control; page-registered actions switch it to Runtime and open a real resource
 and connection, and an action the page cannot run (e.g. no relationships yet)
-returns `false`, so the steps that need it are skipped.
+returns `false`, so the steps that need it are skipped. Infrastructure →
+Resources has `infrastructure.resources` (connection/account scope, every
+filter, lifecycle vs provider status), offered whenever the inventory panel
+shows. Recommendations has `workspace.recommendations`: the inbox controls and
+row columns, then a ready-to-fix and a needs-input recommendation opened by
+`prepare` actions (listing past the top 10 if needed) and closed again.
 Cost → Overview has `cost.overview` and Cost → Explorer has `cost.explorer`;
 with no cost data (or an empty query) the page withdraws the offer
 (`usePageTour`'s `available: false`), so starting it explains why. Cost →

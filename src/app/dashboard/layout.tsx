@@ -38,6 +38,7 @@ export default async function DashboardLayout({
       activeProducts={products
         .filter((product) => product.status === "active")
         .map(({ slug, name }) => ({ slug, name }))}
+      hasOrganization={organization !== null}
     >
       <DashboardShell
         user={{

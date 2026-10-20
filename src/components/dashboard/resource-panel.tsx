@@ -33,19 +33,27 @@ import { EmptyState, StatusBadge } from "./primitives";
 import { ResourceCategoryIcon } from "./resource-category-icon";
 import { cn } from "@/lib/utils";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
+import { usePageTour } from "@/components/tours/tour-provider";
+import {
+  INFRASTRUCTURE_RESOURCES_TOUR_KEY,
+  infrastructureResourcesAnchors as tourAnchors,
+} from "@/lib/tours/definitions/infrastructure-resources";
 
 /** One labeled cluster of filter chips (e.g. "Category" or "Status") — grouping
  * keeps unrelated filter dimensions visually distinct instead of reading as one
  * flat row of buttons. */
 function FilterGroup({
   label,
+  anchor,
   children,
 }: {
   label: string;
+  /** The group's product-tour anchor. */
+  anchor?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div data-tour={anchor} className="flex flex-wrap items-center gap-2">
       <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
         {label}
       </span>
@@ -91,16 +99,19 @@ function FilterSelect({
   value,
   onChange,
   disabled,
+  anchor,
   children,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  /** The filter's product-tour anchor. */
+  anchor?: string;
   children: ReactNode;
 }) {
   return (
-    <label className="flex items-center gap-2">
+    <label data-tour={anchor} className="flex items-center gap-2">
       <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
         {label}
       </span>
@@ -138,6 +149,7 @@ function ResourceRow({
   return (
     <Link
       href={href}
+      data-tour={tourAnchors.resource}
       className={cn(
         "hover:bg-foreground/[0.025] grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors",
         targetLabel !== null
@@ -174,7 +186,10 @@ function ResourceRow({
           {targetLabel}
         </span>
       ) : null}
-      <span className="justify-self-end md:justify-self-start">
+      <span
+        data-tour={tourAnchors.status}
+        className="justify-self-end md:justify-self-start"
+      >
         <StatusBadge status={resourceStatusTone(resource.status)}>
           {resource.status}
         </StatusBadge>
@@ -531,6 +546,10 @@ export function ResourcePanel({
     });
   }, [resources, searchQuery, sortDirection, sortKey]);
 
+  // The tour runs with any inventory: the per-resource steps are skipped
+  // when nothing is listed.
+  usePageTour(INFRASTRUCTURE_RESOURCES_TOUR_KEY, { ready: true });
+
   // Every option below comes from `filterOptions` (`GET .../resources/filters`
   // in Core) — never a frontend-hardcoded resource-family/region list, so a
   // category/type/region only ever appears here when this connection actually
@@ -552,7 +571,10 @@ export function ResourcePanel({
     <div className="flex flex-col gap-5">
       <div className="border-border-soft bg-card-strong/45 rounded-2xl border p-4">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-          <label className="relative block w-full sm:max-w-md">
+          <label
+            data-tour={tourAnchors.search}
+            className="relative block w-full sm:max-w-md"
+          >
             <span className="sr-only">Search resources</span>
             <Search
               size={15}
@@ -569,7 +591,10 @@ export function ResourcePanel({
               className="border-foreground/15 bg-background focus:border-accent h-9 w-full rounded-lg border pr-3 pl-9 text-sm outline-none"
             />
           </label>
-          <div className="flex items-center justify-between gap-3 sm:justify-end">
+          <div
+            data-tour={tourAnchors.refresh}
+            className="flex items-center justify-between gap-3 sm:justify-end"
+          >
             <span className="text-muted-foreground text-xs">
               {searchQuery
                 ? `${visibleResources.length} matching · ${resources.length} loaded`
@@ -596,6 +621,7 @@ export function ResourcePanel({
         <div className="border-border-soft mt-4 flex flex-wrap items-center gap-x-5 gap-y-3 border-t pt-4">
           <FilterSelect
             label="Category"
+            anchor={tourAnchors.category}
             value={filters.category ?? ALL_VALUE}
             onChange={(value) =>
               selectCategory(value === ALL_VALUE ? null : value)
@@ -611,6 +637,7 @@ export function ResourcePanel({
           </FilterSelect>
           <FilterSelect
             label="Type"
+            anchor={tourAnchors.type}
             value={filters.resourceType ?? ALL_VALUE}
             onChange={(value) =>
               selectResourceType(value === ALL_VALUE ? null : value)
@@ -639,6 +666,7 @@ export function ResourcePanel({
           </FilterSelect>
           <FilterSelect
             label="Region"
+            anchor={tourAnchors.region}
             value={filters.region ?? ALL_VALUE}
             onChange={(value) =>
               selectRegion(value === ALL_VALUE ? null : value)
@@ -653,7 +681,7 @@ export function ResourcePanel({
             ))}
           </FilterSelect>
           <div className="bg-foreground/10 hidden h-5 w-px sm:block" />
-          <FilterGroup label="Lifecycle">
+          <FilterGroup label="Lifecycle" anchor={tourAnchors.lifecycle}>
             {Object.entries(RESOURCE_LIFECYCLE_STATUS_LABELS).map(
               ([key, label]) => (
                 <FilterChip
@@ -718,6 +746,7 @@ export function ResourcePanel({
       ) : (
         <div className="border-border-soft overflow-hidden rounded-2xl border">
           <div
+            data-tour={tourAnchors.sort}
             className={cn(
               "border-border-soft bg-foreground/[0.025] hidden items-center gap-3 border-b px-4 py-3 md:grid",
               showTargetColumn
@@ -793,6 +822,7 @@ export function ResourcePanel({
       {resources.length < total ? (
         <button
           type="button"
+          data-tour={tourAnchors.loadMore}
           onClick={loadMore}
           disabled={pending || loadingMore}
           className="border-foreground/15 hover:bg-foreground/5 self-center rounded-lg border px-4 py-2 text-xs font-medium disabled:opacity-50"

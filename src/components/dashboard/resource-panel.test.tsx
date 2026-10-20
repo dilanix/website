@@ -1,7 +1,15 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CoreIntegrationTarget, CoreResource } from "@/lib/core/api";
+import { tourTargetSelector } from "@/lib/tours/anchors";
+import {
+  INFRASTRUCTURE_RESOURCES_TOUR_KEY,
+  infrastructureResourcesAnchors,
+} from "@/lib/tours/definitions/infrastructure-resources";
 import { ResourcePanel } from "./resource-panel";
+
+const { usePageTour } = vi.hoisted(() => ({ usePageTour: vi.fn() }));
+vi.mock("@/components/tours/tour-provider", () => ({ usePageTour }));
 
 vi.mock("@/app/dashboard/integrations/actions", () => ({
   listResourcesAction: vi.fn(),
@@ -118,5 +126,62 @@ describe("ResourcePanel", () => {
 
     expect(screen.getByText("Production")).toBeTruthy();
     expect(screen.getByText("Target account")).toBeTruthy();
+  });
+});
+
+describe("ResourcePanel product tour", () => {
+  const anchored = (name: keyof typeof infrastructureResourcesAnchors) =>
+    document.querySelectorAll(
+      tourTargetSelector(infrastructureResourcesAnchors[name]),
+    );
+  const filterOptions = {
+    category_types: [
+      { category: "compute", resource_type: "compute.instance" },
+    ],
+    regions: ["us-east-1"],
+  };
+
+  it("offers the tour with every control and resource anchored", () => {
+    render(
+      <ResourcePanel
+        connectionId="conn-1"
+        initialResources={[resource, { ...resource, id: "resource-2" }]}
+        initialTotal={45}
+        initialFilterOptions={filterOptions}
+      />,
+    );
+
+    const offer = usePageTour.mock.calls.at(-1);
+    expect(offer?.[0]).toBe(INFRASTRUCTURE_RESOURCES_TOUR_KEY);
+    expect(offer?.[1].ready).toBe(true);
+    for (const name of [
+      "search",
+      "refresh",
+      "category",
+      "type",
+      "region",
+      "lifecycle",
+      "sort",
+      "loadMore",
+    ] as const)
+      expect(anchored(name)).toHaveLength(1);
+    expect(anchored("resource")).toHaveLength(2);
+    expect(anchored("status")).toHaveLength(2);
+  });
+
+  it("runs without resources, leaving out the per-resource steps", () => {
+    render(
+      <ResourcePanel
+        connectionId="conn-1"
+        initialResources={[]}
+        initialTotal={0}
+        initialFilterOptions={{ category_types: [], regions: [] }}
+      />,
+    );
+
+    expect(usePageTour.mock.calls.at(-1)?.[1].ready).toBe(true);
+    expect(anchored("lifecycle")).toHaveLength(1);
+    for (const name of ["sort", "resource", "status", "loadMore"] as const)
+      expect(anchored(name)).toHaveLength(0);
   });
 });

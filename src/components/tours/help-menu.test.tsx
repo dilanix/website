@@ -53,6 +53,7 @@ describe("HelpMenu", () => {
           },
         ]}
         activeProducts={[INFRASTRUCTURE]}
+        hasOrganization={false}
       >
         <HelpMenu />
       </TourProvider>,
@@ -74,13 +75,18 @@ describe("HelpMenu", () => {
 
   it("offers a never-seen tour as new", () => {
     render(
-      <TourProvider progress={[]} activeProducts={[INFRASTRUCTURE]}>
+      <TourProvider
+        progress={[]}
+        activeProducts={[INFRASTRUCTURE]}
+        hasOrganization={false}
+      >
         <HelpMenu />
       </TourProvider>,
     );
     openMenu();
 
-    expect(screen.getByText("New")).toBeTruthy();
+    // Both Infrastructure tours are new.
+    expect(screen.getAllByText("New")).toHaveLength(2);
     expect(
       screen.getByRole("button", {
         name: "Start the Infrastructure Graph tour",
@@ -90,7 +96,11 @@ describe("HelpMenu", () => {
 
   it("hides tours for products the organization cannot use", () => {
     render(
-      <TourProvider progress={[]} activeProducts={[COST]}>
+      <TourProvider
+        progress={[]}
+        activeProducts={[COST]}
+        hasOrganization={false}
+      >
         <HelpMenu />
       </TourProvider>,
     );
@@ -114,6 +124,7 @@ describe("HelpMenu", () => {
           },
         ]}
         activeProducts={[INFRASTRUCTURE, COST]}
+        hasOrganization={false}
       >
         <HelpMenu />
       </TourProvider>,
@@ -122,7 +133,7 @@ describe("HelpMenu", () => {
 
     // Each group says how many of its tours there are, and how many are new.
     expect(group("Infrastructure").textContent).toBe(
-      "Infrastructure1 new1 tour",
+      "Infrastructure2 new2 tours",
     );
     expect(group("Cost").textContent).toBe("Cost6 new7 tours");
     expect(group("Cost").getAttribute("aria-expanded")).toBe("true");
@@ -139,9 +150,30 @@ describe("HelpMenu", () => {
     expect(screen.queryByText("Infrastructure Graph")).toBeNull();
   });
 
+  it("puts platform tours under Workspace and opens it on their page", () => {
+    navigation.pathname = "/dashboard/recommendations";
+    render(
+      <TourProvider progress={[]} activeProducts={[COST]} hasOrganization>
+        <HelpMenu />
+      </TourProvider>,
+    );
+    openMenu();
+
+    expect(group("Workspace").textContent).toBe("Workspace1 new1 tour");
+    expect(group("Workspace").getAttribute("aria-expanded")).toBe("true");
+    expect(group("Cost").getAttribute("aria-expanded")).toBe("false");
+    expect(
+      screen.getByRole("button", { name: "Start the Recommendations tour" }),
+    ).toBeTruthy();
+  });
+
   it("keeps every group closed away from a product's pages", () => {
     render(
-      <TourProvider progress={[]} activeProducts={[INFRASTRUCTURE, COST]}>
+      <TourProvider
+        progress={[]}
+        activeProducts={[INFRASTRUCTURE, COST]}
+        hasOrganization={false}
+      >
         <HelpMenu />
       </TourProvider>,
     );
@@ -154,7 +186,7 @@ describe("HelpMenu", () => {
 
   it("leaves out the tours section when no tour applies", () => {
     render(
-      <TourProvider progress={[]} activeProducts={[]}>
+      <TourProvider progress={[]} activeProducts={[]} hasOrganization={false}>
         <HelpMenu />
       </TourProvider>,
     );

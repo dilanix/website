@@ -71,6 +71,7 @@ function renderProvider({
     <TourProvider
       progress={progress}
       activeProducts={products.map((slug) => ({ slug, name: slug }))}
+      hasOrganization={false}
     >
       <StartButton />
       {page}
@@ -111,7 +112,11 @@ describe("TourProvider", () => {
     expect(runTour).not.toHaveBeenCalled();
 
     rerender(
-      <TourProvider progress={[]} activeProducts={INFRASTRUCTURE}>
+      <TourProvider
+        progress={[]}
+        activeProducts={INFRASTRUCTURE}
+        hasOrganization={false}
+      >
         <GraphPage />
       </TourProvider>,
     );
@@ -210,7 +215,11 @@ describe("TourProvider", () => {
     await act(async () => lastRun().onFinish("interrupted", tour.steps[2]));
 
     rerender(
-      <TourProvider progress={[]} activeProducts={INFRASTRUCTURE}>
+      <TourProvider
+        progress={[]}
+        activeProducts={INFRASTRUCTURE}
+        hasOrganization={false}
+      >
         <GraphPage />
       </TourProvider>,
     );
@@ -221,7 +230,11 @@ describe("TourProvider", () => {
     const { rerender } = renderProvider();
     await settle();
     rerender(
-      <TourProvider progress={[]} activeProducts={INFRASTRUCTURE}>
+      <TourProvider
+        progress={[]}
+        activeProducts={INFRASTRUCTURE}
+        hasOrganization={false}
+      >
         {null}
       </TourProvider>,
     );
@@ -245,7 +258,11 @@ describe("TourProvider", () => {
 
     navigation.pathname = tour.route;
     rerender(
-      <TourProvider progress={progress} activeProducts={INFRASTRUCTURE}>
+      <TourProvider
+        progress={progress}
+        activeProducts={INFRASTRUCTURE}
+        hasOrganization={false}
+      >
         <StartButton />
         <GraphPage />
       </TourProvider>,
@@ -294,7 +311,11 @@ describe("TourProvider", () => {
     expect(runTour).not.toHaveBeenCalled();
 
     rerender(
-      <TourProvider progress={null} activeProducts={INFRASTRUCTURE}>
+      <TourProvider
+        progress={null}
+        activeProducts={INFRASTRUCTURE}
+        hasOrganization={false}
+      >
         <StartButton />
         <GraphPage />
       </TourProvider>,

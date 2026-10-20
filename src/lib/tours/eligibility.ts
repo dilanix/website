@@ -1,4 +1,4 @@
-import type { TourDefinition, TourProgress } from "./types";
+import type { TourDefinition, TourProgress, TourSection } from "./types";
 
 export type TourState = "new" | "in_progress" | "completed" | "dismissed";
 
@@ -9,20 +9,40 @@ export interface TourProduct {
 }
 
 export interface TourGroup<T = TourDefinition> {
-  product: TourProduct;
+  /** Unique across products and sections. */
+  key: string;
+  name: string;
   tours: readonly T[];
 }
 
-/** The tours of products the organization has active access to, one group
- *  per product in the products' order; a product without tours has none. */
+const SECTION_NAMES: Record<TourSection, string> = {
+  workspace: "Workspace",
+  manage: "Manage",
+};
+
+/** The tours the user can take, grouped like the sidebar: Workspace, then
+ *  one group per product the organization has active access to (in the
+ *  products' order), then Manage. Platform sections need an organization; a
+ *  group without tours is left out. */
 export function tourGroups(
   tours: readonly TourDefinition[],
   activeProducts: readonly TourProduct[],
+  hasOrganization: boolean,
 ): TourGroup[] {
-  return activeProducts.flatMap((product) => {
-    const own = tours.filter((tour) => tour.product === product.slug);
-    return own.length > 0 ? [{ product, tours: own }] : [];
+  const section = (id: TourSection) => ({
+    key: `section:${id}`,
+    name: SECTION_NAMES[id],
+    tours: hasOrganization ? tours.filter((tour) => tour.section === id) : [],
   });
+  return [
+    section("workspace"),
+    ...activeProducts.map((product) => ({
+      key: `product:${product.slug}`,
+      name: product.name,
+      tours: tours.filter((tour) => tour.product === product.slug),
+    })),
+    section("manage"),
+  ].filter((group) => group.tours.length > 0);
 }
 
 /** A record from an older tour version counts as never seen. */

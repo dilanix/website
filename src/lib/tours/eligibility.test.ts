@@ -27,20 +27,38 @@ function progress(overrides: Partial<TourProgress>): TourProgress {
 }
 
 describe("tour eligibility", () => {
-  it("groups the tours of products the organization can use", () => {
+  it("groups tours like the sidebar: Workspace, products, Manage", () => {
     const gadgets = { ...tour, key: "gadgets.board", product: "gadgets" };
     const widgetsList = { ...tour, key: "widgets.list" };
+    const inbox: TourDefinition = {
+      ...tour,
+      key: "workspace.inbox",
+      product: undefined,
+      section: "workspace",
+    };
+    const keys: TourDefinition = {
+      ...tour,
+      key: "manage.keys",
+      product: undefined,
+      section: "manage",
+    };
     const products = [
       { slug: "gadgets", name: "Gadgets" },
       { slug: "widgets", name: "Widgets" },
       { slug: "spare", name: "Spare" },
     ];
 
-    expect(tourGroups([tour, gadgets, widgetsList], products)).toEqual([
-      { product: products[0], tours: [gadgets] },
-      { product: products[1], tours: [tour, widgetsList] },
+    expect(
+      tourGroups([keys, tour, gadgets, inbox, widgetsList], products, true),
+    ).toEqual([
+      { key: "section:workspace", name: "Workspace", tours: [inbox] },
+      { key: "product:gadgets", name: "Gadgets", tours: [gadgets] },
+      { key: "product:widgets", name: "Widgets", tours: [tour, widgetsList] },
+      { key: "section:manage", name: "Manage", tours: [keys] },
     ]);
-    expect(tourGroups([tour], [{ slug: "cost", name: "Cost" }])).toEqual([]);
+    // Products the organization can't use, and platform pages without an
+    // organization, offer nothing.
+    expect(tourGroups([tour, inbox, keys], [], false)).toEqual([]);
   });
 
   it("treats a missing or older-version record as new", () => {
