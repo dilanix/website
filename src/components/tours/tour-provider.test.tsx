@@ -10,9 +10,22 @@ import {
   INFRASTRUCTURE_GRAPH_TOUR_KEY as KEY,
   infrastructureGraphTour as tour,
 } from "@/lib/tours/definitions/infrastructure-graph";
+import {
+  INTEGRATIONS_GUIDE_KEY,
+  integrationsGuide,
+} from "@/lib/guides/definitions/integrations";
+import {
+  INTEGRATIONS_TOUR_KEY,
+  integrationsTour,
+} from "@/lib/tours/definitions/integrations";
 import type { TourProgress } from "@/lib/tours/types";
 import type { TourRunOptions } from "./tour-runner";
-import { TourProvider, usePageTour, useTours } from "./tour-provider";
+import {
+  TourProvider,
+  usePageGuide,
+  usePageTour,
+  useTours,
+} from "./tour-provider";
 
 const { navigation, runTour, saveTourProgressAction } = vi.hoisted(() => ({
   navigation: { pathname: "/dashboard/products/infrastructure", push: vi.fn() },
@@ -256,7 +269,7 @@ describe("TourProvider", () => {
     startTour();
     expect(navigation.push).toHaveBeenCalledWith(tour.route);
 
-    navigation.pathname = tour.route;
+    navigation.pathname = tour.route!;
     rerender(
       <TourProvider
         progress={progress}
@@ -322,5 +335,127 @@ describe("TourProvider", () => {
     );
     await settle();
     expect(runTour).toHaveBeenCalledTimes(1);
+  });
+});
+
+function IntegrationsPage({ autoOpen = true }: { autoOpen?: boolean }) {
+  usePageGuide(INTEGRATIONS_GUIDE_KEY, { autoOpen });
+  usePageTour(INTEGRATIONS_TOUR_KEY, { ready: true });
+  return null;
+}
+
+function renderIntegrations(
+  progress: TourProgress[] = [],
+  page = <IntegrationsPage />,
+) {
+  navigation.pathname = "/dashboard/integrations";
+  return render(
+    <TourProvider progress={progress} activeProducts={[]} hasOrganization>
+      {page}
+    </TourProvider>,
+  );
+}
+
+const guideDialog = () =>
+  screen.queryByRole("dialog", { name: integrationsGuide.title });
+
+describe("TourProvider guides", () => {
+  it("opens a page's guide once on its own, ahead of the page's tour", async () => {
+    renderIntegrations();
+    await settle();
+
+    expect(guideDialog()).toBeTruthy();
+    expect(runTour).not.toHaveBeenCalled();
+    expect(saveTourProgressAction).toHaveBeenCalledWith({
+      tourKey: INTEGRATIONS_GUIDE_KEY,
+      tourVersion: integrationsGuide.version,
+      status: "in_progress",
+      stepId: integrationsGuide.scenes[0].id,
+    });
+
+    // Closing it doesn't start the tour this visit, or reopen the guide.
+    fireEvent.click(screen.getByRole("button", { name: "Close guide" }));
+    await settle();
+    expect(guideDialog()).toBeNull();
+    expect(runTour).not.toHaveBeenCalled();
+  });
+
+  it("records a guide watched to the end and hands over to the page's tour", async () => {
+    renderIntegrations();
+    await settle();
+    const last = integrationsGuide.scenes.length - 1;
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: `Scene ${last + 1}: ${integrationsGuide.scenes[last].title}`,
+      }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        integrationsGuide.scenes[last].durationMs,
+      );
+    });
+    expect(saveTourProgressAction).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        tourKey: INTEGRATIONS_GUIDE_KEY,
+        status: "completed",
+      }),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Take the tour on the page/ }),
+    );
+    expect(guideDialog()).toBeNull();
+    expect(runTour).toHaveBeenCalledTimes(1);
+    expect(runTour.mock.calls[0][0]).toBe(integrationsTour);
+  });
+
+  it("leaves a watched guide closed, so the tour starts as usual", async () => {
+    renderIntegrations([
+      {
+        tour_key: INTEGRATIONS_GUIDE_KEY,
+        tour_version: integrationsGuide.version,
+        status: "completed",
+        step_id: null,
+      },
+    ]);
+    await settle();
+
+    expect(guideDialog()).toBeNull();
+    expect(runTour).toHaveBeenCalledTimes(1);
+    expect(runTour.mock.calls[0][0]).toBe(integrationsTour);
+  });
+
+  it("plays a guide on request, resuming at its stored scene", async () => {
+    function PlayButton() {
+      const tours = useTours();
+      return (
+        <button
+          type="button"
+          onClick={() => tours?.play(INTEGRATIONS_GUIDE_KEY)}
+        >
+          Play guide
+        </button>
+      );
+    }
+    renderIntegrations(
+      [
+        {
+          tour_key: INTEGRATIONS_GUIDE_KEY,
+          tour_version: integrationsGuide.version,
+          status: "in_progress",
+          step_id: integrationsGuide.scenes[2].id,
+        },
+      ],
+      <>
+        <IntegrationsPage autoOpen={false} />
+        <PlayButton />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Play guide" }));
+
+    expect(guideDialog()).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe(
+      integrationsGuide.scenes[2].title,
+    );
   });
 });

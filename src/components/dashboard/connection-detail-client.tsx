@@ -49,6 +49,14 @@ import { AwsSetupPanel } from "./integrations/aws-setup-panel";
 import { SyncPanel } from "./sync-panel";
 import { TargetsPanel } from "./targets-panel";
 import { cn } from "@/lib/utils";
+import { usePageTour } from "@/components/tours/tour-provider";
+import { eligibleSyncDatasets } from "@/lib/sync/datasets";
+import {
+  CONNECTION_TOUR_KEY,
+  connectionActions,
+  connectionAnchors as tourAnchors,
+} from "@/lib/tours/definitions/connection";
+import type { SyncPanelTourRequest } from "@/lib/tours/definitions/sync-panel";
 
 const AWS_INTEGRATION_SLUG = "aws";
 
@@ -360,10 +368,56 @@ export function ConnectionDetailClient({
   );
   const canViewResources = enabledCapabilitySlugs.includes("inventory.read");
   const canViewCosts = enabledCapabilitySlugs.includes("billing.read");
+  const canSync =
+    connection.status === "connected" &&
+    eligibleSyncDatasets(
+      enabledCapabilitySlugs,
+      activeOrganizationCapabilityCodes,
+      integrationSlug,
+    ).length > 0;
+
+  // The tour switches tabs itself (without adding history entries), opens the
+  // real Add scope form and the sync panel's dialogs, and closes them unsaved.
+  const [syncTourRequest, setSyncTourRequest] =
+    useState<SyncPanelTourRequest | null>(null);
+  const requestSync = (request: SyncPanelTourRequest) => {
+    setActiveTab("activity");
+    setSyncTourRequest(request);
+    return () => setSyncTourRequest(null);
+  };
+  usePageTour(CONNECTION_TOUR_KEY, {
+    ready:
+      !editDialog &&
+      !verifyDialog &&
+      !removeDialog &&
+      !purgeDialog &&
+      !scopeDialog,
+    actions: {
+      [connectionActions.overview]: () => setActiveTab("overview"),
+      [connectionActions.access]: () => setActiveTab("access"),
+      [connectionActions.scopeForm]: () => {
+        if (connectionDisabled) return false;
+        setActiveTab("access");
+        setScopeDialog(true);
+        return () => setScopeDialog(false);
+      },
+      [connectionActions.activity]: () => setActiveTab("activity"),
+      [connectionActions.schedules]: () =>
+        canSync ? requestSync("schedules") : false,
+      [connectionActions.syncNow]: () =>
+        canSync ? requestSync("sync-now") : false,
+      [connectionActions.latestRun]: () =>
+        initialSyncRuns.length > 0 ? requestSync("latest-run") : false,
+      [connectionActions.settings]: () => setActiveTab("settings"),
+    },
+  });
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="border-border-soft bg-card-strong/50 flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-5 shadow-[0_16px_40px_var(--shadow-card)]">
+      <div
+        data-tour={tourAnchors.header}
+        className="border-border-soft bg-card-strong/50 flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-5 shadow-[0_16px_40px_var(--shadow-card)]"
+      >
         <div className="min-w-0">
           <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
             {integrationName}
@@ -433,6 +487,7 @@ export function ConnectionDetailClient({
 
       <div className="border-foreground/10 border-b">
         <nav
+          data-tour={tourAnchors.tabs}
           className="-mb-px flex gap-1 overflow-x-auto sm:gap-2"
           aria-label="Tabs"
           role="tablist"
@@ -484,7 +539,10 @@ export function ConnectionDetailClient({
             aria-labelledby="connection-tab-overview"
             className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.7fr)]"
           >
-            <section className="border-border-soft rounded-2xl border p-5">
+            <section
+              data-tour={tourAnchors.details}
+              className="border-border-soft rounded-2xl border p-5"
+            >
               <h2 className="text-base font-semibold">Connection details</h2>
               <dl className="mt-5 grid gap-5 sm:grid-cols-2">
                 <div>
@@ -524,7 +582,10 @@ export function ConnectionDetailClient({
               </dl>
             </section>
 
-            <section className="border-border-soft rounded-2xl border p-5">
+            <section
+              data-tour={tourAnchors.cloudData}
+              className="border-border-soft rounded-2xl border p-5"
+            >
               <h2 className="text-base font-semibold">Cloud data</h2>
               <p className="text-muted-foreground mt-1 text-sm leading-6">
                 Resource inventory and provider spend live in shared multicloud
@@ -580,138 +641,147 @@ export function ConnectionDetailClient({
             aria-labelledby="connection-tab-access"
             className="space-y-5"
           >
-            <Section
-              title="Capabilities"
-              className="border-border-soft rounded-2xl border p-5"
-              action={
-                capabilitiesDirty && !connectionDisabled ? (
-                  <button
-                    onClick={saveCapabilities}
-                    disabled={pending}
-                    className="bg-accent text-accent-foreground rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                  >
-                    {pending ? "Saving…" : "Save changes"}
-                  </button>
-                ) : undefined
-              }
-            >
-              {availableCapabilities.length ? (
-                <div className="space-y-2">
-                  {availableCapabilities.map((capability) => {
-                    const selected = selectedCapabilityIds.has(capability.id);
-                    return (
-                      <label
-                        key={capability.id}
-                        className="border-foreground/10 hover:bg-foreground/[0.02] flex cursor-pointer items-center gap-3 rounded-xl border p-4 text-sm transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          disabled={
-                            connectionDisabled ||
-                            (capability.status !== "active" && !selected)
-                          }
-                          onChange={() => toggleCapability(capability.id)}
-                          className="border-foreground/20 text-accent focus:ring-accent rounded"
-                        />
-                        <span className="flex-1">
-                          <span className="font-medium">{capability.name}</span>
-                          <span className="text-muted-foreground ml-2 font-mono text-xs">
-                            {capability.slug}
-                          </span>
-                        </span>
-                        {selected ? (
-                          <CheckCircle2
-                            size={16}
-                            className="text-success shrink-0"
-                          />
-                        ) : null}
-                      </label>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-sm">
-                  No capabilities are available for your organization.
-                </p>
-              )}
-            </Section>
-
-            <Section
-              title="Scopes"
-              className="border-border-soft rounded-2xl border p-5"
-              action={
-                connectionDisabled ? undefined : (
-                  <button
-                    onClick={() => setScopeDialog(true)}
-                    className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium"
-                  >
-                    <Plus size={13} />
-                    Add scope
-                  </button>
-                )
-              }
-            >
-              {scopes.length ? (
-                <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
-                  {scopes.map((scope) => (
-                    <div
-                      key={`${scope.scope_type}/${scope.scope_key}`}
-                      className="flex items-center justify-between gap-3 p-4 text-sm"
+            <div data-tour={tourAnchors.capabilities}>
+              <Section
+                title="Capabilities"
+                className="border-border-soft rounded-2xl border p-5"
+                action={
+                  capabilitiesDirty && !connectionDisabled ? (
+                    <button
+                      onClick={saveCapabilities}
+                      disabled={pending}
+                      className="bg-accent text-accent-foreground rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                     >
-                      <div>
-                        <span className="text-muted-foreground text-xs tracking-wider uppercase">
-                          {scope.scope_type}
-                        </span>
-                        <p className="mt-0.5 font-mono">{scope.scope_key}</p>
-                      </div>
-                      {!connectionDisabled ? (
-                        <button
-                          onClick={() =>
-                            removeScope(scope.scope_type, scope.scope_key)
-                          }
-                          disabled={pending}
-                          aria-label={`Remove scope ${scope.scope_type}/${scope.scope_key}`}
-                          className="text-muted-foreground p-1.5 hover:text-red-500 disabled:opacity-40"
+                      {pending ? "Saving…" : "Save changes"}
+                    </button>
+                  ) : undefined
+                }
+              >
+                {availableCapabilities.length ? (
+                  <div className="space-y-2">
+                    {availableCapabilities.map((capability) => {
+                      const selected = selectedCapabilityIds.has(capability.id);
+                      return (
+                        <label
+                          key={capability.id}
+                          className="border-foreground/10 hover:bg-foreground/[0.02] flex cursor-pointer items-center gap-3 rounded-xl border p-4 text-sm transition-colors"
                         >
-                          <Trash2 size={15} />
-                        </button>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  title="No scopes configured"
-                  description="Limit this connection to specific regions or services. Provider accounts, subscriptions, and projects are resolved during verification."
-                />
-              )}
-            </Section>
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            disabled={
+                              connectionDisabled ||
+                              (capability.status !== "active" && !selected)
+                            }
+                            onChange={() => toggleCapability(capability.id)}
+                            className="border-foreground/20 text-accent focus:ring-accent rounded"
+                          />
+                          <span className="flex-1">
+                            <span className="font-medium">
+                              {capability.name}
+                            </span>
+                            <span className="text-muted-foreground ml-2 font-mono text-xs">
+                              {capability.slug}
+                            </span>
+                          </span>
+                          {selected ? (
+                            <CheckCircle2
+                              size={16}
+                              className="text-success shrink-0"
+                            />
+                          ) : null}
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    No capabilities are available for your organization.
+                  </p>
+                )}
+              </Section>
+            </div>
 
-            <Section
-              title="Provider identity"
-              className="border-border-soft rounded-2xl border p-5"
-              action={
-                integrationSlug === AWS_INTEGRATION_SLUG &&
-                !connectionDisabled ? (
-                  <button
-                    type="button"
-                    onClick={() => setVerifyDialog(true)}
-                    className="border-foreground/15 hover:bg-foreground/5 inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium"
-                  >
-                    <Plus size={13} />
-                    Add target
-                  </button>
-                ) : undefined
-              }
-            >
-              <TargetsPanel
-                connectionId={connection.id}
-                initialTargets={initialTargets}
-                readOnly={connectionDisabled}
-                reloadSignal={targetsReloadSignal}
-              />
-            </Section>
+            <div data-tour={tourAnchors.scopes}>
+              <Section
+                title="Scopes"
+                className="border-border-soft rounded-2xl border p-5"
+                action={
+                  connectionDisabled ? undefined : (
+                    <button
+                      onClick={() => setScopeDialog(true)}
+                      className="border-foreground/15 hover:bg-foreground/5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium"
+                    >
+                      <Plus size={13} />
+                      Add scope
+                    </button>
+                  )
+                }
+              >
+                {scopes.length ? (
+                  <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
+                    {scopes.map((scope) => (
+                      <div
+                        key={`${scope.scope_type}/${scope.scope_key}`}
+                        className="flex items-center justify-between gap-3 p-4 text-sm"
+                      >
+                        <div>
+                          <span className="text-muted-foreground text-xs tracking-wider uppercase">
+                            {scope.scope_type}
+                          </span>
+                          <p className="mt-0.5 font-mono">{scope.scope_key}</p>
+                        </div>
+                        {!connectionDisabled ? (
+                          <button
+                            onClick={() =>
+                              removeScope(scope.scope_type, scope.scope_key)
+                            }
+                            disabled={pending}
+                            aria-label={`Remove scope ${scope.scope_type}/${scope.scope_key}`}
+                            className="text-muted-foreground p-1.5 hover:text-red-500 disabled:opacity-40"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="No scopes configured"
+                    description="Limit this connection to specific regions or services. Provider accounts, subscriptions, and projects are resolved during verification."
+                  />
+                )}
+              </Section>
+            </div>
+
+            <div data-tour={tourAnchors.identity}>
+              <Section
+                title="Provider identity"
+                className="border-border-soft rounded-2xl border p-5"
+                action={
+                  integrationSlug === AWS_INTEGRATION_SLUG &&
+                  !connectionDisabled ? (
+                    <button
+                      type="button"
+                      data-tour={tourAnchors.addTarget}
+                      onClick={() => setVerifyDialog(true)}
+                      className="border-foreground/15 hover:bg-foreground/5 inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium"
+                    >
+                      <Plus size={13} />
+                      Add target
+                    </button>
+                  ) : undefined
+                }
+              >
+                <TargetsPanel
+                  connectionId={connection.id}
+                  initialTargets={initialTargets}
+                  readOnly={connectionDisabled}
+                  reloadSignal={targetsReloadSignal}
+                />
+              </Section>
+            </div>
           </div>
         ) : null}
 
@@ -735,6 +805,7 @@ export function ConnectionDetailClient({
                 initialPolicies={initialSyncPolicies}
                 initialHealth={initialSyncHealth}
                 initialTargets={initialTargets}
+                tourRequest={syncTourRequest}
               />
             </Section>
           </div>
@@ -748,7 +819,10 @@ export function ConnectionDetailClient({
             className="space-y-10"
           >
             <Section title="Connection settings">
-              <div className="border-border-soft rounded-2xl border p-5">
+              <div
+                data-tour={tourAnchors.modify}
+                className="border-border-soft rounded-2xl border p-5"
+              >
                 <p className="text-muted-foreground max-w-2xl text-sm leading-6">
                   Update the connection name, provider reference, and
                   verification configuration.
@@ -779,7 +853,10 @@ export function ConnectionDetailClient({
             </Section>
 
             <Section title="Connection lifecycle">
-              <div className="border-border-soft flex flex-col justify-between gap-5 rounded-2xl border p-5 sm:flex-row sm:items-center">
+              <div
+                data-tour={tourAnchors.lifecycle}
+                className="border-border-soft flex flex-col justify-between gap-5 rounded-2xl border p-5 sm:flex-row sm:items-center"
+              >
                 <div>
                   <h3 className="text-sm font-medium">Connection status</h3>
                   <p className="text-muted-foreground mt-1 text-sm leading-6">
@@ -821,7 +898,10 @@ export function ConnectionDetailClient({
             </Section>
 
             <Section title="Danger zone">
-              <div className="border-border-soft flex flex-col justify-between gap-5 rounded-2xl border border-red-600/20 bg-red-600/5 p-5 sm:flex-row sm:items-center">
+              <div
+                data-tour={tourAnchors.purge}
+                className="border-border-soft flex flex-col justify-between gap-5 rounded-2xl border border-red-600/20 bg-red-600/5 p-5 sm:flex-row sm:items-center"
+              >
                 <div>
                   <h3 className="text-sm font-medium">
                     Delete permanently (purge)
@@ -1213,7 +1293,10 @@ export function ConnectionDetailClient({
               }}
               className="mt-6 space-y-5"
             >
-              <label className="block text-sm">
+              <label
+                data-tour={tourAnchors.scopeType}
+                className="block text-sm"
+              >
                 <span className="mb-2 block font-medium">Scope type</span>
                 <input
                   name="scope_type"
@@ -1226,7 +1309,7 @@ export function ConnectionDetailClient({
                   resolved by verification.
                 </span>
               </label>
-              <label className="block text-sm">
+              <label data-tour={tourAnchors.scopeKey} className="block text-sm">
                 <span className="mb-2 block font-medium">Scope key</span>
                 <input
                   name="scope_key"

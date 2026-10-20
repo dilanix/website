@@ -14,6 +14,11 @@ import type {
   CoreSyncPolicy,
   CoreSyncRun,
 } from "@/lib/core/api";
+import { tourTargetSelector } from "@/lib/tours/anchors";
+import {
+  syncPanelAnchors,
+  type SyncPanelTourRequest,
+} from "@/lib/tours/definitions/sync-panel";
 import { SyncPanel } from "./sync-panel";
 
 const actions = vi.hoisted(() => ({
@@ -370,5 +375,73 @@ describe("SyncPanel automatic sync", () => {
     expect(details.getByText("10")).not.toBeNull();
     expect(details.getByText("inventory.resources")).not.toBeNull();
     expect(details.getByText("snapshot")).not.toBeNull();
+  });
+});
+
+describe("SyncPanel product tour", () => {
+  const anchored = (name: keyof typeof syncPanelAnchors) =>
+    document.querySelectorAll(tourTargetSelector(syncPanelAnchors[name]));
+
+  function Panel({ request }: { request: SyncPanelTourRequest | null }) {
+    return (
+      <SyncPanel
+        connectionId="connection-1"
+        providerSlug="aws"
+        enabledCapabilitySlugs={["inventory.read"]}
+        activeOrganizationCapabilityCodes={["aws.inventory.read"]}
+        connectionUsable
+        initialRuns={[completedRun, queuedRun]}
+        initialTotal={2}
+        initialPolicies={[enabledPolicy]}
+        initialHealth={initialHealth}
+        initialTargets={[target]}
+        tourRequest={request}
+      />
+    );
+  }
+
+  it("anchors its health, schedule, Sync now and newest run", () => {
+    render(<Panel request={null} />);
+    for (const name of ["health", "automatic", "syncNow", "run"] as const)
+      expect(anchored(name)).toHaveLength(1);
+    expect(anchored("schedule")).toHaveLength(0);
+  });
+
+  it("shows the schedules and the Sync now dialog only while the tour asks", () => {
+    const { rerender } = render(<Panel request="schedules" />);
+    expect(
+      screen.getByRole("dialog", { name: "Configure automatic sync" }),
+    ).toBeTruthy();
+    expect(anchored("schedule")).toHaveLength(1);
+
+    rerender(<Panel request="sync-now" />);
+    expect(
+      screen.queryByRole("dialog", { name: "Configure automatic sync" }),
+    ).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Start sync" })).toBeTruthy();
+    expect(anchored("planning")).toHaveLength(1);
+    expect(anchored("start")).toHaveLength(1);
+
+    rerender(<Panel request={null} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(actions.startSyncAction).not.toHaveBeenCalled();
+    expect(actions.setSyncPolicyAction).not.toHaveBeenCalled();
+  });
+
+  it("opens the newest run with its jobs, and closes it again", async () => {
+    actions.getSyncRunAction.mockResolvedValue({
+      data: { ...completedRun, jobs: [inventoryJob, costSummaryJob] },
+    });
+    const { rerender } = render(<Panel request="latest-run" />);
+
+    await waitFor(() => expect(anchored("job")).toHaveLength(1));
+    expect(actions.getSyncRunAction).toHaveBeenCalledWith(
+      "connection-1",
+      completedRun.id,
+    );
+    expect(anchored("totals")).toHaveLength(1);
+
+    rerender(<Panel request={null} />);
+    expect(anchored("job")).toHaveLength(0);
   });
 });

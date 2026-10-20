@@ -36,6 +36,11 @@ describe("TargetsPanel", () => {
 
     render(<TargetsPanel connectionId="conn-1" initialTargets={[target]} />);
     expect(screen.queryByText(/role\/Dilanix/)).toBeNull();
+    // The connection tour points at each account and its actions.
+    for (const anchor of ["connection.target", "connection.target-actions"])
+      expect(document.querySelectorAll(`[data-tour="${anchor}"]`)).toHaveLength(
+        1,
+      );
 
     fireEvent.click(screen.getByRole("button", { name: "Provider metadata" }));
 

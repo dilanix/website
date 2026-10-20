@@ -19,7 +19,9 @@ describe("tour registry", () => {
     (_key, tour) => {
       expect(Number.isInteger(tour.version)).toBe(true);
       expect(tour.version).toBeGreaterThanOrEqual(1);
-      expect(tour.route.startsWith("/dashboard/")).toBe(true);
+      // A per-item page's tour has no fixed route to open.
+      if (tour.route !== null)
+        expect(tour.route.startsWith("/dashboard/")).toBe(true);
       expect(tour.steps.length).toBeGreaterThan(0);
 
       const ids = tour.steps.map((step) => step.id);

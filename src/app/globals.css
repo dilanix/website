@@ -264,6 +264,118 @@
   animation: demo-fade 0.7s ease-out both;
 }
 
+/* Guides (src/components/guides). Scene animations start when a scene
+   mounts, pause with the player (`data-paused`), and show their end state
+   when reduced motion is preferred — `guide-motion-only` marks what exists
+   only as motion (the cursor, a state that is replaced). Most keyframes give
+   only `from`, so an element ends in its own styles. */
+@keyframes guide-appear-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes guide-appear-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+}
+
+@keyframes guide-appear-left {
+  from {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+}
+
+@keyframes guide-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes guide-fade-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@keyframes guide-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes guide-flow {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+
+@keyframes guide-type {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes guide-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes guide-ripple {
+  from {
+    opacity: 0.6;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2.6);
+  }
+}
+
+@keyframes guide-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in oklab, var(--accent) 30%, transparent);
+  }
+}
+
+@keyframes guide-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.guide-stage[data-paused="true"] *,
+.guide-stage[data-paused="true"] *::before,
+.guide-stage[data-paused="true"] *::after {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-stage * {
+    animation: none !important;
+  }
+
+  .guide-stage .guide-motion-only {
+    display: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;

@@ -17,6 +17,8 @@ import {
 } from "@/lib/core/api";
 import { SYNC_RUNS_PAGE_SIZE } from "@/lib/sync/datasets";
 import { PageHeader } from "@/components/dashboard/primitives";
+import { GuideButton } from "@/components/guides/guide-button";
+import { INTEGRATIONS_GUIDE_KEY } from "@/lib/guides/definitions/integrations";
 import {
   ConnectionDetailClient,
   type ConnectionDetailTab,
@@ -93,6 +95,7 @@ export default async function ConnectionDetailPage({
             ? `Connected to ${integration.name}.`
             : "Integration connection."
         }
+        action={<GuideButton guideKey={INTEGRATIONS_GUIDE_KEY} />}
       />
       <ConnectionDetailClient
         connection={connection}

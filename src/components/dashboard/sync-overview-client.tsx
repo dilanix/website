@@ -27,6 +27,14 @@ import {
   type PillTone,
 } from "./expandable-table";
 import { SyncPanel } from "./sync-panel";
+import { usePageTour } from "@/components/tours/tour-provider";
+import { eligibleSyncDatasets } from "@/lib/sync/datasets";
+import {
+  SYNC_TOUR_KEY,
+  syncActions,
+  syncAnchors as tourAnchors,
+} from "@/lib/tours/definitions/sync";
+import type { SyncPanelTourRequest } from "@/lib/tours/definitions/sync-panel";
 
 export type ConnectionSyncData = {
   connection: CoreIntegrationConnection;
@@ -68,11 +76,13 @@ function ConnectionSyncRow({
   open,
   onToggle,
   activeOrganizationCapabilityCodes,
+  tourRequest,
 }: {
   item: ConnectionSyncData;
   open: boolean;
   onToggle: () => void;
   activeOrganizationCapabilityCodes: string[];
+  tourRequest?: SyncPanelTourRequest | null;
 }) {
   const router = useRouter();
   const { connection } = item;
@@ -92,7 +102,10 @@ function ConnectionSyncRow({
       title={
         <>
           <span className="block text-sm font-semibold">{connection.name}</span>
-          <span className="mt-2 flex flex-wrap gap-1.5">
+          <span
+            data-tour={tourAnchors.connection}
+            className="mt-2 flex flex-wrap gap-1.5"
+          >
             <RowTag>{item.integrationName}</RowTag>
             <RowTag
               tone={connection.status === "connected" ? "success" : "warning"}
@@ -103,11 +116,15 @@ function ConnectionSyncRow({
         </>
       }
       cells={[
-        <div key="synced" className="text-xs">
+        <div key="synced" data-tour={tourAnchors.synced} className="text-xs">
           <span className="text-muted-foreground block">Last synced</span>
           <span className="block text-sm font-medium">{synced ?? "Never"}</span>
         </div>,
-        <div key="datasets" className="text-xs">
+        <div
+          key="datasets"
+          data-tour={tourAnchors.datasets}
+          className="text-xs"
+        >
           <span className="text-muted-foreground block">Datasets healthy</span>
           <span className="text-accent block font-mono text-xl font-semibold">
             {item.health.length > 0
@@ -115,20 +132,20 @@ function ConnectionSyncRow({
               : "—"}
           </span>
         </div>,
-        item.error ? (
-          <StatePill key="state" tone="warning">
-            Unavailable
-          </StatePill>
-        ) : state ? (
-          <StatePill
-            key="state"
-            tone={STATE_TONES[state]}
-            spinning={state === "running"}
-          >
-            {SYNC_STATE_LABELS[state]}
-          </StatePill>
-        ) : null,
-        <div key="actions" className="flex items-center justify-end gap-1">
+        <span key="state" data-tour={tourAnchors.state} className="inline-flex">
+          {item.error ? (
+            <StatePill tone="warning">Unavailable</StatePill>
+          ) : state ? (
+            <StatePill tone={STATE_TONES[state]} spinning={state === "running"}>
+              {SYNC_STATE_LABELS[state]}
+            </StatePill>
+          ) : null}
+        </span>,
+        <div
+          key="actions"
+          data-tour={tourAnchors.actions}
+          className="flex items-center justify-end gap-1"
+        >
           <button
             type="button"
             onClick={onToggle}
@@ -172,6 +189,7 @@ function ConnectionSyncRow({
           initialPolicies={item.policies}
           initialHealth={item.health}
           initialTargets={item.targets}
+          tourRequest={tourRequest}
         />
       )}
     </ExpandableRow>
@@ -199,6 +217,43 @@ export function SyncOverviewClient({
     });
   }
 
+  // The tour opens the first connection's panel (and leaves it open), then
+  // its dialogs and newest run, which it closes again.
+  const [tourRequest, setTourRequest] = useState<SyncPanelTourRequest | null>(
+    null,
+  );
+  const first = items[0];
+  const firstCanSync = Boolean(
+    first &&
+    !first.error &&
+    first.connection.status === "connected" &&
+    eligibleSyncDatasets(
+      first.enabledCapabilitySlugs,
+      activeOrganizationCapabilityCodes,
+      first.integrationSlug,
+    ).length > 0,
+  );
+  function openFirst(request?: SyncPanelTourRequest) {
+    if (!first || first.error) return false;
+    setOpenIds((current) => new Set(current).add(first.connection.id));
+    if (!request) return;
+    setTourRequest(request);
+    return () => setTourRequest(null);
+  }
+  usePageTour(SYNC_TOUR_KEY, {
+    ready: true,
+    available: items.length > 0,
+    actions: {
+      [syncActions.openRow]: () => openFirst(),
+      [syncActions.schedules]: () =>
+        firstCanSync ? openFirst("schedules") : false,
+      [syncActions.syncNow]: () =>
+        firstCanSync ? openFirst("sync-now") : false,
+      [syncActions.latestRun]: () =>
+        first && first.runs.length > 0 ? openFirst("latest-run") : false,
+    },
+  });
+
   if (items.length === 0) {
     return (
       <EmptyState
@@ -223,20 +278,23 @@ export function SyncOverviewClient({
       gridClassName={GRID}
       footer={
         <>
-          <span>Each connection syncs on its own schedule.</span>
+          <span data-tour={tourAnchors.footer}>
+            Each connection syncs on its own schedule.
+          </span>
           <span>
             {items.length} connection{items.length === 1 ? "" : "s"}
           </span>
         </>
       }
     >
-      {items.map((item) => (
+      {items.map((item, index) => (
         <ConnectionSyncRow
           key={item.connection.id}
           item={item}
           open={openIds.has(item.connection.id)}
           onToggle={() => toggle(item.connection.id)}
           activeOrganizationCapabilityCodes={activeOrganizationCapabilityCodes}
+          tourRequest={index === 0 ? tourRequest : null}
         />
       ))}
     </ExpandableTable>
