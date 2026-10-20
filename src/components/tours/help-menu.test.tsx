@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { costBudgetsTour } from "@/lib/tours/definitions/cost-budgets";
 import {
   INFRASTRUCTURE_GRAPH_TOUR_KEY as KEY,
   infrastructureGraphTour as tour,
@@ -7,13 +8,14 @@ import {
 import { HelpMenu } from "./help-menu";
 import { TourProvider } from "./tour-provider";
 
-const { push, runTour } = vi.hoisted(() => ({
+const { navigation, push, runTour } = vi.hoisted(() => ({
+  navigation: { pathname: "/dashboard/settings" },
   push: vi.fn(),
   runTour: vi.fn(() => ({ stop: vi.fn() })),
 }));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/dashboard/settings",
+  usePathname: () => navigation.pathname,
   useRouter: () => ({ push }),
 }));
 vi.mock("@/app/dashboard/tour-actions", () => ({
@@ -21,13 +23,21 @@ vi.mock("@/app/dashboard/tour-actions", () => ({
 }));
 vi.mock("./tour-runner", () => ({ runTour }));
 
+const INFRASTRUCTURE = { slug: "infrastructure", name: "Infrastructure" };
+const COST = { slug: "cost", name: "Cost" };
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  navigation.pathname = "/dashboard/settings";
 });
 
 function openMenu() {
   fireEvent.click(screen.getByRole("button", { name: "Help & Support" }));
+}
+
+function group(name: string) {
+  return screen.getByRole("button", { name: new RegExp(`^${name}\\b`) });
 }
 
 describe("HelpMenu", () => {
@@ -42,7 +52,7 @@ describe("HelpMenu", () => {
             step_id: null,
           },
         ]}
-        activeProductSlugs={["infrastructure"]}
+        activeProducts={[INFRASTRUCTURE]}
       >
         <HelpMenu />
       </TourProvider>,
@@ -64,7 +74,7 @@ describe("HelpMenu", () => {
 
   it("offers a never-seen tour as new", () => {
     render(
-      <TourProvider progress={[]} activeProductSlugs={["infrastructure"]}>
+      <TourProvider progress={[]} activeProducts={[INFRASTRUCTURE]}>
         <HelpMenu />
       </TourProvider>,
     );
@@ -80,19 +90,71 @@ describe("HelpMenu", () => {
 
   it("hides tours for products the organization cannot use", () => {
     render(
-      <TourProvider progress={[]} activeProductSlugs={["cost"]}>
+      <TourProvider progress={[]} activeProducts={[COST]}>
         <HelpMenu />
       </TourProvider>,
     );
     openMenu();
 
     expect(screen.getByText("Cost Overview")).toBeTruthy();
+    expect(screen.queryByText("Infrastructure")).toBeNull();
     expect(screen.queryByText("Infrastructure Graph")).toBeNull();
+  });
+
+  it("groups tours by product and opens the current page's group", () => {
+    navigation.pathname = "/dashboard/products/cost/budgets/new";
+    render(
+      <TourProvider
+        progress={[
+          {
+            tour_key: costBudgetsTour.key,
+            tour_version: costBudgetsTour.version,
+            status: "completed",
+            step_id: null,
+          },
+        ]}
+        activeProducts={[INFRASTRUCTURE, COST]}
+      >
+        <HelpMenu />
+      </TourProvider>,
+    );
+    openMenu();
+
+    // Each group says how many of its tours there are, and how many are new.
+    expect(group("Infrastructure").textContent).toBe(
+      "Infrastructure1 new1 tour",
+    );
+    expect(group("Cost").textContent).toBe("Cost6 new7 tours");
+    expect(group("Cost").getAttribute("aria-expanded")).toBe("true");
+    expect(group("Infrastructure").getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("list", { name: "Cost tours" })).toBeTruthy();
+    expect(screen.queryByText("Infrastructure Graph")).toBeNull();
+
+    // One group open at a time.
+    fireEvent.click(group("Infrastructure"));
+    expect(screen.getByText("Infrastructure Graph")).toBeTruthy();
+    expect(screen.queryByText("Cost Budgets")).toBeNull();
+
+    fireEvent.click(group("Infrastructure"));
+    expect(screen.queryByText("Infrastructure Graph")).toBeNull();
+  });
+
+  it("keeps every group closed away from a product's pages", () => {
+    render(
+      <TourProvider progress={[]} activeProducts={[INFRASTRUCTURE, COST]}>
+        <HelpMenu />
+      </TourProvider>,
+    );
+    openMenu();
+
+    expect(group("Cost").getAttribute("aria-expanded")).toBe("false");
+    expect(group("Infrastructure").getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("list", { name: /tours$/ })).toBeNull();
   });
 
   it("leaves out the tours section when no tour applies", () => {
     render(
-      <TourProvider progress={[]} activeProductSlugs={[]}>
+      <TourProvider progress={[]} activeProducts={[]}>
         <HelpMenu />
       </TourProvider>,
     );

@@ -14,9 +14,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { saveTourProgressAction } from "@/app/dashboard/tour-actions";
 import { Toast } from "@/components/ui/toast";
 import {
-  accessibleTours,
   startIndex,
+  tourGroups,
   tourState,
+  type TourGroup,
+  type TourProduct,
   type TourState,
 } from "@/lib/tours/eligibility";
 import { TOURS } from "@/lib/tours/registry";
@@ -47,7 +49,7 @@ export interface TourEntry {
 }
 
 interface TourContextValue {
-  tours: readonly TourEntry[];
+  groups: readonly TourGroup<TourEntry>[];
   start: (key: string) => void;
   register: (key: string, actions: () => TourActions) => () => void;
   setReady: (key: string, ready: boolean) => void;
@@ -64,11 +66,11 @@ const TourContext = createContext<TourContextValue | null>(null);
  */
 export function TourProvider({
   progress: initialProgress,
-  activeProductSlugs,
+  activeProducts,
   children,
 }: {
   progress: readonly TourProgress[] | null;
-  activeProductSlugs: readonly string[];
+  activeProducts: readonly TourProduct[];
   children: ReactNode;
 }) {
   const router = useRouter();
@@ -101,11 +103,14 @@ export function TourProvider({
     progressRef.current = progress;
   });
 
-  const productKey = [...activeProductSlugs].sort().join(" ");
-  const tours = useMemo(
-    () => accessibleTours(TOURS, new Set(productKey.split(" "))),
-    [productKey],
+  const productsKey = JSON.stringify(
+    activeProducts.map(({ slug, name }) => ({ slug, name })),
   );
+  const groups = useMemo(
+    () => tourGroups(TOURS, JSON.parse(productsKey) as TourProduct[]),
+    [productsKey],
+  );
+  const tours = useMemo(() => groups.flatMap((group) => group.tours), [groups]);
 
   /** Updates local state at once; writes to Core one at a time, in order. */
   const persist = useCallback(
@@ -255,14 +260,17 @@ export function TourProvider({
   const dismissNotice = useCallback(() => setNotice(null), []);
   const entries = useMemo(
     () =>
-      tours.map((tour) => ({
-        tour,
-        state: progress ? tourState(tour, progress.get(tour.key)) : null,
+      groups.map(({ product, tours: own }) => ({
+        product,
+        tours: own.map((tour) => ({
+          tour,
+          state: progress ? tourState(tour, progress.get(tour.key)) : null,
+        })),
       })),
-    [tours, progress],
+    [groups, progress],
   );
   const value = useMemo(
-    () => ({ tours: entries, start, register, setReady }),
+    () => ({ groups: entries, start, register, setReady }),
     [entries, start, register, setReady],
   );
 
@@ -276,10 +284,11 @@ export function TourProvider({
   );
 }
 
-/** Tours for Help & Support; `null` outside a `TourProvider`. */
+/** Tours for Help & Support, grouped by product; `null` outside a
+ *  `TourProvider`. */
 export function useTours() {
   const context = useContext(TourContext);
-  return context ? { tours: context.tours, start: context.start } : null;
+  return context ? { groups: context.groups, start: context.start } : null;
 }
 
 /**

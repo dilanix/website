@@ -2,12 +2,27 @@ import type { TourDefinition, TourProgress } from "./types";
 
 export type TourState = "new" | "in_progress" | "completed" | "dismissed";
 
-/** Tours whose product the organization has active access to. */
-export function accessibleTours(
+/** A product the organization has active access to. */
+export interface TourProduct {
+  slug: string;
+  name: string;
+}
+
+export interface TourGroup<T = TourDefinition> {
+  product: TourProduct;
+  tours: readonly T[];
+}
+
+/** The tours of products the organization has active access to, one group
+ *  per product in the products' order; a product without tours has none. */
+export function tourGroups(
   tours: readonly TourDefinition[],
-  activeProductSlugs: ReadonlySet<string>,
-) {
-  return tours.filter((tour) => activeProductSlugs.has(tour.product));
+  activeProducts: readonly TourProduct[],
+): TourGroup[] {
+  return activeProducts.flatMap((product) => {
+    const own = tours.filter((tour) => tour.product === product.slug);
+    return own.length > 0 ? [{ product, tours: own }] : [];
+  });
 }
 
 /** A record from an older tour version counts as never seen. */
