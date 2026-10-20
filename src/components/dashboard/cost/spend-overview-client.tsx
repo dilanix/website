@@ -652,6 +652,7 @@ export function SpendOverviewClient({
         </div>
         <Link
           href={`/dashboard/products/cost/explorer${scopeSuffix}` as Route}
+          data-tour={tourAnchors.explorerLink}
           className="text-accent inline-flex items-center gap-1 text-xs font-semibold"
         >
           Open Explorer <ArrowRight size={13} />
@@ -1283,7 +1284,10 @@ export function SpendOverviewClient({
               );
               return (
                 <Fragment key={currency.currency}>
-                  <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)] lg:col-span-2">
+                  <div
+                    data-tour={tourAnchors.netCost}
+                    className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)] lg:col-span-2"
+                  >
                     <h3 className="text-sm font-semibold">
                       Net cost breakdown · {currency.currency}
                     </h3>
@@ -1371,7 +1375,10 @@ export function SpendOverviewClient({
                     )}
                   </div>
 
-                  <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
+                  <div
+                    data-tour={tourAnchors.topServices}
+                    className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
+                  >
                     <h3 className="text-sm font-semibold">
                       Top services · {currency.currency}
                     </h3>
@@ -1429,7 +1436,10 @@ export function SpendOverviewClient({
                     )}
                   </div>
 
-                  <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
+                  <div
+                    data-tour={tourAnchors.chargeTypes}
+                    className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
+                  >
                     <h3 className="text-sm font-semibold">
                       By charge type · {currency.currency}
                     </h3>

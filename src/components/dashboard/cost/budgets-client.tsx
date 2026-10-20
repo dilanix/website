@@ -22,6 +22,7 @@ import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { usePageTour } from "@/components/tours/tour-provider";
 import {
   COST_BUDGETS_TOUR_KEY,
+  costBudgetsActions,
   costBudgetsAnchors as tourAnchors,
 } from "@/lib/tours/definitions/cost-budgets";
 import { ScopeEditor, summarizeScope } from "./scope-editor";
@@ -251,7 +252,7 @@ function BudgetDialog({
             submit();
           }}
         >
-          <label className="block text-sm">
+          <label data-tour={tourAnchors.formName} className="block text-sm">
             <span className="mb-1.5 block font-medium">Name</span>
             <input
               required
@@ -263,7 +264,10 @@ function BudgetDialog({
             />
           </label>
 
-          <label className="block text-sm">
+          <label
+            data-tour={tourAnchors.formDescription}
+            className="block text-sm"
+          >
             <span className="mb-1.5 block font-medium">Description</span>
             <textarea
               rows={2}
@@ -275,7 +279,10 @@ function BudgetDialog({
             />
           </label>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div
+            data-tour={tourAnchors.formAmount}
+            className="grid grid-cols-2 gap-3"
+          >
             <label className="block text-sm">
               <span className="mb-1.5 block font-medium">Amount</span>
               <input
@@ -306,7 +313,7 @@ function BudgetDialog({
             </label>
           </div>
 
-          <label className="block text-sm">
+          <label data-tour={tourAnchors.formPeriod} className="block text-sm">
             <span className="mb-1.5 block font-medium">Period</span>
             <select
               value={form.period}
@@ -355,7 +362,10 @@ function BudgetDialog({
             </div>
           ) : null}
 
-          <label className="block text-sm">
+          <label
+            data-tour={tourAnchors.formThresholds}
+            className="block text-sm"
+          >
             <span className="mb-1.5 block font-medium">Alert thresholds</span>
             <input
               value={form.alertThresholds}
@@ -371,7 +381,10 @@ function BudgetDialog({
             </span>
           </label>
 
-          <label className="block text-sm">
+          <label
+            data-tour={tourAnchors.formRecipients}
+            className="block text-sm"
+          >
             <span className="mb-1.5 block font-medium">
               Recipients (comma or newline separated)
             </span>
@@ -386,7 +399,7 @@ function BudgetDialog({
             />
           </label>
 
-          <div>
+          <div data-tour={tourAnchors.formScope}>
             <span className="mb-1.5 block text-sm font-medium">Scope</span>
             <ScopeEditor initialValue={scope} onChange={setScope} />
           </div>
@@ -398,6 +411,7 @@ function BudgetDialog({
           ) : null}
 
           <button
+            data-tour={tourAnchors.formSubmit}
             disabled={pending}
             className="bg-accent text-accent-foreground w-full rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
           >
@@ -441,10 +455,17 @@ export function BudgetsClient({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
-  // The product tour needs no budgets: with none, it points at Create budget
-  // and skips the per-budget steps. It never starts over an open dialog.
+  // The product tour needs no budgets: with none, it walks through the create
+  // form and skips the per-budget steps. It never starts over an open dialog,
+  // and the form it opens closes unsaved when it moves on.
   usePageTour(COST_BUDGETS_TOUR_KEY, {
     ready: dialogState === "closed" && !deleteTarget,
+    actions: {
+      [costBudgetsActions.openForm]: () => {
+        setDialogState("create");
+        return () => setDialogState("closed");
+      },
+    },
   });
 
   function toggleEnabled(budget: CoreBudget) {

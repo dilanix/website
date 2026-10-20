@@ -30,7 +30,9 @@ const START_DELAY_MS = 600;
 /** How long a tour started from another page waits for it to offer the tour. */
 const PENDING_TIMEOUT_MS = 3000;
 
-export type TourActions = Record<string, () => void>;
+/** A page's handlers for tour `prepare` steps; one may return a cleanup the
+ *  tour runs when it moves past the steps that need it, or ends. */
+export type TourActions = Record<string, () => void | (() => void)>;
 
 interface PageRegistration {
   ready: boolean;

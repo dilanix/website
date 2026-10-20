@@ -129,4 +129,93 @@ describe("runTour", () => {
     const options = start({ startIndex: 2 });
     expect(options.runAction).toHaveBeenCalledWith("open-details");
   });
+
+  describe("prepared page state", () => {
+    const formTour: TourDefinition = {
+      ...tour,
+      steps: [
+        { id: "intro", title: "Intro", body: "Start" },
+        {
+          id: "name",
+          target: "widgets.form-name",
+          prepare: "open-form",
+          title: "Name",
+          body: "Name it",
+        },
+        {
+          id: "amount",
+          target: "widgets.form-amount",
+          prepare: "open-form",
+          title: "Amount",
+          body: "Size it",
+        },
+        { id: "after", target: "widgets.search", title: "After", body: "Done" },
+        { id: "end", title: "End", body: "Bye" },
+      ],
+    };
+
+    function startForm(startIndex = 0) {
+      const closeForm = vi.fn(() => {
+        document.querySelector("form")?.remove();
+      });
+      const runAction = vi.fn((id: string) => {
+        if (id !== "open-form") return;
+        document.body.insertAdjacentHTML(
+          "beforeend",
+          '<form><input data-tour="widgets.form-name" /><input data-tour="widgets.form-amount" /></form>',
+        );
+        return closeForm;
+      });
+      const onStep = vi.fn();
+      const onFinish = vi.fn();
+      run = runTour(formTour, { startIndex, runAction, onStep, onFinish });
+      return { closeForm, runAction, onStep, onFinish };
+    }
+
+    it("keeps a form open across the steps that share it, and closes it once the tour moves on", async () => {
+      const { closeForm, runAction, onStep } = startForm();
+
+      click(".driver-popover-next-btn");
+      await waitFor(() =>
+        expect(onStep).toHaveBeenLastCalledWith(formTour.steps[1]),
+      );
+      click(".driver-popover-next-btn");
+      await waitFor(() =>
+        expect(onStep).toHaveBeenLastCalledWith(formTour.steps[2]),
+      );
+      expect(runAction).toHaveBeenCalledTimes(1);
+      expect(closeForm).not.toHaveBeenCalled();
+
+      click(".driver-popover-next-btn");
+      expect(closeForm).toHaveBeenCalledTimes(1);
+      expect(onStep).toHaveBeenLastCalledWith(formTour.steps[3]);
+
+      // Back into the form opens it again; back out of it closes it again.
+      click(".driver-popover-prev-btn");
+      await waitFor(() =>
+        expect(onStep).toHaveBeenLastCalledWith(formTour.steps[2]),
+      );
+      expect(runAction).toHaveBeenCalledTimes(2);
+      click(".driver-popover-prev-btn");
+      click(".driver-popover-prev-btn");
+      expect(closeForm).toHaveBeenCalledTimes(2);
+      expect(onStep).toHaveBeenLastCalledWith(formTour.steps[0]);
+    });
+
+    it.each([
+      ["skipped", () => click(".dilanix-tour-skip"), "dismissed"],
+      ["torn down by the page", () => run?.stop(), "interrupted"],
+    ] as const)(
+      "closes an open form when the tour is %s",
+      async (_how, end, outcome) => {
+        const { closeForm, onStep, onFinish } = startForm(1);
+        await waitFor(() =>
+          expect(onStep).toHaveBeenLastCalledWith(formTour.steps[1]),
+        );
+        end();
+        expect(closeForm).toHaveBeenCalledTimes(1);
+        expect(onFinish).toHaveBeenCalledWith(outcome, formTour.steps[1]);
+      },
+    );
+  });
 });

@@ -67,8 +67,9 @@ Cost → Overview has `cost.overview` and Cost → Explorer has `cost.explorer`;
 with no cost data (or an empty query) the page withdraws the offer
 (`usePageTour`'s `available: false`), so starting it explains why. Cost →
 Budgets has `cost.budgets` and Cost → Allocations has `cost.allocations`;
-neither needs data — with no budgets, rules or cost data they point at the
-create button and skip the per-item and breakdown steps.
+neither needs data, and both walk through the real create form field by
+field: the steps' `prepare` action opens it, and the cleanup that action
+returns closes it unsaved once the tour moves past the form or ends.
 
 The Infrastructure product dashboard has exactly two sections (`ProductTabs`):
 **Graph** at `/dashboard/products/infrastructure` (default) — an interactive

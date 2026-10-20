@@ -7,6 +7,7 @@ import { AlertTriangle, ArrowRight, CheckCircle2 } from "lucide-react";
 import { getCostOverviewHighlightsAction } from "@/app/dashboard/products/cost-actions";
 import type { CoreCostOverviewHighlights } from "@/lib/core/api";
 import { formatAmount } from "@/components/dashboard/cost/format";
+import { costOverviewAnchors } from "@/lib/tours/definitions/cost-overview";
 
 /**
  * What needs attention right now: budgets over or forecast to overrun, and
@@ -44,7 +45,10 @@ export function CostAttentionStrip({
 
   if (!needsAttention) {
     return (
-      <p className="text-muted-foreground mt-3 inline-flex items-center gap-1.5 text-xs">
+      <p
+        data-tour={costOverviewAnchors.attention}
+        className="text-muted-foreground mt-3 inline-flex items-center gap-1.5 text-xs"
+      >
         <CheckCircle2 size={13} className="text-success" />
         {budgets.total > 0
           ? `All ${budgets.total} budget${budgets.total === 1 ? "" : "s"} on track`
@@ -55,7 +59,10 @@ export function CostAttentionStrip({
   }
 
   return (
-    <div className="mt-4 rounded-2xl border border-amber-500/25 bg-amber-500/[0.06] p-4">
+    <div
+      data-tour={costOverviewAnchors.attention}
+      className="mt-4 rounded-2xl border border-amber-500/25 bg-amber-500/[0.06] p-4"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="inline-flex items-center gap-2 text-sm font-semibold">
           <AlertTriangle

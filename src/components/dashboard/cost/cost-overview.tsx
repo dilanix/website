@@ -202,7 +202,7 @@ export async function CostOverview({
         </div>
       </div>
 
-      <div>
+      <div data-tour={costOverviewAnchors.quickAccess}>
         <h2 className="text-lg font-semibold tracking-tight">Quick access</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {quickLinks.map((item) => {
@@ -238,7 +238,7 @@ export async function CostOverview({
         </div>
       </div>
 
-      <div>
+      <div data-tour={costOverviewAnchors.recentAnomalies}>
         <h2 className="text-lg font-semibold tracking-tight">
           Recent anomalies
         </h2>

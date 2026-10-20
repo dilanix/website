@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -14,6 +15,7 @@ import type { CoreAllocation, CoreAllocationBreakdown } from "@/lib/core/api";
 import { tourTargetSelector } from "@/lib/tours/anchors";
 import {
   COST_ALLOCATIONS_TOUR_KEY,
+  costAllocationsActions,
   costAllocationsAnchors,
 } from "@/lib/tours/definitions/cost-allocations";
 import { AllocationsClient } from "./allocations-client";
@@ -135,7 +137,8 @@ describe("AllocationsClient", () => {
           targetId={null}
         />,
       );
-      expect(offer()).toEqual([COST_ALLOCATIONS_TOUR_KEY, { ready: true }]);
+      expect(offer()?.[0]).toBe(COST_ALLOCATIONS_TOUR_KEY);
+      expect(offer()?.[1].ready).toBe(true);
       expect(anchor("create")).not.toBeNull();
       expect(anchor("controls")).toBeNull();
       expect(anchor("breakdown")).toBeNull();
@@ -152,17 +155,13 @@ describe("AllocationsClient", () => {
         }),
       );
       renderClient();
-      expect(offer()).toEqual([COST_ALLOCATIONS_TOUR_KEY, { ready: true }]);
+      expect(offer()?.[1].ready).toBe(true);
 
       fireEvent.click(screen.getByRole("button", { name: "Run breakdown" }));
-      await waitFor(() =>
-        expect(offer()).toEqual([COST_ALLOCATIONS_TOUR_KEY, { ready: false }]),
-      );
+      await waitFor(() => expect(offer()?.[1].ready).toBe(false));
 
       resolve({ data: breakdown });
-      await waitFor(() =>
-        expect(offer()).toEqual([COST_ALLOCATIONS_TOUR_KEY, { ready: true }]),
-      );
+      await waitFor(() => expect(offer()?.[1].ready).toBe(true));
     });
 
     it("is not ready while a rule dialog is open", () => {
@@ -170,7 +169,29 @@ describe("AllocationsClient", () => {
       fireEvent.click(
         screen.getByRole("button", { name: "Create allocation" }),
       );
-      expect(offer()).toEqual([COST_ALLOCATIONS_TOUR_KEY, { ready: false }]);
+      expect(offer()?.[1].ready).toBe(false);
+    });
+
+    it("opens an empty create form for the tour's form steps, and closes it unsaved", () => {
+      renderClient();
+      let close: (() => void) | void = undefined;
+      act(() => {
+        close = offer()?.[1].actions[costAllocationsActions.openForm]();
+      });
+
+      expect(
+        screen.getByRole("dialog", { name: "Create allocation" }),
+      ).toBeTruthy();
+      const formAnchors = (
+        Object.keys(
+          costAllocationsAnchors,
+        ) as (keyof typeof costAllocationsAnchors)[]
+      ).filter((name) => name.startsWith("form"));
+      expect(formAnchors.length).toBeGreaterThan(0);
+      for (const name of formAnchors) expect(anchor(name)).not.toBeNull();
+
+      act(() => (close as (() => void) | void)?.());
+      expect(screen.queryByRole("dialog")).toBeNull();
     });
   });
 });

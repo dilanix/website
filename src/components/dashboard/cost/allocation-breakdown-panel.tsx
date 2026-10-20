@@ -140,6 +140,7 @@ export function AllocationBreakdownPanel({
             </label>
             <button
               type="button"
+              data-tour={tourAnchors.run}
               onClick={onRun}
               disabled={pending}
               className="bg-accent text-accent-foreground mt-auto inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium disabled:opacity-50"

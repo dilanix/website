@@ -1,8 +1,15 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CoreBudget, CoreBudgetStatus } from "@/lib/core/api";
 import {
   COST_BUDGETS_TOUR_KEY,
+  costBudgetsActions,
   costBudgetsAnchors,
 } from "@/lib/tours/definitions/cost-budgets";
 import { tourTargetSelector } from "@/lib/tours/anchors";
@@ -88,22 +95,43 @@ describe("BudgetsClient", () => {
 
   describe("product tour", () => {
     const offer = () => usePageTour.mock.calls.at(-1);
+    const anchor = (name: keyof typeof costBudgetsAnchors) =>
+      document.querySelector(tourTargetSelector(costBudgetsAnchors[name]));
 
     it("offers the Budgets tour even before any budget exists", () => {
       render(<BudgetsClient initialBudgets={[]} />);
-      expect(offer()).toEqual([COST_BUDGETS_TOUR_KEY, { ready: true }]);
-      expect(
-        document.querySelector(tourTargetSelector(costBudgetsAnchors.create)),
-      ).not.toBeNull();
+      expect(offer()?.[0]).toBe(COST_BUDGETS_TOUR_KEY);
+      expect(offer()?.[1].ready).toBe(true);
+      expect(anchor("create")).not.toBeNull();
     });
 
     it("is not ready while a budget dialog is open", () => {
       render(<BudgetsClient initialBudgets={[budget]} />);
       fireEvent.click(screen.getByRole("button", { name: "Create budget" }));
-      expect(offer()).toEqual([COST_BUDGETS_TOUR_KEY, { ready: false }]);
+      expect(offer()?.[1].ready).toBe(false);
 
       fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
-      expect(offer()).toEqual([COST_BUDGETS_TOUR_KEY, { ready: true }]);
+      expect(offer()?.[1].ready).toBe(true);
+    });
+
+    it("opens an empty create form for the tour's form steps, and closes it unsaved", () => {
+      render(<BudgetsClient initialBudgets={[budget]} />);
+      let close: (() => void) | void = undefined;
+      act(() => {
+        close = offer()?.[1].actions[costBudgetsActions.openForm]();
+      });
+
+      expect(
+        screen.getByRole("dialog", { name: "Create budget" }),
+      ).toBeTruthy();
+      const formAnchors = (
+        Object.keys(costBudgetsAnchors) as (keyof typeof costBudgetsAnchors)[]
+      ).filter((name) => name.startsWith("form"));
+      expect(formAnchors.length).toBeGreaterThan(0);
+      for (const name of formAnchors) expect(anchor(name)).not.toBeNull();
+
+      act(() => (close as (() => void) | void)?.());
+      expect(screen.queryByRole("dialog")).toBeNull();
     });
 
     it("points the thresholds step only at a budget that has thresholds", () => {

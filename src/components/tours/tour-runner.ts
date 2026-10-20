@@ -14,7 +14,9 @@ export interface TourRun {
 
 export interface TourRunOptions {
   startIndex: number;
-  runAction: (actionId: string) => void;
+  /** Runs a step's `prepare` action. It may return a cleanup that undoes what
+   *  it set up (e.g. closes the form it opened). */
+  runAction: (actionId: string) => void | (() => void);
   onStep: (step: TourStep) => void;
   onFinish: (outcome: TourOutcome, step: TourStep | undefined) => void;
 }
@@ -97,10 +99,18 @@ export function runTour(
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
   let current: TourStep | undefined;
   let finished = false;
+  // What a `prepare` action set up (e.g. an open form) lasts while consecutive
+  // steps share that action, and is undone once the tour moves on or ends.
+  let prepared: { action: string; cleanup?: () => void } | null = null;
 
   const prepare = (index: number) => {
     const action = steps[index]?.prepare;
-    if (action) runAction(action);
+    if (prepared?.action === action) return;
+    prepared?.cleanup?.();
+    prepared = null;
+    if (!action) return;
+    const cleanup = runAction(action);
+    prepared = { action, cleanup: cleanup ?? undefined };
   };
 
   const instance = driver({
@@ -158,6 +168,8 @@ export function runTour(
     if (finished) return;
     finished = true;
     instance.destroy();
+    prepared?.cleanup?.();
+    prepared = null;
     onFinish(outcome, current);
   }
 

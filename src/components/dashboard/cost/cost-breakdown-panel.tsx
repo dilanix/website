@@ -216,7 +216,10 @@ export function CostBreakdownPanel({
             {canDrill ? "Click a row to drill down." : null}
           </p>
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div
+          data-tour={costOverviewAnchors.breakdownDimensions}
+          className="flex flex-wrap gap-1.5"
+        >
           {BREAKDOWN_DIMENSIONS.filter(
             (option) =>
               !path.some(

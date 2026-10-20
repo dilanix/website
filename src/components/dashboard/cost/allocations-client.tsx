@@ -26,6 +26,7 @@ import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { usePageTour } from "@/components/tours/tour-provider";
 import {
   COST_ALLOCATIONS_TOUR_KEY,
+  costAllocationsActions,
   costAllocationsAnchors as tourAnchors,
 } from "@/lib/tours/definitions/cost-allocations";
 import { AllocationBreakdownPanel } from "./allocation-breakdown-panel";
@@ -143,7 +144,7 @@ function AllocationDialog({
             submit();
           }}
         >
-          <label className="block text-sm">
+          <label data-tour={tourAnchors.formName} className="block text-sm">
             <span className="mb-1.5 block font-medium">Name</span>
             <input
               required
@@ -155,7 +156,7 @@ function AllocationDialog({
             />
           </label>
 
-          <label className="block text-sm">
+          <label data-tour={tourAnchors.formTarget} className="block text-sm">
             <span className="mb-1.5 block font-medium">
               Target label (team, cost center, or business unit)
             </span>
@@ -170,7 +171,7 @@ function AllocationDialog({
             />
           </label>
 
-          <label className="block text-sm">
+          <label data-tour={tourAnchors.formPriority} className="block text-sm">
             <span className="mb-1.5 block font-medium">Priority</span>
             <input
               required
@@ -187,7 +188,7 @@ function AllocationDialog({
             </span>
           </label>
 
-          <div>
+          <div data-tour={tourAnchors.formScope}>
             <span className="mb-1.5 block text-sm font-medium">Scope</span>
             <ScopeEditor initialValue={scope} onChange={setScope} />
           </div>
@@ -199,6 +200,7 @@ function AllocationDialog({
           ) : null}
 
           <button
+            data-tour={tourAnchors.formSubmit}
             disabled={pending}
             className="bg-accent text-accent-foreground w-full rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
           >
@@ -320,9 +322,16 @@ export function AllocationsClient({
 
   // The product tour needs no data: rules can be managed without any, and the
   // breakdown steps are skipped when there is nothing to show. It waits for a
-  // remembered breakdown to re-run and never starts over an open dialog.
+  // remembered breakdown to re-run, never starts over an open dialog, and the
+  // form it opens closes unsaved when it moves on.
   usePageTour(COST_ALLOCATIONS_TOUR_KEY, {
     ready: dialogState === "closed" && !deleteTarget && !breakdownPending,
+    actions: {
+      [costAllocationsActions.openForm]: () => {
+        setDialogState("create");
+        return () => setDialogState("closed");
+      },
+    },
   });
 
   function toggleEnabled(allocation: CoreAllocation) {

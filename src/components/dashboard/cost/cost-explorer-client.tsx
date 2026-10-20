@@ -450,31 +450,33 @@ export function CostExplorerClient({
   return (
     <div className="flex flex-col gap-6">
       <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
-        <div
-          data-tour={tourAnchors.query}
-          className="grid gap-4 lg:grid-cols-4"
-        >
-          <label className="block text-sm">
-            <span className="mb-1.5 block font-medium">Start date</span>
-            <input
-              type="date"
-              value={periodStart}
-              max={periodEnd}
-              onChange={(event) => setPeriodStart(event.target.value)}
-              className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 outline-none"
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1.5 block font-medium">End date</span>
-            <input
-              type="date"
-              value={periodEnd}
-              min={periodStart}
-              onChange={(event) => setPeriodEnd(event.target.value)}
-              className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 outline-none"
-            />
-          </label>
-          <label className="block text-sm">
+        <div className="grid gap-4 lg:grid-cols-4">
+          <div
+            data-tour={tourAnchors.dates}
+            className="grid gap-4 lg:col-span-2 lg:grid-cols-2"
+          >
+            <label className="block text-sm">
+              <span className="mb-1.5 block font-medium">Start date</span>
+              <input
+                type="date"
+                value={periodStart}
+                max={periodEnd}
+                onChange={(event) => setPeriodStart(event.target.value)}
+                className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 outline-none"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1.5 block font-medium">End date</span>
+              <input
+                type="date"
+                value={periodEnd}
+                min={periodStart}
+                onChange={(event) => setPeriodEnd(event.target.value)}
+                className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 outline-none"
+              />
+            </label>
+          </div>
+          <label data-tour={tourAnchors.metric} className="block text-sm">
             <span className="mb-1.5 block font-medium">Metric</span>
             <select
               value={metric}
@@ -492,7 +494,7 @@ export function CostExplorerClient({
               )}
             </select>
           </label>
-          <label className="block text-sm">
+          <label data-tour={tourAnchors.granularity} className="block text-sm">
             <span className="mb-1.5 block font-medium">Granularity</span>
             <select
               value={granularity}
@@ -512,9 +514,12 @@ export function CostExplorerClient({
           </label>
         </div>
 
-        <div data-tour={tourAnchors.groupBy} className="mt-5">
+        <div className="mt-5">
           <span className="mb-2 block text-sm font-medium">Group by</span>
-          <div className="flex flex-wrap gap-1.5">
+          <div
+            data-tour={tourAnchors.groupBy}
+            className="flex flex-wrap gap-1.5"
+          >
             {GROUP_BY_DIMENSIONS.map((dimension) => {
               const active = groupBy.some(
                 (field) => field.dimension === dimension,
@@ -535,7 +540,10 @@ export function CostExplorerClient({
               );
             })}
           </div>
-          <div className="mt-2 flex max-w-sm gap-2">
+          <div
+            data-tour={tourAnchors.tagGroup}
+            className="mt-2 flex max-w-sm gap-2"
+          >
             <input
               value={tagGroupKey}
               onChange={(event) => setTagGroupKey(event.target.value)}
