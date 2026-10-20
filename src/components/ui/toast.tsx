@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, Info, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ToastProps {
   message: string;
-  variant?: "success" | "error";
+  variant?: "success" | "error" | "info";
   durationMs?: number;
   onDismiss: () => void;
 }
@@ -30,7 +30,8 @@ export function Toast({
     return () => clearTimeout(removeTimer);
   }, [leaving, onDismiss]);
 
-  const Icon = variant === "success" ? CheckCircle2 : XCircle;
+  const Icon =
+    variant === "success" ? CheckCircle2 : variant === "info" ? Info : XCircle;
 
   return (
     <div
@@ -44,7 +45,11 @@ export function Toast({
       <Icon
         className={cn(
           "mt-0.5 h-4 w-4 shrink-0",
-          variant === "success" ? "text-success" : "text-red-500",
+          variant === "success"
+            ? "text-success"
+            : variant === "info"
+              ? "text-accent"
+              : "text-red-500",
         )}
       />
       <span>{message}</span>

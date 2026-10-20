@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { signOutAction } from "@/app/dashboard/actions";
 import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
 import { BrandLogo } from "@/components/layout/brand-logo";
+import { HelpMenu } from "@/components/tours/help-menu";
 import { SyncNavIndicator } from "./sync-nav-indicator";
 
 const navGroups = [
@@ -510,6 +511,7 @@ export function DashboardShell({
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
+            <HelpMenu />
             <div className="border-border-soft bg-dashboard-panel rounded-xl border shadow-sm">
               <ThemeToggle />
             </div>

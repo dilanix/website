@@ -31,6 +31,7 @@ import type {
   CoreResourceTrafficCoverage,
 } from "@/lib/core/api";
 import { formatPorts } from "@/lib/infrastructure/graph-model";
+import { infrastructureGraphAnchors } from "@/lib/tours/definitions/infrastructure-graph";
 import { EVIDENCE_STYLES, resourceVisual } from "./resource-visuals";
 import { TrafficCoverage } from "./traffic-coverage";
 
@@ -192,7 +193,10 @@ function Shell({
   header: ReactNode;
 }) {
   return (
-    <aside className="border-border-soft bg-dashboard-panel-strong/97 absolute inset-y-3 right-3 z-20 flex w-[min(26rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border shadow-[0_24px_70px_var(--shadow-card)] backdrop-blur-xl">
+    <aside
+      data-tour={infrastructureGraphAnchors.inspector}
+      className="border-border-soft bg-dashboard-panel-strong/97 absolute inset-y-3 right-3 z-20 flex w-[min(26rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border shadow-[0_24px_70px_var(--shadow-card)] backdrop-blur-xl"
+    >
       <div className="flex items-start gap-3 p-4">
         <div className="min-w-0 flex-1">{header}</div>
         <button

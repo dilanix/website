@@ -51,6 +51,19 @@ Services and Resources are connection-scoped and require `billing.read` on the
 connection. Billing remains an internal normalized-data boundary with no
 frontend-facing routes of its own.
 
+Product tours are a platform feature, not product code. Declarative,
+versioned definitions live in `src/lib/tours` (`definitions/*.ts`, listed in
+`registry.ts`); each step targets a `data-tour` anchor the component sets from
+the same constant, and a step whose anchor is not rendered (permissions,
+layout, missing data) is skipped. `TourProvider` (dashboard layout) gates tours
+on active product access, auto-starts a tour once on the page that offers it
+(`usePageTour`, screens ≥768px), resumes or restarts it from the header
+**Help & Support** menu, and saves progress per user through Core's
+`/v1/onboarding/tours` (`tour-actions.ts`); bumping a tour's `version` offers
+it again. `tour-runner.ts` is the only module that uses driver.js (pinned).
+Infrastructure → Graph has the first tour (`infrastructure.graph`); its
+resource-details step opens a real resource through a page-registered action.
+
 The Infrastructure product dashboard has exactly two sections (`ProductTabs`):
 **Graph** at `/dashboard/products/infrastructure` (default) — an interactive
 React Flow canvas laid out and edge-routed by ELK in a Web Worker

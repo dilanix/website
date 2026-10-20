@@ -237,6 +237,50 @@ export function listOrganizationCapabilities(
     token,
   );
 }
+export type CoreTourProgressStatus = "in_progress" | "completed" | "dismissed";
+
+/** The signed-in user's progress through one product tour. Per user, not per
+ *  organization: `tour_key` is opaque to Core — tour definitions live in
+ *  `src/lib/tours`. */
+export interface CoreTourProgress {
+  tour_key: string;
+  tour_version: number;
+  status: CoreTourProgressStatus;
+  step_id: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  dismissed_at: string | null;
+  updated_at: string;
+}
+
+export interface CoreTourProgressUpdate {
+  tour_version: number;
+  status: CoreTourProgressStatus;
+  step_id: string | null;
+}
+
+export async function listTourProgress(token: string) {
+  const response = await coreRequest<{ items: CoreTourProgress[] }>(
+    "/v1/onboarding/tours",
+    token,
+  );
+  return response.items;
+}
+export function saveTourProgress(
+  tourKey: string,
+  token: string,
+  input: CoreTourProgressUpdate,
+) {
+  return coreRequest<CoreTourProgress>(
+    `/v1/onboarding/tours/${encodeURIComponent(tourKey)}`,
+    token,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
 export function listApiKeys(organizationId: string, token: string) {
   return coreRequest<CoreApiKey[]>(
     `/v1/organizations/${organizationId}/api-keys`,
