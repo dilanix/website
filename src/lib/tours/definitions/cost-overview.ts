@@ -1,11 +1,11 @@
 import { sharedTourAnchors } from "../anchors";
 import type { TourDefinition } from "../types";
+import { costAnchors } from "./cost";
 
 export const COST_OVERVIEW_TOUR_KEY = "cost.overview";
 
 /** Anchors the Cost Overview components set (`data-tour={costOverviewAnchors.x}`). */
 export const costOverviewAnchors = {
-  scope: "cost-overview.scope",
   views: "cost-overview.views",
   period: "cost-overview.period",
   totals: "cost-overview.totals",
@@ -40,7 +40,7 @@ export const costOverviewTour: TourDefinition = {
     },
     {
       id: "scope",
-      target: anchors.scope,
+      target: costAnchors.dataScope,
       placement: "bottom",
       title: "Choose whose spend to see",
       body: "Show every connection, one connection, or one connected account. Only connections with billing access are listed, and your choice carries over to Explorer and Allocations.",

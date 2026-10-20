@@ -9,7 +9,7 @@ import type {
   CoreIntegrationTarget,
 } from "@/lib/core/api";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
-import { costOverviewAnchors } from "@/lib/tours/definitions/cost-overview";
+import { costAnchors } from "@/lib/tours/definitions/cost";
 
 const COST_ANALYTICS_PATHS = new Set([
   "/dashboard/products/cost",
@@ -178,7 +178,7 @@ export function CostDataScopeSelector({
 
   return (
     <section
-      data-tour={costOverviewAnchors.scope}
+      data-tour={costAnchors.dataScope}
       className="border-border-soft bg-dashboard-panel flex flex-col justify-between gap-3 rounded-2xl border p-4 shadow-[0_16px_44px_var(--shadow-card)] sm:flex-row sm:items-center"
     >
       <div className="flex min-w-0 items-center gap-3">

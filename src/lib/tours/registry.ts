@@ -1,3 +1,4 @@
+import { costExplorerTour } from "./definitions/cost-explorer";
 import { costOverviewTour } from "./definitions/cost-overview";
 import { infrastructureGraphTour } from "./definitions/infrastructure-graph";
 import type { TourDefinition } from "./types";
@@ -7,6 +8,7 @@ import type { TourDefinition } from "./types";
 export const TOURS: readonly TourDefinition[] = [
   infrastructureGraphTour,
   costOverviewTour,
+  costExplorerTour,
 ];
 
 export function findTour(key: string) {

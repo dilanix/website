@@ -63,8 +63,9 @@ on active product access, auto-starts a tour once on the page that offers it
 it again. `tour-runner.ts` is the only module that uses driver.js (pinned).
 Infrastructure → Graph has the first tour (`infrastructure.graph`); its
 resource-details step opens a real resource through a page-registered action.
-Cost → Overview has `cost.overview`; with no cost data the page withdraws the
-offer (`usePageTour`'s `available: false`), so starting it explains why.
+Cost → Overview has `cost.overview` and Cost → Explorer has `cost.explorer`;
+with no cost data (or an empty query) the page withdraws the offer
+(`usePageTour`'s `available: false`), so starting it explains why.
 
 The Infrastructure product dashboard has exactly two sections (`ProductTabs`):
 **Graph** at `/dashboard/products/infrastructure` (default) — an interactive

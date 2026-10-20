@@ -32,6 +32,11 @@ import {
 } from "@/components/dashboard/cost/scope-editor";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 import { formatAmount } from "@/components/dashboard/cost/format";
+import { usePageTour } from "@/components/tours/tour-provider";
+import {
+  COST_EXPLORER_TOUR_KEY,
+  costExplorerAnchors as tourAnchors,
+} from "@/lib/tours/definitions/cost-explorer";
 
 const METRIC_LABELS: Record<CostUsageMetric, string> = {
   billed_cost: "Billed cost",
@@ -434,10 +439,21 @@ export function CostExplorerClient({
     scopeRestored,
   ]);
 
+  // The product tour runs once a query's results are on screen (after any
+  // remembered query has re-run). An empty result gives it nothing to show,
+  // so the page stops offering it rather than leaving a started one waiting.
+  usePageTour(COST_EXPLORER_TOUR_KEY, {
+    ready: items.length > 0 && !pending,
+    available: items.length > 0 || pending,
+  });
+
   return (
     <div className="flex flex-col gap-6">
       <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
-        <div className="grid gap-4 lg:grid-cols-4">
+        <div
+          data-tour={tourAnchors.query}
+          className="grid gap-4 lg:grid-cols-4"
+        >
           <label className="block text-sm">
             <span className="mb-1.5 block font-medium">Start date</span>
             <input
@@ -496,7 +512,7 @@ export function CostExplorerClient({
           </label>
         </div>
 
-        <div className="mt-5">
+        <div data-tour={tourAnchors.groupBy} className="mt-5">
           <span className="mb-2 block text-sm font-medium">Group by</span>
           <div className="flex flex-wrap gap-1.5">
             {GROUP_BY_DIMENSIONS.map((dimension) => {
@@ -543,7 +559,7 @@ export function CostExplorerClient({
           ) : null}
         </div>
 
-        <div className="mt-5">
+        <div data-tour={tourAnchors.filters} className="mt-5">
           <span className="mb-2 block text-sm font-medium">Filters</span>
           <ScopeEditor
             key={`${scopeEditorKey}:${scopeRestored ? "restored" : "default"}`}
@@ -560,7 +576,10 @@ export function CostExplorerClient({
         ) : null}
 
         <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
-          <div className="flex min-w-0 flex-1 flex-wrap items-end gap-2">
+          <div
+            data-tour={tourAnchors.savedViews}
+            className="flex min-w-0 flex-1 flex-wrap items-end gap-2"
+          >
             <label className="min-w-52 flex-1 text-sm">
               <span className="mb-1.5 block font-medium">Saved view</span>
               <select
@@ -595,6 +614,7 @@ export function CostExplorerClient({
           </div>
           <button
             type="button"
+            data-tour={tourAnchors.run}
             onClick={runQuery}
             disabled={pending}
             className="bg-accent text-accent-foreground inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-medium disabled:opacity-50"
@@ -616,7 +636,10 @@ export function CostExplorerClient({
         />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div
+            data-tour={tourAnchors.totals}
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
             {totals.map(([currency, amount]) => (
               <StatCard
                 key={currency}
@@ -628,7 +651,10 @@ export function CostExplorerClient({
           </div>
 
           {chargeCategoryTotals.length > 0 ? (
-            <div className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]">
+            <div
+              data-tour={tourAnchors.chargeTypes}
+              className="border-border-soft bg-dashboard-panel rounded-2xl border p-5 shadow-[0_16px_44px_var(--shadow-card)]"
+            >
               <h3 className="text-sm font-semibold">By charge type</h3>
               <p className="text-muted-foreground mt-1 text-xs">
                 Usage minus credits/discounts nets to the totals above — a
@@ -655,7 +681,10 @@ export function CostExplorerClient({
             </div>
           ) : null}
 
-          <div className="flex items-center gap-1.5">
+          <div
+            data-tour={tourAnchors.results}
+            className="flex items-center gap-1.5"
+          >
             <button
               type="button"
               onClick={() => setViewMode("summary")}

@@ -11,7 +11,11 @@ import {
   runCostExplorerSavedViewAction,
 } from "@/app/dashboard/products/cost-actions";
 import type { CoreCostExplorerPoint, CoreSavedView } from "@/lib/core/api";
+import { COST_EXPLORER_TOUR_KEY } from "@/lib/tours/definitions/cost-explorer";
 import { CostExplorerClient } from "./cost-explorer-client";
+
+const { usePageTour } = vi.hoisted(() => ({ usePageTour: vi.fn() }));
+vi.mock("@/components/tours/tour-provider", () => ({ usePageTour }));
 
 vi.mock("@/app/dashboard/products/cost-actions", () => ({
   queryCostExplorerAction: vi.fn(),
@@ -233,5 +237,59 @@ describe("CostExplorerClient", () => {
     );
     expect(await screen.findByText("Service: Amazon EC2")).toBeTruthy();
   }, 20_000);
-});
 
+  describe("product tour", () => {
+    const offer = () => usePageTour.mock.calls.at(-1);
+    const renderExplorer = (initialItems: CoreCostExplorerPoint[]) =>
+      render(
+        <CostExplorerClient
+          initialItems={initialItems}
+          initialPeriodStart="2026-09-01"
+          initialPeriodEnd="2026-09-11"
+          savedViews={[]}
+          connectionId={null}
+          targetId={null}
+        />,
+      );
+
+    it("offers the Explorer tour once results are on screen", () => {
+      renderExplorer([point]);
+      expect(offer()).toEqual([
+        COST_EXPLORER_TOUR_KEY,
+        { ready: true, available: true },
+      ]);
+    });
+
+    it("withdraws the tour while the query has no results, and offers it again once one does", async () => {
+      let resolve: (value: {
+        data: { items: CoreCostExplorerPoint[] };
+      }) => void = () => {};
+      vi.mocked(queryCostExplorerAction).mockReturnValue(
+        new Promise((settle) => {
+          resolve = settle;
+        }),
+      );
+      renderExplorer([]);
+      expect(offer()).toEqual([
+        COST_EXPLORER_TOUR_KEY,
+        { ready: false, available: false },
+      ]);
+
+      fireEvent.click(screen.getByRole("button", { name: /Run query/ }));
+      await waitFor(() =>
+        expect(offer()).toEqual([
+          COST_EXPLORER_TOUR_KEY,
+          { ready: false, available: true },
+        ]),
+      );
+
+      resolve({ data: { items: [point] } });
+      await waitFor(() =>
+        expect(offer()).toEqual([
+          COST_EXPLORER_TOUR_KEY,
+          { ready: true, available: true },
+        ]),
+      );
+    });
+  });
+});
