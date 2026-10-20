@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getBlogPosts, getBlogPostBySlug } from "@/lib/data/blog";
@@ -42,7 +43,10 @@ export default async function BlogPostPage({
     headline: post.title,
     description: post.excerpt,
     datePublished: post.publishedAt,
-    author: { "@type": "Organization", name: post.author?.name ?? siteConfig.name },
+    author: {
+      "@type": "Organization",
+      name: post.author?.name ?? siteConfig.name,
+    },
     publisher: { "@type": "Organization", name: siteConfig.name },
     mainEntityOfPage: `${siteConfig.url}/blog/${post.slug}`,
   };
@@ -104,6 +108,20 @@ export default async function BlogPostPage({
             </div>
           )}
         </div>
+
+        {post.coverImageUrl ? (
+          <div className="border-foreground/10 relative mt-10 aspect-[16/9] overflow-hidden rounded-2xl border">
+            <Image
+              src={post.coverImageUrl}
+              alt={post.title}
+              fill
+              priority
+              unoptimized
+              sizes="(min-width: 768px) 768px, 100vw"
+              className="object-cover"
+            />
+          </div>
+        ) : null}
 
         {/* Article Body */}
         <div className="border-foreground/10 text-foreground/90 mt-12 space-y-6 border-t pt-10 text-base leading-relaxed sm:text-lg">
@@ -176,7 +194,8 @@ export default async function BlogPostPage({
               Explore custom infrastructure software with Dilanix
             </h3>
             <p className="text-muted-foreground mt-2 max-w-md text-xs sm:text-sm">
-              We partner with high-scale engineering organizations to build focused solutions.
+              We partner with high-scale engineering organizations to build
+              focused solutions.
             </p>
           </div>
 
