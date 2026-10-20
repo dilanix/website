@@ -1,9 +1,13 @@
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { TourProvider } from "@/components/tours/tour-provider";
 import { DashboardFilterStorageProvider } from "@/lib/dashboard/filter-storage";
 import {
   listOrganizationCapabilities,
   listOrganizationProducts,
+  listTourProgress,
+  type CoreOrganizationCapability,
 } from "@/lib/core/api";
+import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
 import { toDashboardProduct } from "@/lib/dashboard/products";
 import { getDashboardSession } from "@/lib/dashboard/session";
 
@@ -11,39 +15,54 @@ export default async function DashboardLayout({
   children,
 }: LayoutProps<"/dashboard">) {
   const { token, me, organization } = await getDashboardSession();
-  const [products, organizationCapabilities] = organization
-    ? await Promise.all([
-        listOrganizationProducts(organization.organization_id, token).then(
-          (items) => items.map((product) => toDashboardProduct(product)),
-        ),
-        listOrganizationCapabilities(organization.organization_id, token),
-      ])
-    : [[], []];
+  const [[products, organizationCapabilities], tourProgress] =
+    await Promise.all([
+      organization
+        ? Promise.all([
+            listOrganizationProducts(organization.organization_id, token).then(
+              (items) => items.map((product) => toDashboardProduct(product)),
+            ),
+            listOrganizationCapabilities(organization.organization_id, token),
+          ])
+        : Promise.resolve<[DashboardProduct[], CoreOrganizationCapability[]]>([
+            [],
+            [],
+          ]),
+      // Tours are an enhancement: without progress they never auto-start.
+      listTourProgress(token).catch(() => null),
+    ]);
 
   return (
-    <DashboardShell
-      user={{
-        firstName: me.first_name,
-        lastName: me.last_name,
-        email: me.email,
-      }}
-      organization={
-        organization
-          ? {
-              name: organization.organization_name,
-            }
-          : null
-      }
-      products={products}
-      activeCapabilityCodes={organizationCapabilities
-        .filter((capability) => capability.access_status === "active")
-        .map((capability) => capability.code)}
+    <TourProvider
+      progress={tourProgress}
+      activeProductSlugs={products
+        .filter((product) => product.status === "active")
+        .map((product) => product.slug)}
     >
-      <DashboardFilterStorageProvider
-        namespace={organization?.organization_id ?? `user:${me.email}`}
+      <DashboardShell
+        user={{
+          firstName: me.first_name,
+          lastName: me.last_name,
+          email: me.email,
+        }}
+        organization={
+          organization
+            ? {
+                name: organization.organization_name,
+              }
+            : null
+        }
+        products={products}
+        activeCapabilityCodes={organizationCapabilities
+          .filter((capability) => capability.access_status === "active")
+          .map((capability) => capability.code)}
       >
-        {children}
-      </DashboardFilterStorageProvider>
-    </DashboardShell>
+        <DashboardFilterStorageProvider
+          namespace={organization?.organization_id ?? `user:${me.email}`}
+        >
+          {children}
+        </DashboardFilterStorageProvider>
+      </DashboardShell>
+    </TourProvider>
   );
 }

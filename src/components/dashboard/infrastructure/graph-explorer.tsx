@@ -66,6 +66,12 @@ import {
 } from "@/lib/infrastructure/graph-layout";
 import { buildTraceIndex, traceFrom } from "@/lib/infrastructure/graph-trace";
 import {
+  INFRASTRUCTURE_GRAPH_TOUR_KEY,
+  infrastructureGraphActions,
+  infrastructureGraphAnchors as tourAnchors,
+} from "@/lib/tours/definitions/infrastructure-graph";
+import { usePageTour } from "@/components/tours/tour-provider";
+import {
   getGraphConnectionAction,
   getGraphResourceAction,
 } from "@/app/dashboard/products/infrastructure-actions";
@@ -418,6 +424,33 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
     setSelection(null);
     setHovered(null);
   }, []);
+
+  // The product tour runs once the first layout is on screen; its resource
+  // details step opens the drawn resource with the most connections.
+  usePageTour(INFRASTRUCTURE_GRAPH_TOUR_KEY, {
+    ready: rendered !== null,
+    actions: {
+      [infrastructureGraphActions.openResourceDetails]: () => {
+        if (selection?.type === "resource" || !rendered) return;
+        const degree = new Map<string, number>();
+        for (const edge of rendered.model.edges) {
+          degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1);
+          degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1);
+        }
+        const best = rendered.model.nodes
+          .filter((node) => node.kind === "resource")
+          .reduce<string | null>(
+            (current, node) =>
+              current === null ||
+              (degree.get(node.id) ?? 0) > (degree.get(current) ?? 0)
+                ? node.id
+                : current,
+            null,
+          );
+        if (best) focusResource(best);
+      },
+    },
+  });
 
   const changeStructure = (apply: () => void) => {
     fitRequest.current = { type: "all" };
@@ -806,6 +839,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
     <div
       ref={rootRef}
       data-lod="mid"
+      data-tour={tourAnchors.canvas}
       className={cn(
         "graph-workspace relative h-full w-full overflow-hidden",
         fullscreen !== "off" && "bg-background",
@@ -931,7 +965,10 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
             : "0.75rem",
         }}
       >
-        <div className="pointer-events-auto relative w-full max-w-xs">
+        <div
+          data-tour={tourAnchors.search}
+          className="pointer-events-auto relative w-full max-w-xs"
+        >
           <Search
             size={14}
             className="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2"
@@ -998,6 +1035,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
           className={cn(panel, "flex p-1")}
           role="tablist"
           aria-label="Graph mode"
+          data-tour={tourAnchors.modes}
         >
           {GRAPH_MODES.map((item) => (
             <button
@@ -1069,6 +1107,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
             className={cn(panel, "flex p-1")}
             role="tablist"
             aria-label="Graph view"
+            data-tour={tourAnchors.views}
           >
             {GRAPH_VIEWS.map((item) => (
               <button
@@ -1100,64 +1139,78 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
               aria-label="Laying out"
             />
           ) : null}
-          <ToolbarButton
-            label="Zoom out"
-            onClick={() => void flow.zoomOut({ duration: 200 })}
+          <div
+            data-tour={tourAnchors.navigation}
+            className="flex items-center gap-0.5"
           >
-            <Minus size={14} />
-          </ToolbarButton>
-          <ZoomReadout />
-          <ToolbarButton
-            label="Zoom in"
-            onClick={() => void flow.zoomIn({ duration: 200 })}
-          >
-            <Plus size={14} />
-          </ToolbarButton>
-          <ToolbarButton
-            label="Fit to view"
-            onClick={() => void flow.fitView({ ...FIT_OPTIONS, duration: 300 })}
-          >
-            <Maximize size={14} />
-          </ToolbarButton>
-          <ToolbarButton label="Reset view" onClick={resetView}>
-            <RotateCcw size={14} />
-          </ToolbarButton>
+            <ToolbarButton
+              label="Zoom out"
+              onClick={() => void flow.zoomOut({ duration: 200 })}
+            >
+              <Minus size={14} />
+            </ToolbarButton>
+            <ZoomReadout />
+            <ToolbarButton
+              label="Zoom in"
+              onClick={() => void flow.zoomIn({ duration: 200 })}
+            >
+              <Plus size={14} />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Fit to view"
+              onClick={() =>
+                void flow.fitView({ ...FIT_OPTIONS, duration: 300 })
+              }
+            >
+              <Maximize size={14} />
+            </ToolbarButton>
+            <ToolbarButton label="Reset view" onClick={resetView}>
+              <RotateCcw size={14} />
+            </ToolbarButton>
+          </div>
           <span className="bg-border-soft mx-0.5 h-5 w-px" aria-hidden="true" />
-          <ToolbarButton
-            label="Expand all"
-            onClick={() =>
-              changeStructure(() => {
-                setCollapsedGroups(new Set());
-                setExpanded(
-                  new Set(
-                    model.nodes
-                      .filter((node) => node.kind === "resource")
-                      .map((node) => node.id),
-                  ),
-                );
-              })
-            }
+          <div
+            data-tour={tourAnchors.expandCollapse}
+            className="flex items-center gap-0.5"
           >
-            <ChevronsUpDown size={14} />
-          </ToolbarButton>
-          <ToolbarButton
-            label="Collapse all"
-            onClick={() =>
-              changeStructure(() => {
-                setExpanded(new Set());
-                setCollapsedGroups(
-                  new Set(
-                    model.nodes
-                      .filter((node) => node.kind === "group" && !node.parentId)
-                      .map((node) => node.id),
-                  ),
-                );
-              })
-            }
-          >
-            <ChevronsDownUp size={14} />
-          </ToolbarButton>
-          <div className="relative">
+            <ToolbarButton
+              label="Expand all"
+              onClick={() =>
+                changeStructure(() => {
+                  setCollapsedGroups(new Set());
+                  setExpanded(
+                    new Set(
+                      model.nodes
+                        .filter((node) => node.kind === "resource")
+                        .map((node) => node.id),
+                    ),
+                  );
+                })
+              }
+            >
+              <ChevronsUpDown size={14} />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Collapse all"
+              onClick={() =>
+                changeStructure(() => {
+                  setExpanded(new Set());
+                  setCollapsedGroups(
+                    new Set(
+                      model.nodes
+                        .filter(
+                          (node) => node.kind === "group" && !node.parentId,
+                        )
+                        .map((node) => node.id),
+                    ),
+                  );
+                })
+              }
+            >
+              <ChevronsDownUp size={14} />
+            </ToolbarButton>
+          </div>
+          <div data-tour={tourAnchors.filters} className="relative">
             <ToolbarButton
               label="Filter resource categories"
               onClick={() => setFiltersOpen((open) => !open)}

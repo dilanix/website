@@ -3,6 +3,7 @@
 import type { Route } from "next";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
+import { infrastructureGraphAnchors } from "@/lib/tours/definitions/infrastructure-graph";
 
 interface Option {
   value: string;
@@ -74,7 +75,10 @@ export function GraphScopeBar({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div
+      data-tour={infrastructureGraphAnchors.scope}
+      className="flex flex-wrap items-center gap-2"
+    >
       <Select
         label="Connection"
         value={selected.connection}

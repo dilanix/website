@@ -235,6 +235,11 @@ export function QuickstartPage() {
         <Faq
           items={[
             {
+              question: "Is there a guided tour?",
+              answer:
+                "Yes — the Infrastructure graph shows a short tour the first time you open it. Replay it anytime from Help & Support, the question-mark button at the top of every dashboard page.",
+            },
+            {
               question: "Do I need the FOCUS billing export?",
               answer:
                 "No — Cost works with Cost Explorer totals alone. The export adds per-resource, per-tag, and per-charge detail, which allocations, scoped budgets, the Resources view, and most savings estimates rely on.",

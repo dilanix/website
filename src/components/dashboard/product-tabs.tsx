@@ -3,6 +3,7 @@
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { sharedTourAnchors } from "@/lib/tours/anchors";
 import { cn } from "@/lib/utils";
 
 function tabClassName(active: boolean) {
@@ -73,7 +74,10 @@ export function ProductTabs({ slug }: { slug: string }) {
   ];
 
   return (
-    <div className="border-foreground/10 flex gap-1 overflow-x-auto border-b">
+    <div
+      data-tour={sharedTourAnchors.productTabs}
+      className="border-foreground/10 flex gap-1 overflow-x-auto border-b"
+    >
       {tabs.map((tab) => {
         const path = tab.path ? `${base}/${tab.path}` : base;
         const href = `${path}${costScopeQuery ? `?${costScopeQuery}` : ""}`;
