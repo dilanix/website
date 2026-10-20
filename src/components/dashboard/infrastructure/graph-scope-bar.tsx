@@ -15,14 +15,19 @@ function Select({
   value,
   options,
   onChange,
+  tourAnchor,
 }: {
   label: string;
   value: string;
   options: Option[];
   onChange: (value: string) => void;
+  tourAnchor: string;
 }) {
   return (
-    <label className="border-border-soft bg-dashboard-panel-strong/80 relative flex h-9 items-center rounded-xl border pr-8 pl-3 text-xs shadow-[0_8px_22px_var(--shadow-card)]">
+    <label
+      data-tour={tourAnchor}
+      className="border-border-soft bg-dashboard-panel-strong/80 relative flex h-9 items-center rounded-xl border pr-8 pl-3 text-xs shadow-[0_8px_22px_var(--shadow-card)]"
+    >
       <span className="text-muted-foreground mr-2">{label}</span>
       <select
         value={value}
@@ -75,21 +80,20 @@ export function GraphScopeBar({
   };
 
   return (
-    <div
-      data-tour={infrastructureGraphAnchors.scope}
-      className="flex flex-wrap items-center gap-2"
-    >
+    <div className="flex flex-wrap items-center gap-2">
       <Select
         label="Connection"
         value={selected.connection}
         options={connections}
         onChange={(connection) => navigate({ connection })}
+        tourAnchor={infrastructureGraphAnchors.scopeConnection}
       />
       <Select
         label="Account"
         value={selected.target}
         options={targets}
         onChange={(target) => navigate({ target, region: "" })}
+        tourAnchor={infrastructureGraphAnchors.scopeAccount}
       />
       <Select
         label="Region"
@@ -99,9 +103,13 @@ export function GraphScopeBar({
           ...regions.map((region) => ({ value: region, label: region })),
         ]}
         onChange={(region) => navigate({ region })}
+        tourAnchor={infrastructureGraphAnchors.scopeRegion}
       />
       {resolvedAt ? (
-        <span className="text-muted-foreground ml-auto text-[11px]">
+        <span
+          data-tour={infrastructureGraphAnchors.resolved}
+          className="text-muted-foreground ml-auto text-[11px]"
+        >
           Relationships resolved{" "}
           {new Intl.DateTimeFormat("en", {
             dateStyle: "medium",

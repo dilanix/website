@@ -11,13 +11,15 @@ export interface TourStep {
    *  missing data) is skipped, so a tour never points at unavailable UI. */
   target?: string;
   title: string;
+  /** Plain text; a line break starts a new line in the popover. */
   body: string;
   placement?: TourPlacement;
   /** A page-registered action run before the step shows (e.g. open a panel
    *  with real data, or a form to walk through); the step then waits for its
    *  target to appear. Consecutive steps with the same `prepare` share one
    *  run, and its cleanup (e.g. closing the form) runs when the tour moves to
-   *  a step without it, or ends. */
+   *  a step without it, or ends. An action the page cannot run (it returns
+   *  `false`) skips every step that shares it. */
   prepare?: string;
 }
 

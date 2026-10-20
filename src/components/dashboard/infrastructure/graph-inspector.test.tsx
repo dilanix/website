@@ -5,7 +5,13 @@ import type {
   CoreGraphNode,
   CoreGraphNodeDetail,
 } from "@/lib/core/api";
-import { ConnectionInspector, ResourceInspector } from "./graph-inspector";
+import { tourTargetSelector } from "@/lib/tours/anchors";
+import { infrastructureGraphAnchors as tourAnchors } from "@/lib/tours/definitions/infrastructure-graph";
+import {
+  ConnectionInspector,
+  InspectorLoading,
+  ResourceInspector,
+} from "./graph-inspector";
 
 afterEach(cleanup);
 
@@ -552,5 +558,59 @@ describe("ConnectionInspector for logged load balancer requests", () => {
         /ALB access logs recorded 1,200 requests from adverse-media-api to production-db \(port 8080\), 2 with a 5xx response.*best-effort.*not registered in the logged target group/,
       ),
     ).toBeTruthy();
+  });
+});
+
+describe("product tour anchors", () => {
+  const anchored = (anchor: string) =>
+    document.querySelector(tourTargetSelector(anchor));
+
+  it("marks only a loaded inspector, so a tour step waits past loading", () => {
+    render(<InspectorLoading onClose={vi.fn()} />);
+    expect(anchored(tourAnchors.inspector)).toBeNull();
+    expect(anchored(tourAnchors.connection)).toBeNull();
+    cleanup();
+
+    render(
+      <ResourceInspector
+        detail={{
+          node: db,
+          connection_id: "conn-1",
+          provider_resource_key: "db",
+          zone: null,
+          tags: {},
+          extra: {},
+          capacity: {},
+          first_seen_at: "2026-09-01T10:00:00Z",
+          last_seen_at: "2026-09-28T10:00:00Z",
+        }}
+        neighborhood={{ resource: db, edges: [], peers: [], total_edges: 0 }}
+        external={null}
+        onClose={vi.fn()}
+        onSelectResource={vi.fn()}
+        onSelectRelationship={vi.fn()}
+      />,
+    );
+    expect(anchored(tourAnchors.inspector)).not.toBeNull();
+    expect(anchored(tourAnchors.inspectorTabs)?.getAttribute("role")).toBe(
+      "tablist",
+    );
+    cleanup();
+
+    render(
+      <ConnectionInspector
+        detail={connection}
+        hops={["edge-1"]}
+        activeHop="edge-1"
+        onSelectHop={vi.fn()}
+        onClose={vi.fn()}
+        onSelectResource={vi.fn()}
+      />,
+    );
+    expect(anchored(tourAnchors.connection)).not.toBeNull();
+    expect(anchored(tourAnchors.connectionStatus)?.textContent).toContain(
+      "Internet path",
+    );
+    expect(anchored(tourAnchors.inspector)).toBeNull();
   });
 });

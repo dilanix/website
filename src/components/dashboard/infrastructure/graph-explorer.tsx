@@ -144,15 +144,18 @@ function ToolbarButton({
   onClick,
   children,
   active,
+  tourAnchor,
 }: {
   label: string;
   onClick: () => void;
   children: React.ReactNode;
   active?: boolean;
+  tourAnchor?: string;
 }) {
   return (
     <button
       type="button"
+      data-tour={tourAnchor}
       onClick={onClick}
       aria-label={label}
       title={label}
@@ -195,7 +198,7 @@ function LevelOfDetail({
 
 function Legend() {
   return (
-    <div className={cn(panel, "px-3 py-2")}>
+    <div data-tour={tourAnchors.legend} className={cn(panel, "px-3 py-2")}>
       <ul className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {(Object.keys(EVIDENCE_STYLES) as (keyof typeof EVIDENCE_STYLES)[]).map(
           (kind) => (
@@ -425,37 +428,74 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
     setHovered(null);
   }, []);
 
-  // The product tour runs once the first layout is on screen; its resource
-  // details step opens the drawn resource with the most connections.
-  usePageTour(INFRASTRUCTURE_GRAPH_TOUR_KEY, {
-    ready: rendered !== null,
-    actions: {
-      [infrastructureGraphActions.openResourceDetails]: () => {
-        if (selection?.type === "resource" || !rendered) return;
-        const degree = new Map<string, number>();
-        for (const edge of rendered.model.edges) {
-          degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1);
-          degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1);
-        }
-        const best = rendered.model.nodes
-          .filter((node) => node.kind === "resource")
-          .reduce<string | null>(
-            (current, node) =>
-              current === null ||
-              (degree.get(node.id) ?? 0) > (degree.get(current) ?? 0)
-                ? node.id
-                : current,
-            null,
-          );
-        if (best) focusResource(best);
-      },
-    },
-  });
-
   const changeStructure = (apply: () => void) => {
     fitRequest.current = { type: "all" };
     apply();
   };
+
+  const switchMode = (next: GraphMode) =>
+    changeStructure(() => {
+      setMode(next);
+      setExpanded(new Set());
+      setCollapsedGroups(new Set());
+    });
+
+  /** The drawn resource with the most connections, and one of its lines —
+   *  the product tour's examples. */
+  const tourExample = () => {
+    if (!rendered) return null;
+    const { nodes: drawn, edges: lines } = rendered.model;
+    const degree = new Map<string, number>();
+    for (const edge of lines) {
+      degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1);
+      degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1);
+    }
+    const resource = drawn
+      .filter((node) => node.kind === "resource")
+      .reduce<string | null>(
+        (current, node) =>
+          current === null ||
+          (degree.get(node.id) ?? 0) > (degree.get(current) ?? 0)
+            ? node.id
+            : current,
+        null,
+      );
+    const explained = lines.filter((edge) => edge.facts.length > 0);
+    const line =
+      explained.find(
+        (edge) => edge.source === resource || edge.target === resource,
+      ) ?? explained[0];
+    return { resource, line };
+  };
+
+  // The product tour runs once the first layout is on screen. Its steps switch
+  // to Runtime, then open the most connected resource and one of its lines;
+  // each cleanup puts the canvas back once the tour moves past those steps.
+  usePageTour(INFRASTRUCTURE_GRAPH_TOUR_KEY, {
+    ready: rendered !== null,
+    actions: {
+      [infrastructureGraphActions.showRuntime]: () => {
+        if (mode !== "runtime") switchMode("runtime");
+        return () => switchMode("provisioned");
+      },
+      [infrastructureGraphActions.openResourceDetails]: () => {
+        // Keep a resource the user already opened.
+        if (selection?.type === "resource") return;
+        const resource = tourExample()?.resource;
+        if (!resource) return false;
+        focusResource(resource);
+        return clearSelection;
+      },
+      [infrastructureGraphActions.openConnectionDetails]: () => {
+        if (selection?.type === "connection") return;
+        const line = tourExample()?.line;
+        const strongest = line?.facts[0]?.relationshipIds.at(-1);
+        if (!line || !strongest) return false;
+        loadConnection(line.relationshipIds, strongest);
+        return clearSelection;
+      },
+    },
+  });
 
   const resetView = () => {
     changeStructure(() => {
@@ -1045,12 +1085,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
               aria-selected={mode === item.id}
               title={item.hint}
               onClick={() => {
-                if (item.id === mode) return;
-                changeStructure(() => {
-                  setMode(item.id);
-                  setExpanded(new Set());
-                  setCollapsedGroups(new Set());
-                });
+                if (item.id !== mode) switchMode(item.id);
               }}
               className={cn(
                 "rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors",
@@ -1068,6 +1103,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
           <div
             className={cn(panel, "flex flex-wrap items-center gap-1 p-1")}
             aria-label="Evidence shown"
+            data-tour={tourAnchors.evidence}
           >
             {(Object.keys(EVIDENCE_STYLES) as CoreEvidenceKind[]).map(
               (kind) => {
@@ -1250,6 +1286,7 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
             }
             onClick={() => void toggleFullscreen()}
             active={fullscreen !== "off"}
+            tourAnchor={tourAnchors.fullscreen}
           >
             {fullscreen === "off" ? (
               <Maximize2 size={14} />

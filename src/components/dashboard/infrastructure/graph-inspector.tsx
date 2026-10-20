@@ -129,13 +129,16 @@ function Tabs<T extends string>({
   tabs,
   active,
   onChange,
+  tourAnchor,
 }: {
   tabs: { id: T; label: string; count?: number }[];
   active: T;
   onChange: (tab: T) => void;
+  tourAnchor?: string;
 }) {
   return (
     <div
+      data-tour={tourAnchor}
       className="border-border-soft flex gap-1 overflow-x-auto border-b px-4"
       role="tablist"
     >
@@ -183,18 +186,22 @@ function Rows({ rows }: { rows: [string, ReactNode][] }) {
   );
 }
 
+/** The inspector panel. Only a loaded inspector carries a tour anchor, so a
+ *  tour step waits past the loading state for the real content. */
 function Shell({
   children,
   onClose,
   header,
+  tourAnchor,
 }: {
   children: ReactNode;
   onClose: () => void;
   header: ReactNode;
+  tourAnchor?: string;
 }) {
   return (
     <aside
-      data-tour={infrastructureGraphAnchors.inspector}
+      data-tour={tourAnchor}
       className="border-border-soft bg-dashboard-panel-strong/97 absolute inset-y-3 right-3 z-20 flex w-[min(26rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border shadow-[0_24px_70px_var(--shadow-card)] backdrop-blur-xl"
     >
       <div className="flex items-start gap-3 p-4">
@@ -598,6 +605,7 @@ export function ResourceInspector({
   return (
     <Shell
       onClose={onClose}
+      tourAnchor={infrastructureGraphAnchors.inspector}
       header={
         <div className="flex items-center gap-3">
           <ResourceTile node={node} size={44} />
@@ -637,6 +645,7 @@ export function ResourceInspector({
       <Tabs<ResourceTab>
         active={tab}
         onChange={setTab}
+        tourAnchor={infrastructureGraphAnchors.inspectorTabs}
         tabs={[
           { id: "overview", label: "Overview" },
           { id: "network", label: "Network" },
@@ -1118,6 +1127,7 @@ export function ConnectionInspector({
   return (
     <Shell
       onClose={onClose}
+      tourAnchor={infrastructureGraphAnchors.connection}
       header={
         <div>
           <p className="flex items-center gap-1.5 text-base font-semibold">
@@ -1153,7 +1163,10 @@ export function ConnectionInspector({
             ))}
           </div>
         ) : null}
-        <div className="flex flex-wrap gap-1.5">
+        <div
+          data-tour={infrastructureGraphAnchors.connectionStatus}
+          className="flex flex-wrap gap-1.5"
+        >
           <StatusChip
             label="Configured"
             value={status.configured}

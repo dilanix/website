@@ -15,15 +15,18 @@ export interface TourRun {
 export interface TourRunOptions {
   startIndex: number;
   /** Runs a step's `prepare` action. It may return a cleanup that undoes what
-   *  it set up (e.g. closes the form it opened). */
-  runAction: (actionId: string) => void | (() => void);
+   *  it set up (e.g. closes the form it opened), or `false` when the page has
+   *  nothing to set up (e.g. no connection to open), which skips the steps
+   *  that need it. */
+  runAction: (actionId: string) => void | false | (() => void);
   onStep: (step: TourStep) => void;
   onFinish: (outcome: TourOutcome, step: TourStep | undefined) => void;
 }
 
-/** How long a prepared step waits for its target (e.g. a panel that loads
- *  real data) before it is skipped. */
-const PREPARED_TARGET_WAIT_MS = 4000;
+/** How long a step waits for its target before it is skipped — e.g. a panel a
+ *  prepared step opens that loads real data, or UI that renders again once a
+ *  prepared step's page state is undone. A target already there shows at once. */
+const TARGET_WAIT_MS = 4000;
 
 function escapeHtml(text: string) {
   return text
@@ -103,23 +106,37 @@ export function runTour(
   // steps share that action, and is undone once the tour moves on or ends.
   let prepared: { action: string; cleanup?: () => void } | null = null;
 
+  /** Sets up step `index`'s page state; false when the page could not. */
   const prepare = (index: number) => {
     const action = steps[index]?.prepare;
-    if (prepared?.action === action) return;
+    if (prepared?.action === action) return true;
     prepared?.cleanup?.();
     prepared = null;
-    if (!action) return;
-    const cleanup = runAction(action);
-    prepared = { action, cleanup: cleanup ?? undefined };
+    if (!action) return true;
+    const result = runAction(action);
+    if (result === false) return false;
+    prepared = { action, cleanup: result ?? undefined };
+    return true;
+  };
+
+  /** The first step from `index` on (in `direction`) whose page state could be
+   *  set up — passing every step of an action the page could not run — or -1. */
+  const settle = (index: number, direction: 1 | -1) => {
+    let target = index;
+    while (steps[target] && !prepare(target)) {
+      const action = steps[target]?.prepare;
+      while (steps[target]?.prepare === action) target += direction;
+    }
+    return steps[target] ? target : -1;
   };
 
   const instance = driver({
     steps: steps.map((step): DriveStep => ({
       element: step.target ? tourTargetSelector(step.target) : undefined,
-      waitForElement: step.prepare ? PREPARED_TARGET_WAIT_MS : 0,
+      waitForElement: step.target ? TARGET_WAIT_MS : 0,
       popover: {
         title: escapeHtml(step.title),
-        description: escapeHtml(step.body),
+        description: escapeHtml(step.body).replaceAll("\n", "<br>"),
         side: step.placement,
         align: "start",
       },
@@ -148,14 +165,13 @@ export function runTour(
       if (current) onStep(current);
     },
     onNextClick: (_element, _step, { index }) => {
-      const next = (index ?? 0) + 1;
-      prepare(next);
-      instance.moveTo(next);
+      const next = settle((index ?? 0) + 1, 1);
+      if (next < 0) finish("completed");
+      else instance.moveTo(next);
     },
     onPrevClick: (_element, _step, { index }) => {
-      const previous = (index ?? 0) - 1;
-      prepare(previous);
-      instance.moveTo(previous);
+      const previous = settle((index ?? 0) - 1, -1);
+      instance.moveTo(previous < 0 ? settle(index ?? 0, 1) : previous);
     },
     onDoneClick: () => finish("completed"),
     // Escape (driver.js routes every user-initiated close here).
@@ -173,7 +189,8 @@ export function runTour(
     onFinish(outcome, current);
   }
 
-  prepare(first);
-  instance.drive(first);
+  const start = settle(first, 1);
+  if (start < 0) finish("interrupted");
+  else instance.drive(start);
   return { stop: () => finish("interrupted") };
 }

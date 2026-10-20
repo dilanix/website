@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Radar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CoreInteractionSourceStatus } from "@/lib/core/api";
+import { infrastructureGraphAnchors } from "@/lib/tours/definitions/infrastructure-graph";
 
 export const SOURCE_LABELS: Record<
   string,
@@ -107,7 +108,7 @@ export function InteractionSources({
   ).length;
 
   return (
-    <div className="relative">
+    <div data-tour={infrastructureGraphAnchors.sources} className="relative">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}

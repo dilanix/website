@@ -61,8 +61,10 @@ on active product access, auto-starts a tour once on the page that offers it
 **Help & Support** menu, and saves progress per user through Core's
 `/v1/onboarding/tours` (`tour-actions.ts`); bumping a tour's `version` offers
 it again. `tour-runner.ts` is the only module that uses driver.js (pinned).
-Infrastructure → Graph has the first tour (`infrastructure.graph`); its
-resource-details step opens a real resource through a page-registered action.
+Infrastructure → Graph has `infrastructure.graph`, which covers every graph
+control; page-registered actions switch it to Runtime and open a real resource
+and connection, and an action the page cannot run (e.g. no relationships yet)
+returns `false`, so the steps that need it are skipped.
 Cost → Overview has `cost.overview` and Cost → Explorer has `cost.explorer`;
 with no cost data (or an empty query) the page withdraws the offer
 (`usePageTour`'s `available: false`), so starting it explains why. Cost →

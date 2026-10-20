@@ -217,5 +217,49 @@ describe("runTour", () => {
         expect(onFinish).toHaveBeenCalledWith(outcome, formTour.steps[1]);
       },
     );
+
+    it("skips every step of an action the page cannot set up", async () => {
+      const runAction = vi.fn(() => false as const);
+      const onStep = vi.fn();
+      run = runTour(formTour, {
+        startIndex: 0,
+        runAction,
+        onStep,
+        onFinish: vi.fn(),
+      });
+
+      click(".driver-popover-next-btn");
+      expect(onStep).toHaveBeenLastCalledWith(formTour.steps[3]);
+      click(".driver-popover-prev-btn");
+      expect(onStep).toHaveBeenLastCalledWith(formTour.steps[0]);
+      expect(runAction).toHaveBeenCalledTimes(2);
+    });
+
+    it("resumes past a stored step the page cannot set up", () => {
+      const onStep = vi.fn();
+      run = runTour(formTour, {
+        startIndex: 2,
+        runAction: () => false,
+        onStep,
+        onFinish: vi.fn(),
+      });
+      expect(onStep).toHaveBeenLastCalledWith(formTour.steps[3]);
+    });
+  });
+
+  it("shows line breaks in a step's text as separate lines", () => {
+    run = runTour(
+      {
+        ...tour,
+        steps: [
+          { id: "list", title: "List", body: "First <one>\nSecond" },
+          { id: "end", title: "End", body: "Bye" },
+        ],
+      },
+      { startIndex: 0, runAction: vi.fn(), onStep: vi.fn(), onFinish: vi.fn() },
+    );
+    expect(
+      popover().querySelector(".driver-popover-description")?.innerHTML,
+    ).toBe("First &lt;one&gt;<br>Second");
   });
 });
