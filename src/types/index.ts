@@ -95,6 +95,7 @@ export interface BlogPost {
   title: string;
   excerpt: string;
   content?: string;
+  coverImageUrl?: string;
   category?: string;
   readTime?: string;
   author?: {
