@@ -28,6 +28,7 @@ type Animation =
   | "guide-fade-out"
   | "guide-type"
   | "guide-grow-x"
+  | "guide-grow-y"
   | "guide-ring";
 
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
@@ -623,5 +624,155 @@ export function Highlight({
       )}
       style={{ animation: `guide-ring 1100ms ease-in-out ${at}ms 2 both` }}
     />
+  );
+}
+
+/** A row of tabs or a segmented control; the active one moves to `next` at
+ *  `switchAt`. */
+export function MockTabs({
+  tabs,
+  active,
+  next,
+  switchAt,
+  cursorPrefix,
+  className,
+}: {
+  tabs: readonly string[];
+  active: string;
+  next?: string;
+  switchAt?: number;
+  /** Marks each tab `data-cursor={prefix-tab}`. */
+  cursorPrefix?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "border-foreground/10 bg-background inline-flex rounded-lg border p-1 text-xs",
+        className,
+      )}
+    >
+      {tabs.map((tab) => (
+        <span
+          key={tab}
+          data-cursor={cursorPrefix ? `${cursorPrefix}-${tab}` : undefined}
+          className="relative rounded-md px-2.5 py-1.5 font-medium"
+        >
+          {tab === active ? (
+            next && switchAt !== undefined ? (
+              <Until
+                until={switchAt}
+                className="bg-accent/10 absolute inset-0 rounded-md"
+              />
+            ) : (
+              <span className="bg-accent/10 absolute inset-0 rounded-md" />
+            )
+          ) : null}
+          {tab === next && switchAt !== undefined ? (
+            <span
+              className="bg-accent/10 absolute inset-0 rounded-md"
+              style={anim("guide-fade-in", switchAt, 200)}
+            />
+          ) : null}
+          <span className="relative">{tab}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Bars that grow in one after another from `at`. */
+export function Bars({
+  values,
+  at,
+  height = 120,
+  className,
+  barClassName = "bg-accent/70",
+  highlight,
+  highlightClassName = "bg-red-500",
+}: {
+  values: readonly number[];
+  at: number;
+  height?: number;
+  className?: string;
+  barClassName?: string;
+  /** Index of a bar to colour differently. */
+  highlight?: number;
+  highlightClassName?: string;
+}) {
+  const max = Math.max(...values, 1);
+  return (
+    <div className={cn("flex items-end gap-1.5", className)} style={{ height }}>
+      {values.map((value, index) => (
+        <span
+          key={index}
+          className={cn(
+            "flex-1 origin-bottom rounded-t-md",
+            index === highlight ? highlightClassName : barClassName,
+          )}
+          style={{
+            height: `${(value / max) * 100}%`,
+            ...anim("guide-grow-y", at + index * 120, 500),
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** An SVG polyline drawn in from `at`, in a `w`×`h` box. */
+export function LineChart({
+  points,
+  w,
+  h,
+  at,
+  duration = 1400,
+  className = "stroke-accent",
+  dashed,
+}: {
+  points: readonly number[];
+  w: number;
+  h: number;
+  at: number;
+  duration?: number;
+  className?: string;
+  dashed?: boolean;
+}) {
+  const max = Math.max(...points, 1);
+  const step = w / Math.max(1, points.length - 1);
+  const d = points
+    .map(
+      (value, index) =>
+        `${index === 0 ? "M" : "L"} ${(index * step).toFixed(1)} ${(h - (value / max) * h).toFixed(1)}`,
+    )
+    .join(" ");
+  return (
+    <svg
+      aria-hidden
+      width={w}
+      height={h}
+      className="overflow-visible"
+      fill="none"
+    >
+      <path
+        d={d}
+        pathLength={1}
+        strokeDasharray={dashed ? undefined : 1}
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+        style={
+          dashed
+            ? {
+                strokeDasharray: "0.02 0.015",
+                ...anim("guide-fade-in", at, 400),
+              }
+            : {
+                animation: `guide-draw ${duration}ms ease-out ${at}ms both`,
+              }
+        }
+      />
+    </svg>
   );
 }

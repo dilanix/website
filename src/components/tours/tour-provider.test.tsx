@@ -10,10 +10,13 @@ import {
   INFRASTRUCTURE_GRAPH_TOUR_KEY as KEY,
   infrastructureGraphTour as tour,
 } from "@/lib/tours/definitions/infrastructure-graph";
+import { COST_GUIDE_KEY, costGuide } from "@/lib/guides/definitions/cost";
 import {
   INTEGRATIONS_GUIDE_KEY,
   integrationsGuide,
 } from "@/lib/guides/definitions/integrations";
+import { costBudgetsTour } from "@/lib/tours/definitions/cost-budgets";
+import { costOverviewTour } from "@/lib/tours/definitions/cost-overview";
 import {
   INTEGRATIONS_TOUR_KEY,
   integrationsTour,
@@ -457,5 +460,38 @@ describe("TourProvider guides", () => {
     expect(screen.getByRole("heading", { level: 3 }).textContent).toBe(
       integrationsGuide.scenes[2].title,
     );
+  });
+});
+
+describe("TourProvider product guides", () => {
+  function CostPage({ tour, guide }: { tour: string; guide?: boolean }) {
+    usePageGuide(COST_GUIDE_KEY, { autoOpen: Boolean(guide) });
+    usePageTour(tour, { ready: true });
+    return null;
+  }
+  const COST = [{ slug: "cost", name: "Cost" }];
+
+  it("holds back only the tour of the page the guide opened on", async () => {
+    navigation.pathname = "/dashboard/products/cost";
+    const { rerender } = render(
+      <TourProvider progress={[]} activeProducts={COST} hasOrganization>
+        <CostPage tour={costOverviewTour.key} guide />
+      </TourProvider>,
+    );
+    await settle();
+    expect(screen.getByRole("dialog", { name: costGuide.title })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close guide" }));
+    await settle();
+    expect(runTour).not.toHaveBeenCalled();
+
+    navigation.pathname = "/dashboard/products/cost/budgets";
+    rerender(
+      <TourProvider progress={[]} activeProducts={COST} hasOrganization>
+        <CostPage tour={costBudgetsTour.key} />
+      </TourProvider>,
+    );
+    await settle();
+    expect(runTour).toHaveBeenCalledTimes(1);
+    expect(runTour.mock.calls[0][0]).toBe(costBudgetsTour);
   });
 });

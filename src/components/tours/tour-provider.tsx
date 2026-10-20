@@ -328,7 +328,10 @@ export function TourProvider({
     if (!guide) return;
     const timer = window.setTimeout(() => {
       autoStarted.current.add(guide.key);
-      for (const key of guide.tours) autoStarted.current.add(key);
+      // The page's own tour waits for the guide's end screen this visit;
+      // tours of the guide's other pages still start there as usual.
+      for (const key of guide.tours)
+        if (pagesRef.current.has(key)) autoStarted.current.add(key);
       setWatching({ guide, index: 0 });
     }, START_DELAY_MS);
     return () => window.clearTimeout(timer);

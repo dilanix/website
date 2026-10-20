@@ -17,6 +17,7 @@ import {
 import { GuideEmbed } from "@/components/guides/guide-embed";
 import { INTEGRATIONS_GUIDE_KEY } from "@/lib/guides/definitions/integrations";
 import { SYNC_GUIDE_KEY } from "@/lib/guides/definitions/sync";
+import { INFRASTRUCTURE_GUIDE_KEY } from "@/lib/guides/definitions/infrastructure";
 
 export function ConnectAwsPage() {
   return (
@@ -288,6 +289,8 @@ export function InfrastructurePage() {
         title="Infrastructure graph"
         description="A live map of your resources and how they connect — with the evidence for every line, so you always know whether a connection is configured, observed, or only possible."
       />
+
+      <GuideEmbed guideKey={INFRASTRUCTURE_GUIDE_KEY} />
 
       <DocSection title="Two ways to look">
         <DocTable

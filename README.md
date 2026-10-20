@@ -88,14 +88,20 @@ scenes' text and timing, `src/components/guides` for the player and each
 scene's visual — `GUIDE_VISUALS`, by scene id). Scenes are laid out on a fixed
 960×540 canvas scaled to the stage; their CSS animations (`guide-*` in
 `globals.css`) pause with the player and show their end state under reduced
-motion, and a scene's pointer finds its targets by `data-cursor`. `guide.integrations`
-(How Integrations work) and `guide.sync` (How Sync works) play from Help &
-Support (grouped with the tours), from **How it works** on Integrations, a
-connection's page and Sync, inline on the Connect AWS and Sync documentation
-pages, and — once — on their own on Integrations before the first connection
-(`usePageGuide`'s `autoOpen`), ahead of that page's tour. Their progress is
-saved like a tour's (`guide.*` keys, the scene as the step), so they resume;
-the end screen hands over to the tour the page offers.
+motion, and a scene's pointer finds its targets by `data-cursor`. Four guides
+exist: `guide.cost` (How Cost works — every Cost page) and
+`guide.infrastructure` (How Infrastructure works — the graph, its evidence and
+sources, and the inventory) belong to their products, `guide.integrations` and
+`guide.sync` to Manage. They play from Help & Support (grouped with the tours),
+from **How it works** — in a product's header (`productGuide`) and on
+Integrations, a connection's page and Sync — and inline on the matching
+Documentation pages. Each opens once on its own (`usePageGuide`'s `autoOpen`):
+the product guides on a first visit to Cost → Overview and Infrastructure →
+Graph, the Integrations guide before the first connection; that page's own tour
+then waits for the guide's end screen, while tours of the guide's other pages
+still start as usual. Their progress is saved like a tour's (`guide.*` keys,
+the scene as the step), so they resume; the end screen hands over to the tour
+the page offers.
 Cost → Overview has `cost.overview` and Cost → Explorer has `cost.explorer`;
 with no cost data (or an empty query) the page withdraws the offer
 (`usePageTour`'s `available: false`), so starting it explains why. Cost →

@@ -40,7 +40,8 @@ import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 import { formatAmount } from "@/components/dashboard/cost/format";
-import { usePageTour } from "@/components/tours/tour-provider";
+import { usePageGuide, usePageTour } from "@/components/tours/tour-provider";
+import { COST_GUIDE_KEY } from "@/lib/guides/definitions/cost";
 import {
   COST_OVERVIEW_TOUR_KEY,
   costOverviewAnchors as tourAnchors,
@@ -631,6 +632,8 @@ export function SpendOverviewClient({
     ready: showsSpend,
     available: showsSpend || loadingSpend,
   });
+  // The full video guide opens once, on a first visit, ahead of the tour.
+  usePageGuide(COST_GUIDE_KEY, { autoOpen: true });
 
   return (
     <div>

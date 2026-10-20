@@ -85,8 +85,8 @@ describe("HelpMenu", () => {
     );
     openMenu();
 
-    // Both Infrastructure tours are new.
-    expect(screen.getAllByText("New")).toHaveLength(2);
+    // The Infrastructure video and both of its tours are new.
+    expect(screen.getAllByText("New")).toHaveLength(3);
     expect(
       screen.getByRole("button", {
         name: "Start the Infrastructure Graph tour",
@@ -133,9 +133,9 @@ describe("HelpMenu", () => {
 
     // Each group says how many of its tours there are, and how many are new.
     expect(group("Infrastructure").textContent).toBe(
-      "Infrastructure2 new2 tours",
+      "Infrastructure3 new1 video · 2 tours",
     );
-    expect(group("Cost").textContent).toBe("Cost6 new7 tours");
+    expect(group("Cost").textContent).toBe("Cost7 new1 video · 7 tours");
     expect(group("Cost").getAttribute("aria-expanded")).toBe("true");
     expect(group("Infrastructure").getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByRole("list", { name: "Cost tours" })).toBeTruthy();
