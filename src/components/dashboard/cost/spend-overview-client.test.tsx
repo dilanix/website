@@ -15,11 +15,18 @@ import {
 } from "@/app/dashboard/products/cost-actions";
 import type { CoreCostOverview } from "@/lib/core/api";
 import { monthToDateRange, presetRange } from "@/lib/billing/cost-summaries";
+import { COST_GUIDE_KEY } from "@/lib/guides/definitions/cost";
 import { COST_OVERVIEW_TOUR_KEY } from "@/lib/tours/definitions/cost-overview";
 import { SpendOverviewClient } from "./spend-overview-client";
 
-const { usePageTour } = vi.hoisted(() => ({ usePageTour: vi.fn() }));
-vi.mock("@/components/tours/tour-provider", () => ({ usePageTour }));
+const { usePageTour, usePageGuide } = vi.hoisted(() => ({
+  usePageTour: vi.fn(),
+  usePageGuide: vi.fn(),
+}));
+vi.mock("@/components/tours/tour-provider", () => ({
+  usePageTour,
+  usePageGuide,
+}));
 
 vi.mock("@/app/dashboard/products/cost-actions", () => ({
   getCostOverviewAction: vi.fn(),
@@ -613,6 +620,13 @@ describe("SpendOverviewClient", () => {
         COST_OVERVIEW_TOUR_KEY,
         { ready: true, available: true },
       ]);
+    });
+
+    it("asks for the full Cost video to open once, with or without data", () => {
+      renderClient({ initialOverview: null });
+      expect(usePageGuide).toHaveBeenLastCalledWith(COST_GUIDE_KEY, {
+        autoOpen: true,
+      });
     });
 
     it.each([

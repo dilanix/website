@@ -14,6 +14,8 @@ import {
   Steps,
 } from "@/components/docs/doc-blocks";
 import { ScoreCalculator } from "@/components/docs/widgets";
+import { GuideEmbed } from "@/components/guides/guide-embed";
+import { COST_GUIDE_KEY } from "@/lib/guides/definitions/cost";
 
 export function CostPage() {
   return (
@@ -31,6 +33,8 @@ export function CostPage() {
           Open the full Cost guide →
         </DocLink>
       </DocHero>
+
+      <GuideEmbed guideKey={COST_GUIDE_KEY} />
 
       <DocSection title="The screens">
         <DocTable
@@ -119,7 +123,7 @@ export function RecommendationsPage() {
         <Steps>
           <Step title="Detected">
             <p>
-              Analyzers check every resource each hour against its bill,
+              Analyzers check every resource every 6 hours against its bill,
               metrics, current prices, and how it connects to other resources.
               Savings are always calculated from real prices and your real bill
               — never guessed by AI.

@@ -70,7 +70,8 @@ import {
   infrastructureGraphActions,
   infrastructureGraphAnchors as tourAnchors,
 } from "@/lib/tours/definitions/infrastructure-graph";
-import { usePageTour } from "@/components/tours/tour-provider";
+import { usePageGuide, usePageTour } from "@/components/tours/tour-provider";
+import { INFRASTRUCTURE_GUIDE_KEY } from "@/lib/guides/definitions/infrastructure";
 import {
   getGraphConnectionAction,
   getGraphResourceAction,
@@ -471,6 +472,8 @@ function GraphCanvas({ graph }: { graph: CoreScopeGraph }) {
   // The product tour runs once the first layout is on screen. Its steps switch
   // to Runtime, then open the most connected resource and one of its lines;
   // each cleanup puts the canvas back once the tour moves past those steps.
+  // The full video guide opens once, on a first visit, ahead of the tour.
+  usePageGuide(INFRASTRUCTURE_GUIDE_KEY, { autoOpen: true });
   usePageTour(INFRASTRUCTURE_GRAPH_TOUR_KEY, {
     ready: rendered !== null,
     actions: {

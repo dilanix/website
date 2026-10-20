@@ -333,6 +333,24 @@
   }
 }
 
+@keyframes guide-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes guide-dim {
+  to {
+    opacity: 0.25;
+  }
+}
+
+@keyframes guide-pan {
+  to {
+    transform: translate(-60px, -10px);
+  }
+}
+
 @keyframes guide-ripple {
   from {
     opacity: 0.6;

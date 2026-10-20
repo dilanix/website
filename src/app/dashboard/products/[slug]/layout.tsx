@@ -6,6 +6,8 @@ import { listOrganizationProducts } from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { Badge } from "@/components/ui/badge";
 import { ProductTabs } from "@/components/dashboard/product-tabs";
+import { GuideButton } from "@/components/guides/guide-button";
+import { productGuide } from "@/lib/guides/registry";
 
 export default async function ProductDashboardLayout({
   children,
@@ -27,25 +29,29 @@ export default async function ProductDashboardLayout({
   if (!product) {
     notFound();
   }
+  const guide = productGuide(slug);
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <Link
-          href="/dashboard"
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
-        >
-          <ArrowLeft size={14} />
-          Products
-        </Link>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {product.shortName ?? product.name}
-          </h1>
-          <Badge tone={product.status === "active" ? "success" : "neutral"}>
-            {product.status === "active" ? "Active" : "In development"}
-          </Badge>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <Link
+            href="/dashboard"
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
+          >
+            <ArrowLeft size={14} />
+            Products
+          </Link>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {product.shortName ?? product.name}
+            </h1>
+            <Badge tone={product.status === "active" ? "success" : "neutral"}>
+              {product.status === "active" ? "Active" : "In development"}
+            </Badge>
+          </div>
         </div>
+        {guide ? <GuideButton guideKey={guide.key} /> : null}
       </div>
 
       <ProductTabs slug={slug} />
