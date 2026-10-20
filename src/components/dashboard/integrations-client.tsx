@@ -21,6 +21,13 @@ import { createConnectionAction } from "@/app/dashboard/integrations/actions";
 import { ModalOverlay } from "./modal-overlay";
 import { EmptyState, Section, StatusBadge } from "./primitives";
 import { AwsOnboardingWizard } from "./integrations/aws-onboarding-wizard";
+import { usePageGuide, usePageTour } from "@/components/tours/tour-provider";
+import { INTEGRATIONS_GUIDE_KEY } from "@/lib/guides/definitions/integrations";
+import {
+  INTEGRATIONS_TOUR_KEY,
+  integrationsActions,
+  integrationsAnchors as tourAnchors,
+} from "@/lib/tours/definitions/integrations";
 
 // Display-only ordering/labels for the catalog's `category` metadata — never
 // a business-logic branch, mirrors the `groupByDomain`/`domainLabel` pattern
@@ -158,6 +165,25 @@ export function IntegrationsClient({
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [connectTo]);
 
+  // The video guide opens on its own the first time, before any connection
+  // exists; the tour then walks the page and the real Connect form, which it
+  // closes unsaved.
+  usePageGuide(INTEGRATIONS_GUIDE_KEY, { autoOpen: connections.length === 0 });
+  usePageTour(INTEGRATIONS_TOUR_KEY, {
+    ready: !connectTo && !onboarding,
+    available: integrations.length > 0,
+    actions: {
+      [integrationsActions.openConnect]: () => {
+        const integration = integrations.find(
+          (item) => item.connection_supported && hasProviderAccess(item.slug),
+        );
+        if (!integration) return false;
+        setConnectTo(integration);
+        return close;
+      },
+    },
+  });
+
   if (!integrations.length) {
     return (
       <EmptyState
@@ -169,7 +195,7 @@ export function IntegrationsClient({
 
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div data-tour={tourAnchors.stats} className="grid gap-3 sm:grid-cols-3">
         <div className="border-border-soft bg-card-strong/50 rounded-2xl border p-4">
           <p className="text-muted-foreground text-xs">Providers</p>
           <p className="mt-1 font-mono text-xl font-semibold">
@@ -215,6 +241,7 @@ export function IntegrationsClient({
               return (
                 <article
                   key={integration.id}
+                  data-tour={tourAnchors.provider}
                   className="border-border-soft bg-card-strong/45 flex min-h-72 flex-col rounded-2xl border p-5 shadow-[0_16px_40px_var(--shadow-card)]"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -233,6 +260,7 @@ export function IntegrationsClient({
                     </div>
                     <button
                       type="button"
+                      data-tour={tourAnchors.connect}
                       onClick={() => setConnectTo(integration)}
                       disabled={!canConnect}
                       title={
@@ -257,7 +285,10 @@ export function IntegrationsClient({
                       {integration.description}
                     </p>
                   ) : null}
-                  <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs">
+                  <div
+                    data-tour={tourAnchors.counts}
+                    className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-xs"
+                  >
                     <span className="flex items-center gap-1.5">
                       <CheckCircle2 size={13} className="text-success" />
                       {connectedCount} connected
@@ -274,6 +305,7 @@ export function IntegrationsClient({
                         <li key={connection.id} className="py-3">
                           <Link
                             href={`/dashboard/integrations/${connection.id}`}
+                            data-tour={tourAnchors.connection}
                             className="group flex items-center justify-between gap-3"
                           >
                             <span className="min-w-0 flex-1">
@@ -367,7 +399,10 @@ export function IntegrationsClient({
               }}
               className="mt-6 space-y-5"
             >
-              <label className="block text-sm">
+              <label
+                data-tour={tourAnchors.connectName}
+                className="block text-sm"
+              >
                 <span className="mb-2 block font-medium">Connection name</span>
                 <input
                   name="name"
@@ -383,6 +418,7 @@ export function IntegrationsClient({
               ) : null}
               <button
                 type="submit"
+                data-tour={tourAnchors.connectSubmit}
                 disabled={pending}
                 className="bg-accent text-accent-foreground w-full rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
               >

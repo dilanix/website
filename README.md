@@ -74,6 +74,28 @@ filter, lifecycle vs provider status), offered whenever the inventory panel
 shows. Recommendations has `workspace.recommendations`: the inbox controls and
 row columns, then a ready-to-fix and a needs-input recommendation opened by
 `prepare` actions (listing past the top 10 if needed) and closed again.
+Integrations has `manage.integrations` (the page, then the real Connect form,
+closed unsaved); a connection's page has `manage.connection`, whose `route` is
+`null` — a per-item page's tour is listed in Help & Support only while that
+page offers it — and walks every tab, the Add scope form and the sync panel;
+Sync has `manage.sync`. The sync panel's steps are shared
+(`definitions/sync-panel.ts`): a page asks the panel, through its
+`tourRequest` prop, to show its schedules, Sync now dialog or newest run until
+the tour moves on.
+
+Video guides are animated, video-like explainers (`src/lib/guides` for the
+scenes' text and timing, `src/components/guides` for the player and each
+scene's visual — `GUIDE_VISUALS`, by scene id). Scenes are laid out on a fixed
+960×540 canvas scaled to the stage; their CSS animations (`guide-*` in
+`globals.css`) pause with the player and show their end state under reduced
+motion, and a scene's pointer finds its targets by `data-cursor`. `guide.integrations`
+(How Integrations work) and `guide.sync` (How Sync works) play from Help &
+Support (grouped with the tours), from **How it works** on Integrations, a
+connection's page and Sync, inline on the Connect AWS and Sync documentation
+pages, and — once — on their own on Integrations before the first connection
+(`usePageGuide`'s `autoOpen`), ahead of that page's tour. Their progress is
+saved like a tour's (`guide.*` keys, the scene as the step), so they resume;
+the end screen hands over to the tour the page offers.
 Cost → Overview has `cost.overview` and Cost → Explorer has `cost.explorer`;
 with no cost data (or an empty query) the page withdraws the offer
 (`usePageTour`'s `available: false`), so starting it explains why. Cost →

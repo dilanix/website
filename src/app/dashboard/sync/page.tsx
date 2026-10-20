@@ -15,6 +15,9 @@ import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { SYNC_RUNS_PAGE_SIZE } from "@/lib/sync/datasets";
 import { enabledSyncCapabilitySlugs } from "@/lib/sync/overview";
 import { PageHeader } from "@/components/dashboard/primitives";
+import { GuideButton } from "@/components/guides/guide-button";
+import { SYNC_GUIDE_KEY } from "@/lib/guides/definitions/sync";
+import { syncAnchors } from "@/lib/tours/definitions/sync";
 import {
   SyncOverviewClient,
   type ConnectionSyncData,
@@ -117,6 +120,12 @@ export default async function SyncPage() {
         eyebrow="Manage"
         title="Sync"
         description="Every cloud connection's data sync in one place — what is running, what is healthy, and what needs attention."
+        action={
+          <GuideButton
+            guideKey={SYNC_GUIDE_KEY}
+            anchor={syncAnchors.howItWorks}
+          />
+        }
       />
       <SyncOverviewClient
         items={items}

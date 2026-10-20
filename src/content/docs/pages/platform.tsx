@@ -14,6 +14,9 @@ import {
   Steps,
   SubHeading,
 } from "@/components/docs/doc-blocks";
+import { GuideEmbed } from "@/components/guides/guide-embed";
+import { INTEGRATIONS_GUIDE_KEY } from "@/lib/guides/definitions/integrations";
+import { SYNC_GUIDE_KEY } from "@/lib/guides/definitions/sync";
 
 export function ConnectAwsPage() {
   return (
@@ -24,6 +27,8 @@ export function ConnectAwsPage() {
         title="Connect AWS"
         description="Dilanix reads your AWS accounts through one IAM role that you create with a CloudFormation stack. The role can only read, and only what you allow."
       />
+
+      <GuideEmbed guideKey={INTEGRATIONS_GUIDE_KEY} />
 
       <DocSection title="Create the connection">
         <Steps>
@@ -178,6 +183,8 @@ export function SyncPage() {
         title="Sync and data health"
         description="Dilanix keeps a fresh copy of your cloud in a few datasets. Sync is how they refresh — on a schedule, or right away."
       />
+
+      <GuideEmbed guideKey={SYNC_GUIDE_KEY} />
 
       <DocSection title="Datasets">
         <DocTable

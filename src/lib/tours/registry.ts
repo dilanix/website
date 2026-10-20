@@ -5,9 +5,12 @@ import { costExplorerTour } from "./definitions/cost-explorer";
 import { costOverviewTour } from "./definitions/cost-overview";
 import { costReportsTour } from "./definitions/cost-reports";
 import { costSavedViewsTour } from "./definitions/cost-saved-views";
+import { connectionTour } from "./definitions/connection";
 import { infrastructureGraphTour } from "./definitions/infrastructure-graph";
 import { infrastructureResourcesTour } from "./definitions/infrastructure-resources";
+import { integrationsTour } from "./definitions/integrations";
 import { recommendationsTour } from "./definitions/recommendations";
+import { syncTour } from "./definitions/sync";
 import type { TourDefinition } from "./types";
 
 /** Every product tour. Add a product's tours here; nothing else in the tour
@@ -23,6 +26,9 @@ export const TOURS: readonly TourDefinition[] = [
   costAnomaliesTour,
   costSavedViewsTour,
   costReportsTour,
+  integrationsTour,
+  connectionTour,
+  syncTour,
 ];
 
 export function findTour(key: string) {

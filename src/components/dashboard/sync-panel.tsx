@@ -52,6 +52,10 @@ import {
 } from "@/lib/sync/datasets";
 import { stageProgress } from "@/lib/sync/progress";
 import { useSyncRunEvents } from "@/hooks/use-sync-run-events";
+import {
+  syncPanelAnchors as tourAnchors,
+  type SyncPanelTourRequest,
+} from "@/lib/tours/definitions/sync-panel";
 import { ModalOverlay } from "./modal-overlay";
 import { EmptyState, StatusBadge } from "./primitives";
 import { Toast } from "@/components/ui/toast";
@@ -302,11 +306,14 @@ function JobRow({
   target,
   connectionId,
   syncRunId,
+  anchor,
 }: {
   job: CoreSyncJob;
   target?: CoreIntegrationTarget;
   connectionId: string;
   syncRunId: string;
+  /** The product-tour anchor, on the run's first job. */
+  anchor?: string;
 }) {
   const progress = stageProgress(job);
   const scope = jobScope(job);
@@ -318,7 +325,10 @@ function JobRow({
     `Target ${job.target_id.slice(0, 8)}…`;
 
   return (
-    <article className="border-foreground/10 bg-background overflow-hidden rounded-lg border text-xs">
+    <article
+      data-tour={anchor}
+      className="border-foreground/10 bg-background overflow-hidden rounded-lg border text-xs"
+    >
       <button
         type="button"
         aria-expanded={detailsOpen}
@@ -519,6 +529,7 @@ function DatasetTotals({ jobs }: { jobs: CoreSyncJob[] }) {
   return (
     <section
       aria-labelledby="dataset-totals-title"
+      data-tour={tourAnchors.totals}
       className="border-border-soft bg-background rounded-xl border p-4"
     >
       <div>
@@ -623,6 +634,7 @@ export function SyncPanel({
   initialPolicies,
   initialHealth,
   initialTargets,
+  tourRequest = null,
 }: {
   connectionId: string;
   providerSlug: string;
@@ -634,6 +646,9 @@ export function SyncPanel({
   initialPolicies: CoreSyncPolicy[];
   initialHealth: CoreSyncDatasetHealth[];
   initialTargets: CoreIntegrationTarget[];
+  /** What a product tour shows — the schedules, the Sync now dialog or the
+   *  newest run — until it moves on. */
+  tourRequest?: SyncPanelTourRequest | null;
 }) {
   const [runs, setRuns] = useState(initialRuns);
   const [total, setTotal] = useState(initialTotal);
@@ -826,6 +841,13 @@ export function SyncPanel({
     return () => clearInterval(interval);
   }, [hasActiveRun, connectionId]);
 
+  // A tour's request opens what it shows only while it lasts, on top of
+  // whatever the user has open.
+  const showPolicies =
+    policyDialogOpen || (canSync && tourRequest === "schedules");
+  const showStartDialog = dialogOpen || (canSync && tourRequest === "sync-now");
+  const tourRunId = tourRequest === "latest-run" ? (runs[0]?.id ?? null) : null;
+
   const expandedRun = useMemo(
     () => runs.find((run) => run.id === expandedRunId) ?? null,
     [runs, expandedRunId],
@@ -887,6 +909,19 @@ export function SyncPanel({
     connectionId,
     handleLiveFrame,
   ]);
+
+  // The newest run's jobs, for a tour that opens it.
+  const tourRunLoaded = tourRunId ? Boolean(jobsByRunId[tourRunId]) : true;
+  useEffect(() => {
+    if (!tourRunId || tourRunLoaded) return;
+    let cancelled = false;
+    void getSyncRunAction(connectionId, tourRunId).then((result) => {
+      if (!cancelled && result.data) handleLiveFrame(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tourRunId, tourRunLoaded, connectionId, handleLiveFrame]);
 
   function openDialog() {
     if (!canSync) return;
@@ -986,6 +1021,7 @@ export function SyncPanel({
     <div className="flex flex-col gap-4">
       <section
         aria-labelledby="sync-health-heading"
+        data-tour={tourAnchors.health}
         className="border-border-soft bg-card-strong/55 rounded-xl border p-4 shadow-[0_10px_30px_var(--shadow-card)]"
       >
         <div className="flex items-start justify-between gap-4">
@@ -1076,7 +1112,10 @@ export function SyncPanel({
       </section>
 
       {canSync ? (
-        <div className="border-border-soft bg-card-strong/55 flex flex-col justify-between gap-4 rounded-xl border px-4 py-3.5 shadow-[0_10px_30px_var(--shadow-card)] sm:flex-row sm:items-center">
+        <div
+          data-tour={tourAnchors.automatic}
+          className="border-border-soft bg-card-strong/55 flex flex-col justify-between gap-4 rounded-xl border px-4 py-3.5 shadow-[0_10px_30px_var(--shadow-card)] sm:flex-row sm:items-center"
+        >
           <div className="flex min-w-0 items-center gap-3">
             <span
               className={cn(
@@ -1134,6 +1173,7 @@ export function SyncPanel({
         </p>
         {canSync ? (
           <button
+            data-tour={tourAnchors.syncNow}
             onClick={openDialog}
             className="bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
           >
@@ -1161,8 +1201,8 @@ export function SyncPanel({
         />
       ) : (
         <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
-          {runs.map((run) => {
-            const expanded = expandedRunId === run.id;
+          {runs.map((run, index) => {
+            const expanded = expandedRunId === run.id || tourRunId === run.id;
             const duration = formatDuration(run.started_at, run.finished_at);
             const jobs = jobsByRunId[run.id] ?? [];
             return (
@@ -1172,6 +1212,7 @@ export function SyncPanel({
                 <div
                   role="button"
                   tabIndex={0}
+                  data-tour={index === 0 ? tourAnchors.run : undefined}
                   onClick={() => toggleExpand(run)}
                   onKeyDown={(event) => {
                     if (event.key !== "Enter" && event.key !== " ") return;
@@ -1218,13 +1259,16 @@ export function SyncPanel({
                     ) : (
                       <>
                         <DatasetTotals jobs={jobs} />
-                        {jobs.map((job) => (
+                        {jobs.map((job, jobIndex) => (
                           <JobRow
                             key={job.id}
                             job={job}
                             target={targetById.get(job.target_id)}
                             connectionId={connectionId}
                             syncRunId={run.id}
+                            anchor={
+                              jobIndex === 0 ? tourAnchors.job : undefined
+                            }
                           />
                         ))}
                       </>
@@ -1247,7 +1291,7 @@ export function SyncPanel({
         </button>
       ) : null}
 
-      {policyDialogOpen ? (
+      {showPolicies ? (
         <ModalOverlay onClose={() => setPolicyDialogOpen(false)}>
           <div
             role="dialog"
@@ -1289,7 +1333,7 @@ export function SyncPanel({
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto p-5 sm:p-6">
-              {eligibleDatasets.map((dataset) => {
+              {eligibleDatasets.map((dataset, index) => {
                 const policy = policyByDataset.get(dataset.slug);
                 const enabled = policy?.enabled ?? false;
                 const intervalSeconds =
@@ -1298,6 +1342,7 @@ export function SyncPanel({
                 return (
                   <div
                     key={dataset.slug}
+                    data-tour={index === 0 ? tourAnchors.schedule : undefined}
                     className={cn(
                       "border-border-soft rounded-xl border p-4 transition-colors",
                       enabled ? "bg-accent/[0.045]" : "bg-card-strong/45",
@@ -1410,7 +1455,7 @@ export function SyncPanel({
         </ModalOverlay>
       ) : null}
 
-      {dialogOpen ? (
+      {showStartDialog ? (
         <ModalOverlay onClose={() => setDialogOpen(false)}>
           <div
             role="dialog"
@@ -1436,7 +1481,7 @@ export function SyncPanel({
               </button>
             </div>
 
-            <fieldset className="mt-5">
+            <fieldset data-tour={tourAnchors.planning} className="mt-5">
               <legend className="text-muted-foreground mb-2 text-[11px] font-semibold tracking-wide uppercase">
                 Dataset planning
               </legend>
@@ -1545,6 +1590,7 @@ export function SyncPanel({
                 Cancel
               </button>
               <button
+                data-tour={tourAnchors.start}
                 onClick={submitStartSync}
                 disabled={
                   pending ||

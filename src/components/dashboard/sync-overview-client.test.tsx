@@ -1,6 +1,13 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { act } from "@testing-library/react";
 import type { CoreIntegrationConnection } from "@/lib/core/api";
+import { tourTargetSelector } from "@/lib/tours/anchors";
+import {
+  SYNC_TOUR_KEY,
+  syncActions,
+  syncAnchors,
+} from "@/lib/tours/definitions/sync";
 import {
   SyncOverviewClient,
   type ConnectionSyncData,
@@ -11,12 +18,26 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("./sync-panel", () => ({
-  SyncPanel: ({ connectionId }: { connectionId: string }) => (
-    <div data-testid="sync-panel">{connectionId}</div>
+  SyncPanel: ({
+    connectionId,
+    tourRequest,
+  }: {
+    connectionId: string;
+    tourRequest?: string | null;
+  }) => (
+    <div data-testid="sync-panel" data-request={tourRequest ?? ""}>
+      {connectionId}
+    </div>
   ),
 }));
 
-afterEach(cleanup);
+const { usePageTour } = vi.hoisted(() => ({ usePageTour: vi.fn() }));
+vi.mock("@/components/tours/tour-provider", () => ({ usePageTour }));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 function item(
   id: string,
@@ -122,5 +143,73 @@ describe("SyncOverviewClient", () => {
     expect(
       screen.getByRole("link", { name: "Go to Integrations" }),
     ).toBeTruthy();
+  });
+});
+
+describe("SyncOverviewClient product tour", () => {
+  const offer = () => usePageTour.mock.calls.at(-1);
+  const run = (action: string) => {
+    let cleanup: (() => void) | false | void = undefined;
+    act(() => {
+      cleanup = offer()?.[1].actions[action]();
+    });
+    return cleanup as (() => void) | false | void;
+  };
+  const panels = () => screen.queryAllByTestId("sync-panel");
+
+  it("opens the first connection's panel and its dialogs for the panel steps", () => {
+    render(
+      <SyncOverviewClient
+        items={[
+          item("c1", "Prod", { runs: [{ id: "r1" } as never] }),
+          item("c2", "Dev"),
+        ]}
+        activeOrganizationCapabilityCodes={["aws.inventory.read"]}
+      />,
+    );
+    expect(offer()?.[0]).toBe(SYNC_TOUR_KEY);
+    expect(offer()?.[1].available).toBe(true);
+    for (const name of [
+      "connection",
+      "synced",
+      "datasets",
+      "state",
+      "actions",
+    ] as const)
+      expect(
+        document.querySelectorAll(tourTargetSelector(syncAnchors[name])),
+      ).toHaveLength(2);
+    expect(panels()).toHaveLength(0);
+
+    run(syncActions.openRow);
+    expect(panels().map((panel) => panel.textContent)).toEqual(["c1"]);
+
+    const close = run(syncActions.schedules);
+    expect(panels()[0].getAttribute("data-request")).toBe("schedules");
+    act(() => (close as () => void)());
+    expect(panels()[0].getAttribute("data-request")).toBe("");
+
+    run(syncActions.latestRun);
+    expect(panels()[0].getAttribute("data-request")).toBe("latest-run");
+  });
+
+  it("skips the dialog and run steps the first connection can't show", () => {
+    render(
+      <SyncOverviewClient
+        items={[item("c1", "Prod")]}
+        activeOrganizationCapabilityCodes={[]}
+      />,
+    );
+    // No organization grant for its datasets, and no runs yet.
+    expect(run(syncActions.schedules)).toBe(false);
+    expect(run(syncActions.syncNow)).toBe(false);
+    expect(run(syncActions.latestRun)).toBe(false);
+  });
+
+  it("withdraws the tour when there is no connection", () => {
+    render(
+      <SyncOverviewClient items={[]} activeOrganizationCapabilityCodes={[]} />,
+    );
+    expect(offer()?.[1].available).toBe(false);
   });
 });

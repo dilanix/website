@@ -21,6 +21,7 @@ import {
 import { ModalOverlay } from "./modal-overlay";
 import { EmptyState, StatusBadge } from "./primitives";
 import { hasResourceMetadata, ResourceMetadata } from "./resource-metadata";
+import { connectionAnchors } from "@/lib/tours/definitions/connection";
 
 /** Core returns targets oldest-first; the live one is what a user actually
  * cares about seeing first, especially right after a replace. */
@@ -111,7 +112,10 @@ function TargetRow({
   }
 
   return (
-    <div className="border-foreground/10 flex flex-col gap-2 rounded-lg border p-3 text-sm">
+    <div
+      data-tour={connectionAnchors.target}
+      className="border-foreground/10 flex flex-col gap-2 rounded-lg border p-3 text-sm"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <StatusBadge status={targetStatusTone(target.status)}>
@@ -125,7 +129,10 @@ function TargetRow({
           </span>
         </div>
         {!readOnly ? (
-          <div className="flex shrink-0 items-center gap-3">
+          <div
+            data-tour={connectionAnchors.targetActions}
+            className="flex shrink-0 items-center gap-3"
+          >
             <button
               type="button"
               onClick={() => setRenameDialog(true)}

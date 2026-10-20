@@ -12,7 +12,10 @@ import {
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { saveTourProgressAction } from "@/app/dashboard/tour-actions";
+import { GuideDialog } from "@/components/guides/guide-dialog";
 import { Toast } from "@/components/ui/toast";
+import { GUIDES } from "@/lib/guides/registry";
+import type { GuideDefinition } from "@/lib/guides/types";
 import {
   startIndex,
   tourGroups,
@@ -42,27 +45,37 @@ interface PageRegistration {
   actions: () => TourActions;
 }
 
-export interface TourEntry {
-  tour: TourDefinition;
-  /** `null` when progress could not be loaded. */
-  state: TourState | null;
-}
+/** A tour or a guide as Help & Support lists it; `state` is `null` when
+ *  progress could not be loaded. */
+export type HelpEntry =
+  | { kind: "tour"; tour: TourDefinition; state: TourState | null }
+  | { kind: "guide"; guide: GuideDefinition; state: TourState | null };
 
 interface TourContextValue {
-  groups: readonly TourGroup<TourEntry>[];
+  groups: readonly TourGroup<HelpEntry>[];
   start: (key: string) => void;
+  play: (key: string) => void;
   register: (key: string, actions: () => TourActions) => () => void;
   setReady: (key: string, ready: boolean) => void;
+  offerGuide: (key: string, autoOpen: boolean) => () => void;
+}
+
+function isGuide(
+  item: TourDefinition | GuideDefinition,
+): item is GuideDefinition {
+  return "scenes" in item;
 }
 
 const TourContext = createContext<TourContextValue | null>(null);
 
 /**
- * Orchestrates product tours for the dashboard: which tours the organization
- * can access, auto-starting a tour once on the page that offers it, starting
- * one from Help & Support (navigating to its page first), and saving
- * progress. Pages offer a tour with `usePageTour`; the tour definitions
- * themselves are declarative (`src/lib/tours`).
+ * Orchestrates product tours and video guides for the dashboard: which ones
+ * the organization can access, auto-starting a tour (or a guide its page asks
+ * for) once on the page that offers it, starting one from Help & Support
+ * (navigating to a tour's page first), and saving progress — a guide's like a
+ * tour's, by scene. Pages offer a tour with `usePageTour` and a guide with
+ * `usePageGuide`; the definitions themselves are declarative
+ * (`src/lib/tours`, `src/lib/guides`).
  */
 export function TourProvider({
   progress: initialProgress,
@@ -95,6 +108,13 @@ export function TourProvider({
   } | null>(null);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [guideOffers, setGuideOffers] = useState<ReadonlyMap<string, boolean>>(
+    () => new Map(),
+  );
+  const [watching, setWatching] = useState<{
+    guide: GuideDefinition;
+    index: number;
+  } | null>(null);
   const run = useRef<TourRun | null>(null);
   const runningKey = useRef<string | null>(null);
   const autoStarted = useRef(new Set<string>());
@@ -109,21 +129,30 @@ export function TourProvider({
   const productsKey = JSON.stringify(
     activeProducts.map(({ slug, name }) => ({ slug, name })),
   );
+  // Guides first in each group, then tours.
   const groups = useMemo(
     () =>
-      tourGroups(
-        TOURS,
+      tourGroups<TourDefinition | GuideDefinition>(
+        [...GUIDES, ...TOURS],
         JSON.parse(productsKey) as TourProduct[],
         hasOrganization,
       ),
     [productsKey, hasOrganization],
   );
-  const tours = useMemo(() => groups.flatMap((group) => group.tours), [groups]);
+  const listed = useMemo(
+    () => groups.flatMap((group) => group.tours),
+    [groups],
+  );
+  const tours = useMemo(
+    () => listed.filter((item): item is TourDefinition => !isGuide(item)),
+    [listed],
+  );
+  const guides = useMemo(() => listed.filter(isGuide), [listed]);
 
   /** Updates local state at once; writes to Core one at a time, in order. */
   const persist = useCallback(
     (
-      tour: TourDefinition,
+      tour: { key: string; version: number },
       status: TourProgress["status"],
       stepId: string | null,
     ) => {
@@ -184,16 +213,57 @@ export function TourProvider({
     (key: string) => {
       const tour = tours.find((item) => item.key === key);
       if (!tour) return;
+      // A per-item page's tour starts only where that page offers it.
+      if (!tour.route && !pagesRef.current.has(key)) return;
+      setWatching(null);
       const index = startIndex(tour, progressRef.current?.get(key));
       if (pagesRef.current.get(key)?.ready) {
         launch(tour, index);
         return;
       }
       setPending({ key, index });
-      if (!pagesRef.current.has(key)) router.push(tour.route);
+      if (!pagesRef.current.has(key) && tour.route) router.push(tour.route);
     },
     [tours, launch, router],
   );
+
+  const play = useCallback(
+    (key: string) => {
+      const guide = guides.find((item) => item.key === key);
+      if (!guide) return;
+      run.current?.stop();
+      setPending(null);
+      setWatching({
+        guide,
+        index: startIndex(
+          { version: guide.version, steps: guide.scenes },
+          progressRef.current?.get(key),
+        ),
+      });
+    },
+    [guides],
+  );
+
+  /** The tour a guide hands over to: the one this page offers, else the
+   *  first that Help & Support can open. */
+  const handoverTour = useCallback(
+    (guide: GuideDefinition) =>
+      guide.tours.find((key) => pages.has(key)) ??
+      guide.tours.find((key) =>
+        tours.some((tour) => tour.key === key && tour.route),
+      ),
+    [pages, tours],
+  );
+
+  const offerGuide = useCallback((key: string, autoOpen: boolean) => {
+    setGuideOffers((current) => new Map(current).set(key, autoOpen));
+    return () =>
+      setGuideOffers((current) => {
+        const next = new Map(current);
+        next.delete(key);
+        return next;
+      });
+  }, []);
 
   const register = useCallback((key: string, actions: () => TourActions) => {
     setPages((current) =>
@@ -234,7 +304,7 @@ export function TourProvider({
       }, START_DELAY_MS);
       return () => window.clearTimeout(timer);
     }
-    if (!tour || page || pathname !== tour.route) return;
+    if (!tour || page || !tour.route || pathname !== tour.route) return;
     const timer = window.setTimeout(() => {
       setPending(null);
       setNotice(
@@ -244,15 +314,46 @@ export function TourProvider({
     return () => window.clearTimeout(timer);
   }, [pending, pages, pathname, tours, launch]);
 
-  // Each tour starts on its own once, the first time its page is ready —
-  // never when progress is unknown, so a failed load cannot nag.
+  // A guide its page asks to open does so once, before any tour — and its
+  // tours then wait for its end screen (or Help & Support) this visit.
   useEffect(() => {
-    if (!progress || activeKey || pending) return;
+    if (!progress || watching || activeKey || pending) return;
     if (!window.matchMedia?.(AUTO_START_QUERY).matches) return;
+    const guide = guides.find(
+      (item) =>
+        guideOffers.get(item.key) &&
+        !autoStarted.current.has(item.key) &&
+        tourState(item, progress.get(item.key)) === "new",
+    );
+    if (!guide) return;
+    const timer = window.setTimeout(() => {
+      autoStarted.current.add(guide.key);
+      for (const key of guide.tours) autoStarted.current.add(key);
+      setWatching({ guide, index: 0 });
+    }, START_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [progress, watching, activeKey, pending, guides, guideOffers]);
+
+  // Each tour starts on its own once, the first time its page is ready —
+  // never when progress is unknown, so a failed load cannot nag — and never
+  // ahead of a guide its page is about to open.
+  useEffect(() => {
+    if (!progress || activeKey || pending || watching) return;
+    if (!window.matchMedia?.(AUTO_START_QUERY).matches) return;
+    const waiting = new Set(
+      guides
+        .filter(
+          (guide) =>
+            guideOffers.get(guide.key) &&
+            tourState(guide, progress.get(guide.key)) === "new",
+        )
+        .flatMap((guide) => guide.tours),
+    );
     const tour = tours.find(
       (item) =>
         pages.get(item.key)?.ready &&
         !autoStarted.current.has(item.key) &&
+        !waiting.has(item.key) &&
         tourState(item, progress.get(item.key)) === "new",
     );
     if (!tour) return;
@@ -261,30 +362,69 @@ export function TourProvider({
       launch(tour, 0);
     }, START_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [progress, activeKey, pending, pages, tours, launch]);
+  }, [
+    progress,
+    activeKey,
+    pending,
+    watching,
+    guides,
+    guideOffers,
+    pages,
+    tours,
+    launch,
+  ]);
 
   useEffect(() => () => run.current?.stop(), []);
 
   const dismissNotice = useCallback(() => setNotice(null), []);
+  const closeGuide = useCallback(() => setWatching(null), []);
   const entries = useMemo(
     () =>
-      groups.map((group) => ({
-        ...group,
-        tours: group.tours.map((tour) => ({
-          tour,
-          state: progress ? tourState(tour, progress.get(tour.key)) : null,
-        })),
-      })),
-    [groups, progress],
+      groups
+        .map((group) => ({
+          ...group,
+          tours: group.tours.flatMap((item): HelpEntry[] => {
+            const state = progress
+              ? tourState(item, progress.get(item.key))
+              : null;
+            if (isGuide(item)) return [{ kind: "guide", guide: item, state }];
+            // A per-item page's tour is listed only while that page offers it.
+            if (!item.route && !pages.has(item.key)) return [];
+            return [{ kind: "tour", tour: item, state }];
+          }),
+        }))
+        .filter((group) => group.tours.length > 0),
+    [groups, progress, pages],
   );
   const value = useMemo(
-    () => ({ groups: entries, start, register, setReady }),
-    [entries, start, register, setReady],
+    () => ({
+      groups: entries,
+      start,
+      play,
+      register,
+      setReady,
+      offerGuide,
+    }),
+    [entries, start, play, register, setReady, offerGuide],
   );
 
+  const handover = watching ? handoverTour(watching.guide) : undefined;
   return (
     <TourContext.Provider value={value}>
       {children}
+      {watching ? (
+        <GuideDialog
+          key={watching.guide.key}
+          guide={watching.guide}
+          startIndex={watching.index}
+          onClose={closeGuide}
+          onSceneChange={(scene) =>
+            persist(watching.guide, "in_progress", scene.id)
+          }
+          onEnd={() => persist(watching.guide, "completed", null)}
+          onTakeTour={handover ? () => start(handover) : undefined}
+        />
+      ) : null}
       {notice ? (
         <Toast message={notice} variant="info" onDismiss={dismissNotice} />
       ) : null}
@@ -292,11 +432,23 @@ export function TourProvider({
   );
 }
 
-/** Tours for Help & Support, grouped like the sidebar; `null` outside a
- *  `TourProvider`. */
+/** Tours and guides for Help & Support, grouped like the sidebar; `null`
+ *  outside a `TourProvider`. */
 export function useTours() {
   const context = useContext(TourContext);
-  return context ? { groups: context.groups, start: context.start } : null;
+  return context
+    ? { groups: context.groups, start: context.start, play: context.play }
+    : null;
+}
+
+/** Offers a guide on the current page, opening it once on its own when
+ *  `autoOpen` (e.g. Integrations before the first connection). */
+export function usePageGuide(
+  key: string,
+  { autoOpen = false }: { autoOpen?: boolean } = {},
+) {
+  const offerGuide = useContext(TourContext)?.offerGuide;
+  useEffect(() => offerGuide?.(key, autoOpen), [offerGuide, key, autoOpen]);
 }
 
 /**

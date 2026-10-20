@@ -167,6 +167,28 @@ describe("HelpMenu", () => {
     ).toBeTruthy();
   });
 
+  it("lists video guides with their tours and plays one", () => {
+    navigation.pathname = "/dashboard/integrations";
+    render(
+      <TourProvider progress={[]} activeProducts={[]} hasOrganization>
+        <HelpMenu />
+      </TourProvider>,
+    );
+    openMenu();
+
+    expect(group("Manage").getAttribute("aria-expanded")).toBe("true");
+    expect(group("Manage").textContent).toContain("2 videos · 2 tours");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Play the How Integrations work video",
+      }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "How Integrations work" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Help & Support" })).toBeNull();
+  });
+
   it("keeps every group closed away from a product's pages", () => {
     render(
       <TourProvider
