@@ -19,6 +19,11 @@ import { formatAmount } from "@/components/dashboard/cost/format";
 import { DestructiveActionDialog } from "@/components/dashboard/destructive-action-dialog";
 import { ModalOverlay } from "@/components/dashboard/modal-overlay";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
+import { usePageTour } from "@/components/tours/tour-provider";
+import {
+  COST_BUDGETS_TOUR_KEY,
+  costBudgetsAnchors as tourAnchors,
+} from "@/lib/tours/definitions/cost-budgets";
 import { ScopeEditor, summarizeScope } from "./scope-editor";
 
 const PERIOD_LABELS: Record<BudgetPeriod, string> = {
@@ -58,7 +63,7 @@ function BudgetStatusMeter({ status }: { status: CoreBudgetStatus }) {
         ? "bg-amber-500"
         : "bg-accent";
   return (
-    <div className="mt-4">
+    <div data-tour={tourAnchors.status} className="mt-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
         <span className="font-mono">
           {formatAmount(spent, status.currency)}{" "}
@@ -436,6 +441,12 @@ export function BudgetsClient({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
+  // The product tour needs no budgets: with none, it points at Create budget
+  // and skips the per-budget steps. It never starts over an open dialog.
+  usePageTour(COST_BUDGETS_TOUR_KEY, {
+    ready: dialogState === "closed" && !deleteTarget,
+  });
+
   function toggleEnabled(budget: CoreBudget) {
     setError("");
     startTransition(async () => {
@@ -477,6 +488,7 @@ export function BudgetsClient({
         </p>
         <button
           type="button"
+          data-tour={tourAnchors.create}
           onClick={() => setDialogState("create")}
           className="bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium"
         >
@@ -513,6 +525,7 @@ export function BudgetsClient({
             return (
               <article
                 key={budget.id}
+                data-tour={tourAnchors.budget}
                 className="border-border-soft bg-card-strong/68 rounded-2xl border p-5 shadow-[0_16px_40px_var(--shadow-card)]"
               >
                 <div className="flex items-start justify-between gap-4">
@@ -541,7 +554,14 @@ export function BudgetsClient({
                 {statuses[budget.id] ? (
                   <BudgetStatusMeter status={statuses[budget.id]!} />
                 ) : null}
-                <div className="mt-3 flex flex-wrap gap-1.5">
+                <div
+                  data-tour={
+                    budget.alert_thresholds.length
+                      ? tourAnchors.thresholds
+                      : undefined
+                  }
+                  className="mt-3 flex flex-wrap gap-1.5"
+                >
                   {budget.alert_thresholds.map((threshold) => {
                     const crossed =
                       budget.notified_thresholds.includes(threshold);
@@ -570,7 +590,10 @@ export function BudgetsClient({
                     ? ` · highest alert fired: ${highestNotified}%`
                     : ""}
                 </p>
-                <div className="border-border-soft mt-5 flex items-center justify-between border-t pt-4">
+                <div
+                  data-tour={tourAnchors.actions}
+                  className="border-border-soft mt-5 flex items-center justify-between border-t pt-4"
+                >
                   <button
                     type="button"
                     disabled={pending}
