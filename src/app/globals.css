@@ -378,6 +378,37 @@
   }
 }
 
+/* The landing reel (src/components/sections/hero-reel.tsx): each shot
+   pushes in slowly, then dissolves into the next. */
+@keyframes reel-push {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.04);
+  }
+}
+
+@keyframes reel-out {
+  to {
+    opacity: 0;
+    filter: blur(6px);
+    transform: scale(1.02);
+  }
+}
+
+@keyframes reel-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.12);
+  }
+}
+
 .guide-stage[data-paused="true"] *,
 .guide-stage[data-paused="true"] *::before,
 .guide-stage[data-paused="true"] *::after {

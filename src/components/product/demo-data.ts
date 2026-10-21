@@ -57,7 +57,7 @@ export interface DemoRecommendation {
   savingUsd: number;
   savingLabel: string;
   state: { tone: "success" | "warning"; label: string };
-  /** For the hero preview: the verified CLI command of the preferred fix. */
+  /** For the hero reel: the verified CLI command of the preferred fix. */
   command: string;
   verifiedAgainst: string;
   status: "ready" | "input";

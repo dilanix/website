@@ -1,7 +1,7 @@
 import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
 import { HeroBackground } from "@/components/sections/hero-background";
-import { HeroPreview } from "@/components/sections/hero-preview";
+import { HeroReel } from "@/components/sections/hero-reel";
 import { ArrowRight, BadgeCheck, Lock, Receipt } from "lucide-react";
 
 export function HeroSection({ calendlyUrl }: { calendlyUrl: string }) {
@@ -87,7 +87,7 @@ export function HeroSection({ calendlyUrl }: { calendlyUrl: string }) {
             </div>
           </div>
 
-          <HeroPreview />
+          <HeroReel />
         </div>
       </Container>
     </section>

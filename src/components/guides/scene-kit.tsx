@@ -47,7 +47,16 @@ const CanvasContext = createContext<RefObject<HTMLDivElement | null> | null>(
   null,
 );
 
-export function SceneCanvas({ children }: { children: ReactNode }) {
+/** `width`×`height` sets another fixed canvas (e.g. the landing reel). */
+export function SceneCanvas({
+  children,
+  width = SCENE_WIDTH,
+  height = SCENE_HEIGHT,
+}: {
+  children: ReactNode;
+  width?: number;
+  height?: number;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -55,22 +64,22 @@ export function SceneCanvas({ children }: { children: ReactNode }) {
     const element = ref.current;
     if (!element) return;
     const update = () => {
-      if (element.clientWidth > 0) setScale(element.clientWidth / SCENE_WIDTH);
+      if (element.clientWidth > 0) setScale(element.clientWidth / width);
     };
     update();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(update);
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [width]);
   return (
     <div ref={ref} className="absolute inset-0 overflow-hidden">
       <div
         ref={canvas}
         className="relative origin-top-left"
         style={{
-          width: SCENE_WIDTH,
-          height: SCENE_HEIGHT,
+          width,
+          height,
           transform: `scale(${scale})`,
         }}
       >
@@ -285,17 +294,22 @@ export function Lines({
   paths,
   className = "stroke-accent/55",
   flow,
+  width = SCENE_WIDTH,
+  height = SCENE_HEIGHT,
 }: {
   paths: readonly { d: string; at: number; duration?: number }[];
   className?: string;
   flow?: boolean;
+  /** The canvas size, when it isn't the guides' one. */
+  width?: number;
+  height?: number;
 }) {
   return (
     <svg
       aria-hidden
       className="pointer-events-none absolute inset-0"
-      width={SCENE_WIDTH}
-      height={SCENE_HEIGHT}
+      width={width}
+      height={height}
       fill="none"
     >
       {paths.map((path, index) => (
