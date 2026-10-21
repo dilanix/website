@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { TourProvider } from "@/components/tours/tour-provider";
 import { DashboardFilterStorageProvider } from "@/lib/dashboard/filter-storage";
@@ -10,6 +11,11 @@ import {
 import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
 import { toDashboardProduct } from "@/lib/dashboard/products";
 import { getDashboardSession } from "@/lib/dashboard/session";
+
+// Signed-in pages are never search results.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default async function DashboardLayout({
   children,

@@ -104,6 +104,8 @@ export interface BlogPost {
     avatar?: string;
   };
   publishedAt: string;
+  /** ISO 8601, for structured data and the sitemap. */
+  publishedAtIso?: string;
   status: "draft" | "published";
 }
 

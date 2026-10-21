@@ -6,7 +6,7 @@ import { Container } from "@/components/ui/container";
 import { ArrowRight, Clock, BookOpen } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Blog & Engineering Notes — Dilanix",
+  title: "Blog & Engineering Notes",
   description:
     "Technical articles, cloud optimization guides, and AI unit economics insights from the Dilanix engineering team.",
   alternates: { canonical: "/blog" },

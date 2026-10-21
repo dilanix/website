@@ -16,6 +16,15 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+SEO: `siteConfig.url` (`https://www.dilanix.org`) is the canonical origin — the
+apex domain redirects there on Vercel — and feeds `metadataBase`, canonical
+links, `sitemap.ts`, `robots.ts` and the Organization/WebSite JSON-LD in the root
+layout. The root `openGraph`/`twitter` deliberately carry no title, description
+or URL, so each page's cards come from its own `title`/`description`; a page
+that sets `openGraph` itself must also set `images` (the root card is
+`/opengraph-image`). Titles get `| Dilanix` from the template — don't add the
+brand to a page title. `/dashboard` is `noindex` and disallowed in robots.
+
 The authenticated dashboard treats `/v1/auth/me` as the source of truth for effective
 organization access. When the user has no active, non-deleted organization, the UI
 shows only personal settings: organization-scoped navigation and entry points such as

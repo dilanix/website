@@ -42,6 +42,12 @@ function formatPublishedAt(value: string | null): string {
   }).format(date);
 }
 
+function isoDate(value: string | null): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
 function mapDtoToBlogPost(dto: ApiBlogPostDto): BlogPost {
   return {
     slug: dto.slug,
@@ -56,6 +62,7 @@ function mapDtoToBlogPost(dto: ApiBlogPostDto): BlogPost {
       role: dto.author_role || "Engineering",
     },
     publishedAt: formatPublishedAt(dto.published_at),
+    publishedAtIso: isoDate(dto.published_at),
     status: dto.status === "published" ? "published" : "draft",
   };
 }

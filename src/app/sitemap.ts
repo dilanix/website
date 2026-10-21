@@ -14,12 +14,16 @@ const staticRoutes = [
   "/terms",
 ];
 
+// Static pages carry no `lastModified`: a date that changes on every request
+// tells search engines nothing. Articles carry their publication date.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const posts = await getBlogPosts();
-  const blogRoutes = posts.map((post) => `/blog/${post.slug}`);
 
-  return [...staticRoutes, ...blogRoutes].map((path) => ({
-    url: `${siteConfig.url}${path}`,
-    lastModified: new Date(),
-  }));
+  return [
+    ...staticRoutes.map((path) => ({ url: `${siteConfig.url}${path}` })),
+    ...posts.map((post) => ({
+      url: `${siteConfig.url}/blog/${post.slug}`,
+      ...(post.publishedAtIso ? { lastModified: post.publishedAtIso } : {}),
+    })),
+  ];
 }

@@ -22,9 +22,19 @@ export async function generateMetadata({
   if (!post) return { title: "Blog" };
 
   return {
-    title: `${post.title} — Dilanix Blog`,
+    title: post.title,
     description: post.excerpt,
     alternates: { canonical: `/blog/${post.slug}` },
+    // Setting `openGraph` here replaces the root one, so it names its image
+    // too — the cover, else the site's card.
+    openGraph: {
+      type: "article",
+      url: `/blog/${post.slug}`,
+      publishedTime: post.publishedAtIso,
+      authors: post.author ? [post.author.name] : undefined,
+      section: post.category,
+      images: [post.coverImageUrl ?? "/opengraph-image"],
+    },
   };
 }
 
@@ -40,15 +50,20 @@ export default async function BlogPostPage({
 
   const articleJsonLd = {
     "@context": "https://schema.org",
-    "@type": "Article",
+    "@type": "BlogPosting",
     headline: post.title,
     description: post.excerpt,
-    datePublished: post.publishedAt,
-    author: {
+    ...(post.publishedAtIso ? { datePublished: post.publishedAtIso } : {}),
+    ...(post.coverImageUrl ? { image: [post.coverImageUrl] } : {}),
+    author: post.author
+      ? { "@type": "Person", name: post.author.name }
+      : { "@type": "Organization", name: siteConfig.name },
+    publisher: {
       "@type": "Organization",
-      name: post.author?.name ?? siteConfig.name,
+      "@id": `${siteConfig.url}/#organization`,
+      name: siteConfig.name,
+      logo: `${siteConfig.url}/dilanix-logo.png`,
     },
-    publisher: { "@type": "Organization", name: siteConfig.name },
     mainEntityOfPage: `${siteConfig.url}/blog/${post.slug}`,
   };
 
