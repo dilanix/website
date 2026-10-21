@@ -6,6 +6,7 @@ import {
   createApiKeyAction,
   revokeApiKeyAction,
 } from "@/app/dashboard/api-keys/actions";
+import { ModalOverlay } from "./modal-overlay";
 import { EmptyState } from "./primitives";
 
 const formatDate = (value: string | null, fallback = "Never") =>
@@ -105,7 +106,7 @@ export function ApiKeysClient({
         />
       )}
       {dialog ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay onClose={close}>
           <div
             role="dialog"
             aria-modal="true"
@@ -243,10 +244,15 @@ export function ApiKeysClient({
               </div>
             )}
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
       {revoke ? (
-        <div className="bg-background/75 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <ModalOverlay
+          onClose={() => {
+            setRevoke(null);
+            setError("");
+          }}
+        >
           <div
             role="alertdialog"
             aria-modal="true"
@@ -301,7 +307,7 @@ export function ApiKeysClient({
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       ) : null}
     </>
   );

@@ -1,0 +1,1397 @@
+"use client";
+
+import { useState, type ReactNode } from "react";
+import type { Route } from "next";
+import Link from "next/link";
+import {
+  ArrowDown,
+  ArrowRight,
+  CircleCheck,
+  CircleDashed,
+  CircleHelp,
+  CircleMinus,
+  CircleX,
+  ExternalLink,
+  Globe,
+  Loader2,
+  X,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import type {
+  CoreConnectionDetail,
+  CoreEvidenceKind,
+  CoreGraphEdge,
+  CoreGraphEvidence,
+  CoreGraphNode,
+  CoreGraphNodeDetail,
+  CoreReachability,
+  CoreReachabilityCheck,
+  CoreResourceExternalReach,
+  CoreResourceNeighborhood,
+  CoreResourceTrafficCoverage,
+} from "@/lib/core/api";
+import { formatPorts } from "@/lib/infrastructure/graph-model";
+import { infrastructureGraphAnchors } from "@/lib/tours/definitions/infrastructure-graph";
+import { EVIDENCE_STYLES, resourceVisual } from "./resource-visuals";
+import { TrafficCoverage } from "./traffic-coverage";
+
+const RELATIONSHIP_LABELS: Record<string, string> = {
+  contains: "contains",
+  belongs_to: "belongs to",
+  routes_to: "routes to",
+  targets: "targets",
+  runs: "runs",
+  depends_on: "depends on",
+  connects_to: "can connect to",
+  communicates_with: "exchanges traffic with",
+  attached_to: "attached to",
+  protected_by: "protected by",
+  uses: "uses",
+  reads_from: "reads from",
+  writes_to: "writes to",
+  exposes: "exposes",
+  deployed_from: "deployed from",
+  triggers: "triggers",
+  resolves: "looks up",
+};
+
+const NETWORK_TYPES = new Set([
+  "belongs_to",
+  "uses",
+  "routes_to",
+  "attached_to",
+  "exposes",
+  "targets",
+]);
+const SECURITY_TYPES = new Set(["protected_by", "connects_to", "exposes"]);
+
+function dateTime(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat("en", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(date);
+}
+
+function relative(value: string | null | undefined) {
+  if (!value) return "—";
+  const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60000);
+  if (!Number.isFinite(minutes)) return value;
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} days ago`;
+}
+
+function ResourceTile({
+  node,
+  size = 40,
+}: {
+  node: CoreGraphNode;
+  size?: number;
+}) {
+  const visual = resourceVisual(node.resource_type, node.category);
+  const Icon = visual.icon;
+  return (
+    <span
+      style={{ width: size, height: size }}
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-[0_10px_24px_rgba(0,0,0,0.25)]",
+        visual.tile,
+      )}
+    >
+      <Icon size={Math.round(size * 0.48)} />
+    </span>
+  );
+}
+
+function EvidenceChip({ kind }: { kind: CoreEvidenceKind }) {
+  const style = EVIDENCE_STYLES[kind];
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
+      style={{
+        color: style.color,
+        borderColor: `${style.color}55`,
+        background: `${style.color}14`,
+      }}
+    >
+      {style.label}
+    </span>
+  );
+}
+
+function Tabs<T extends string>({
+  tabs,
+  active,
+  onChange,
+  tourAnchor,
+}: {
+  tabs: { id: T; label: string; count?: number }[];
+  active: T;
+  onChange: (tab: T) => void;
+  tourAnchor?: string;
+}) {
+  return (
+    <div
+      data-tour={tourAnchor}
+      className="border-border-soft flex gap-1 overflow-x-auto border-b px-4"
+      role="tablist"
+    >
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={tab.id === active}
+          onClick={() => onChange(tab.id)}
+          className={cn(
+            "relative shrink-0 px-2 py-2.5 text-xs whitespace-nowrap transition-colors",
+            tab.id === active
+              ? "text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {tab.label}
+          {tab.count !== undefined ? (
+            <span className="text-muted-foreground ml-1 font-mono text-[10px]">
+              {tab.count}
+            </span>
+          ) : null}
+          {tab.id === active ? (
+            <span className="bg-accent absolute -bottom-px left-0 h-px w-full" />
+          ) : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Rows({ rows }: { rows: [string, ReactNode][] }) {
+  return (
+    <dl className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-xs">
+      {rows.map(([label, value]) => (
+        <div key={label} className="contents">
+          <dt className="text-muted-foreground">{label}</dt>
+          <dd className="text-foreground min-w-0 break-words">
+            {value ?? "—"}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** The inspector panel. Only a loaded inspector carries a tour anchor, so a
+ *  tour step waits past the loading state for the real content. */
+function Shell({
+  children,
+  onClose,
+  header,
+  tourAnchor,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  header: ReactNode;
+  tourAnchor?: string;
+}) {
+  return (
+    <aside
+      data-tour={tourAnchor}
+      className="border-border-soft bg-dashboard-panel-strong/97 absolute inset-y-3 right-3 z-20 flex w-[min(26rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border shadow-[0_24px_70px_var(--shadow-card)] backdrop-blur-xl"
+    >
+      <div className="flex items-start gap-3 p-4">
+        <div className="min-w-0 flex-1">{header}</div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-muted-foreground hover:text-foreground hover:bg-foreground/5 rounded-lg p-1.5"
+          aria-label="Close inspector"
+        >
+          <X size={16} />
+        </button>
+      </div>
+      {children}
+    </aside>
+  );
+}
+
+export function InspectorLoading({ onClose }: { onClose: () => void }) {
+  return (
+    <Shell
+      onClose={onClose}
+      header={<span className="text-muted-foreground text-sm">Loading…</span>}
+    >
+      <div className="text-muted-foreground flex flex-1 items-center justify-center">
+        <Loader2 className="animate-spin" size={20} />
+      </div>
+    </Shell>
+  );
+}
+
+export function InspectorError({
+  message,
+  onClose,
+}: {
+  message: string;
+  onClose: () => void;
+}) {
+  return (
+    <Shell
+      onClose={onClose}
+      header={
+        <span className="text-sm font-semibold">Unable to load details</span>
+      }
+    >
+      <p className="text-muted-foreground px-4 text-sm">{message}</p>
+    </Shell>
+  );
+}
+
+function RelationshipList({
+  resourceId,
+  edges,
+  peers,
+  onSelectResource,
+  onSelectRelationship,
+}: {
+  resourceId: string;
+  edges: CoreGraphEdge[];
+  peers: Map<string, CoreGraphNode>;
+  onSelectResource: (id: string) => void;
+  onSelectRelationship: (id: string) => void;
+}) {
+  if (edges.length === 0) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        No relationships in this view.
+      </p>
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {edges.map((edge) => {
+        const outgoing = edge.source_resource_id === resourceId;
+        const peer = peers.get(
+          outgoing ? edge.target_resource_id : edge.source_resource_id,
+        );
+        const kinds = [...new Set(edge.evidence.map((item) => item.kind))];
+        const label =
+          RELATIONSHIP_LABELS[edge.relationship_type] ?? edge.relationship_type;
+        const ports = formatPorts(
+          edge.evidence
+            .filter((item) => "protocol" in item.attributes)
+            .map((item) => ({
+              protocol: (item.attributes.protocol as string | null) ?? null,
+              from_port: (item.attributes.from_port as number | null) ?? null,
+              to_port: (item.attributes.to_port as number | null) ?? null,
+            })),
+        );
+        return (
+          <li
+            key={edge.id}
+            className="border-border-soft hover:border-accent/40 flex items-center gap-2.5 rounded-xl border px-2.5 py-2 transition-colors"
+          >
+            {peer ? (
+              <button
+                type="button"
+                onClick={() => onSelectResource(peer.id)}
+                aria-label={`Inspect ${peer.name ?? peer.external_id}`}
+                className="shrink-0 rounded-xl"
+              >
+                <ResourceTile node={peer} size={28} />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => onSelectRelationship(edge.id)}
+              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="text-muted-foreground block text-[10px] tracking-wide uppercase">
+                  {outgoing ? label : `← ${label}`}
+                </span>
+                <span className="block truncate text-xs font-medium">
+                  {peer?.name ??
+                    peer?.external_id ??
+                    "Resource outside this view"}
+                </span>
+              </span>
+              <span className="flex shrink-0 flex-col items-end gap-1">
+                {ports ? (
+                  <span className="font-mono text-[10px]">{ports}</span>
+                ) : null}
+                <span className="flex gap-1">
+                  {kinds.map((kind) => (
+                    <span
+                      key={kind}
+                      title={EVIDENCE_STYLES[kind].label}
+                      className="size-1.5 rounded-full"
+                      style={{ background: EVIDENCE_STYLES[kind].color }}
+                    />
+                  ))}
+                </span>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+type RuleShape = {
+  protocol?: string;
+  from_port?: number | null;
+  to_port?: number | null;
+  ipv4_ranges?: string[];
+  ipv6_ranges?: string[];
+  prefix_list_ids?: string[];
+  security_group_ids?: string[];
+};
+
+function RuleTable({ title, rules }: { title: string; rules: RuleShape[] }) {
+  return (
+    <div>
+      <p className="text-muted-foreground mb-1.5 text-[11px] font-semibold tracking-wide uppercase">
+        {title}
+      </p>
+      {rules.length === 0 ? (
+        <p className="text-muted-foreground text-xs">No rules.</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {rules.map((rule, index) => (
+            <li
+              key={index}
+              className="bg-foreground/[0.03] flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs"
+            >
+              <span className="w-24 shrink-0 font-mono">
+                {formatPorts([
+                  {
+                    protocol: rule.protocol ?? null,
+                    from_port: rule.from_port ?? null,
+                    to_port: rule.to_port ?? null,
+                  },
+                ])}
+              </span>
+              <span className="text-muted-foreground min-w-0 truncate font-mono text-[11px]">
+                {[
+                  ...(rule.ipv4_ranges ?? []),
+                  ...(rule.ipv6_ranges ?? []),
+                  ...(rule.security_group_ids ?? []),
+                  ...(rule.prefix_list_ids ?? []),
+                ].join(", ") || "—"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+type ResourceTab =
+  | "overview"
+  | "network"
+  | "security"
+  | "relationships"
+  | "external"
+  | "traffic"
+  | "tags"
+  | "raw";
+
+/** How a chain's last resource interacts with the external endpoint: a
+ *  call, or only traffic exchanged with it (a DNS answer joined with flows). */
+const EXTERNAL_VERBS: Record<string, string> = {
+  connects_to: "calls",
+  routes_to: "routes to",
+  targets: "targets",
+  communicates_with: "exchanges traffic with",
+};
+
+/** Why the resource is said to call an external endpoint — one line per
+ *  piece of evidence on the final call. */
+function explainExternal(evidence: CoreGraphEvidence, caller: string) {
+  const a = evidence.attributes;
+  if (evidence.kind === "configured" && typeof a.variable === "string") {
+    const container =
+      typeof a.container === "string" && a.container
+        ? ` (container ${a.container})`
+        : "";
+    return `Environment variable ${a.variable}${container} of ${caller} names this host.`;
+  }
+  if (evidence.kind === "observed" && a.source === "xray") {
+    return `AWS X-Ray traced ${Number(a.requests ?? 0).toLocaleString("en-US")} calls from ${caller} (${Number(a.errors ?? 0)} errors), last ${relative(evidence.last_observed_at)}.`;
+  }
+  if (evidence.kind === "observed" && a.source === "dns_query_logs") {
+    return `${caller} looked up this host and VPC Flow Logs recorded ${formatBytes(Number(a.bytes ?? 0))} over ${Number(a.flows ?? 0)} flows with an address it was answered, last ${relative(evidence.last_observed_at)}. This shows traffic, not which requests were made.${evidence.endpoint_identity === "heuristic" ? " The address also answered other host names, so the traffic may have been for another of them." : ""}`;
+  }
+  if (evidence.kind === "inferred" && typeof a.rationale === "string") {
+    return `AI (${Math.round((evidence.confidence ?? 0) * 100)}% confidence): ${a.rationale}`;
+  }
+  return `${EVIDENCE_STYLES[evidence.kind].label} by ${evidence.producer}, last ${relative(evidence.last_observed_at)}.`;
+}
+
+function ExternalList({
+  resource,
+  external,
+  onSelectResource,
+}: {
+  resource: CoreGraphNode;
+  external: CoreResourceExternalReach | null;
+  onSelectResource: (id: string) => void;
+}) {
+  if (external === null) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        External endpoints could not be loaded.
+      </p>
+    );
+  }
+  if (external.items.length === 0) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        No external endpoint is known for this resource. Without tracing or a
+        host in its configuration this does not mean it calls none.
+        {external.truncated
+          ? " The search stopped at 3 hops, so resources further along were not checked."
+          : ""}
+      </p>
+    );
+  }
+  const nodes = new Map(external.nodes.map((node) => [node.id, node]));
+  return (
+    <div className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-2">
+        {external.items.map((item, index) => {
+          const caller =
+            item.hops.length === 0 ? resource : nodes.get(item.via_resource_id);
+          const callerName = name(caller);
+          return (
+            <li
+              key={`${item.endpoint}:${item.via_resource_id}:${index}`}
+              className="border-border-soft flex flex-col gap-1.5 rounded-xl border px-2.5 py-2"
+            >
+              <div className="flex items-center gap-2">
+                <Globe size={14} className="text-muted-foreground shrink-0" />
+                <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                  {item.endpoint}
+                </span>
+                {item.provider ? (
+                  <span className="border-border-soft rounded-md border px-1.5 py-0.5 text-[10px]">
+                    {item.provider}
+                  </span>
+                ) : null}
+                <span
+                  className="text-[10px] font-medium"
+                  style={{
+                    color: item.observed
+                      ? EVIDENCE_STYLES.observed.color
+                      : undefined,
+                  }}
+                >
+                  {item.observed ? "Observed" : "Not observed end to end"}
+                </span>
+              </div>
+              <p className="text-muted-foreground text-[11px]">
+                {callerName}{" "}
+                {EXTERNAL_VERBS[item.relationship_type] ??
+                  item.relationship_type}{" "}
+                this {item.endpoint_kind === "host" ? "host" : "address"}
+                {item.relationship_type === "communicates_with"
+                  ? " — traffic was seen, not which requests were made."
+                  : "."}
+              </p>
+              {item.hops.length ? (
+                <p className="text-muted-foreground flex flex-wrap items-center gap-1 text-[11px]">
+                  via
+                  {item.hops.map((hop) => {
+                    const node = nodes.get(hop.resource_id);
+                    return (
+                      <button
+                        key={hop.resource_id}
+                        type="button"
+                        onClick={() => onSelectResource(hop.resource_id)}
+                        title={`${RELATIONSHIP_LABELS[hop.relationship_type] ?? hop.relationship_type} · ${hop.evidence_kinds.map((kind) => EVIDENCE_STYLES[kind].label).join(", ")}${hop.observed ? "" : " (not observed)"}`}
+                        className="text-foreground hover:text-accent inline-flex items-center gap-1 underline-offset-2 hover:underline"
+                      >
+                        <ArrowRight size={10} />
+                        {name(node)}
+                      </button>
+                    );
+                  })}
+                </p>
+              ) : null}
+              <ul className="flex flex-col gap-1">
+                {item.evidence.map((evidence, position) => (
+                  <li
+                    key={`${evidence.producer}:${position}`}
+                    className="flex items-start gap-1.5 text-[11px] leading-4"
+                  >
+                    <span
+                      className="mt-1 size-1.5 shrink-0 rounded-full"
+                      style={{
+                        background: EVIDENCE_STYLES[evidence.kind].color,
+                      }}
+                    />
+                    <span>{explainExternal(evidence, callerName)}</span>
+                  </li>
+                ))}
+              </ul>
+              {item.identity === "heuristic" ? (
+                <p className="text-[11px] text-amber-400">
+                  A resource on this path was matched by a rule that is not
+                  proof, so the chain may belong to another resource.
+                </p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      {external.truncated ? (
+        <p className="text-muted-foreground text-[11px]">
+          More chains exist than are shown (at most 3 hops and 50 chains).
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function ResourceInspector({
+  detail,
+  neighborhood,
+  external,
+  coverage = null,
+  onClose,
+  onSelectResource,
+  onSelectRelationship,
+}: {
+  detail: CoreGraphNodeDetail;
+  neighborhood: CoreResourceNeighborhood;
+  external: CoreResourceExternalReach | null;
+  /** Whether its traffic could be seen over the last 7 days. */
+  coverage?: CoreResourceTrafficCoverage | null;
+  onClose: () => void;
+  onSelectResource: (id: string) => void;
+  onSelectRelationship: (id: string) => void;
+}) {
+  const [tab, setTab] = useState<ResourceTab>("overview");
+  const node = detail.node;
+  const visual = resourceVisual(node.resource_type, node.category);
+  const peers = new Map(neighborhood.peers.map((peer) => [peer.id, peer]));
+  const edges = neighborhood.edges;
+  const ingress = Array.isArray(detail.extra.ingress_rules)
+    ? (detail.extra.ingress_rules as RuleShape[])
+    : null;
+  const egress = Array.isArray(detail.extra.egress_rules)
+    ? (detail.extra.egress_rules as RuleShape[])
+    : null;
+  const tags = Object.entries(detail.tags);
+  const capacity = Object.entries(detail.capacity);
+  const list = (filter: (edge: CoreGraphEdge) => boolean) => (
+    <RelationshipList
+      resourceId={node.id}
+      edges={edges.filter(filter)}
+      peers={peers}
+      onSelectResource={onSelectResource}
+      onSelectRelationship={onSelectRelationship}
+    />
+  );
+
+  return (
+    <Shell
+      onClose={onClose}
+      tourAnchor={infrastructureGraphAnchors.inspector}
+      header={
+        <div className="flex items-center gap-3">
+          <ResourceTile node={node} size={44} />
+          <div className="min-w-0">
+            <p className="truncate text-base font-semibold">
+              {node.name ?? node.external_id}
+            </p>
+            <p className="text-muted-foreground truncate text-xs">
+              {visual.label} ·{" "}
+              <span className="font-mono">{node.provider_resource_type}</span>
+            </p>
+          </div>
+        </div>
+      }
+    >
+      <div className="flex items-center gap-2 px-4 pb-3">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium",
+            node.lifecycle_status === "active"
+              ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-400"
+              : "border-amber-400/30 bg-amber-400/10 text-amber-400",
+          )}
+        >
+          <span className="size-1.5 rounded-full bg-current" />
+          {node.status}
+        </span>
+        <Link
+          href={
+            `/dashboard/products/infrastructure/resources/${node.id}?connection=${detail.connection_id}` as Route
+          }
+          className="text-muted-foreground hover:text-foreground border-border-soft ml-auto inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs"
+        >
+          Open in Resources <ExternalLink size={12} />
+        </Link>
+      </div>
+      <Tabs<ResourceTab>
+        active={tab}
+        onChange={setTab}
+        tourAnchor={infrastructureGraphAnchors.inspectorTabs}
+        tabs={[
+          { id: "overview", label: "Overview" },
+          { id: "network", label: "Network" },
+          { id: "security", label: "Security" },
+          {
+            id: "relationships",
+            label: "Relationships",
+            count: neighborhood.total_edges,
+          },
+          { id: "external", label: "External", count: external?.items.length },
+          { id: "traffic", label: "Traffic" },
+          { id: "tags", label: "Tags", count: tags.length },
+          { id: "raw", label: "Raw" },
+        ]}
+      />
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {tab === "overview" ? (
+          <div className="flex flex-col gap-5">
+            <Rows
+              rows={[
+                ["Name", node.name ?? "—"],
+                ["Type", visual.label],
+                [
+                  "Provider type",
+                  <span key="t" className="font-mono">
+                    {node.provider_resource_type}
+                  </span>,
+                ],
+                [
+                  "Identifier",
+                  <span key="i" className="font-mono text-[11px]">
+                    {node.external_id}
+                  </span>,
+                ],
+                ["Region", node.region],
+                ["Zone", detail.zone ?? "—"],
+                ["Provider status", node.status],
+                ["Inventory state", node.lifecycle_status],
+                ["First seen", dateTime(detail.first_seen_at)],
+                ["Last seen", dateTime(detail.last_seen_at)],
+                [
+                  "Provider key",
+                  <span key="k" className="font-mono text-[11px]">
+                    {detail.provider_resource_key}
+                  </span>,
+                ],
+              ]}
+            />
+            {capacity.length ? (
+              <div>
+                <p className="text-muted-foreground mb-2 text-[11px] font-semibold tracking-wide uppercase">
+                  Capacity
+                </p>
+                <Rows
+                  rows={capacity.map(([key, value]) => [key, String(value)])}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {tab === "network"
+          ? list((edge) => NETWORK_TYPES.has(edge.relationship_type))
+          : null}
+        {tab === "security" ? (
+          <div className="flex flex-col gap-5">
+            {ingress || egress ? (
+              <>
+                <RuleTable title="Inbound rules" rules={ingress ?? []} />
+                <RuleTable title="Outbound rules" rules={egress ?? []} />
+              </>
+            ) : null}
+            {list((edge) => SECURITY_TYPES.has(edge.relationship_type))}
+          </div>
+        ) : null}
+        {tab === "relationships" ? list(() => true) : null}
+        {tab === "traffic" ? <TrafficCoverage coverage={coverage} /> : null}
+        {tab === "external" ? (
+          <ExternalList
+            resource={node}
+            external={external}
+            onSelectResource={onSelectResource}
+          />
+        ) : null}
+        {tab === "tags" ? (
+          tags.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {tags.map(([key, value]) => (
+                <span
+                  key={key}
+                  className="border-border-soft bg-foreground/[0.03] rounded-lg border px-2 py-1 text-xs"
+                >
+                  <span className="text-muted-foreground">{key}</span>
+                  {value ? (
+                    <span className="text-foreground">: {value}</span>
+                  ) : null}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-xs">No tags.</p>
+          )
+        ) : null}
+        {tab === "raw" ? (
+          <pre className="bg-foreground/[0.04] overflow-x-auto rounded-xl p-3 font-mono text-[11px] leading-5">
+            {JSON.stringify(detail.extra, null, 2)}
+          </pre>
+        ) : null}
+      </div>
+    </Shell>
+  );
+}
+
+function StatusChip({
+  label,
+  value,
+  tone,
+  note,
+}: {
+  label: string;
+  value: boolean | null;
+  tone: string;
+  note?: string;
+}) {
+  const Icon = value ? CircleCheck : CircleDashed;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+        value ? "" : "border-border-soft text-muted-foreground",
+      )}
+      style={
+        value
+          ? { color: tone, borderColor: `${tone}55`, background: `${tone}14` }
+          : undefined
+      }
+    >
+      <Icon size={13} />
+      {label}
+      {value === null ? (
+        <span className="text-[10px]">n/a</span>
+      ) : value ? (
+        note ? (
+          <span className="text-[10px]">{note}</span>
+        ) : null
+      ) : (
+        <span className="text-[10px]">No</span>
+      )}
+    </span>
+  );
+}
+
+const REACHABILITY_LABELS: Record<CoreReachability["state"], string> = {
+  reachable: "Reachable",
+  blocked: "Blocked",
+  unknown: "Reachability unknown",
+  not_applicable: "Reachability n/a",
+};
+
+function ReachabilityChip({
+  reachability,
+  tone,
+}: {
+  reachability: CoreReachability;
+  tone: string;
+}) {
+  const { state } = reachability;
+  const Icon =
+    state === "reachable"
+      ? CircleCheck
+      : state === "blocked"
+        ? CircleX
+        : CircleDashed;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+        state === "blocked"
+          ? "border-rose-400/40 bg-rose-400/10 text-rose-300"
+          : state === "reachable"
+            ? ""
+            : "border-border-soft text-muted-foreground",
+      )}
+      style={
+        state === "reachable"
+          ? { color: tone, borderColor: `${tone}55`, background: `${tone}14` }
+          : undefined
+      }
+    >
+      <Icon size={13} />
+      {REACHABILITY_LABELS[state]}
+    </span>
+  );
+}
+
+const CHECK_ICONS: Record<CoreReachabilityCheck["result"], typeof CircleCheck> =
+  {
+    pass: CircleCheck,
+    fail: CircleX,
+    unknown: CircleHelp,
+    not_evaluated: CircleMinus,
+  };
+
+const CHECK_TONES: Record<CoreReachabilityCheck["result"], string> = {
+  pass: "text-emerald-400",
+  fail: "text-rose-400",
+  unknown: "text-amber-400",
+  not_evaluated: "text-muted-foreground",
+};
+
+function name(node: { name: string | null; external_id: string } | undefined) {
+  return node ? (node.name ?? node.external_id) : "a resource";
+}
+
+interface FlowEndpoint {
+  resource_id: string;
+  fixed_ports: number[];
+  port_min: number | null;
+  port_max: number | null;
+}
+
+/** One side's ports as flow logs recorded them: the single ports it used,
+ *  else its range. */
+function flowPorts(side: FlowEndpoint) {
+  if (side.fixed_ports.length) return `port ${side.fixed_ports.join(", ")}`;
+  if (side.port_min === null || side.port_max === null) return "unknown ports";
+  return side.port_min === side.port_max
+    ? `port ${side.port_min}`
+    : `ports ${side.port_min}-${side.port_max}`;
+}
+
+function ruleLabel(attributes: Record<string, unknown>) {
+  return formatPorts([
+    {
+      protocol: (attributes.protocol as string | null) ?? null,
+      from_port: (attributes.from_port as number | null) ?? null,
+      to_port: (attributes.to_port as number | null) ?? null,
+    },
+  ]);
+}
+
+/** Plain-language reasons, each derived from one piece of stored evidence. */
+function explain(
+  detail: CoreConnectionDetail,
+): { kind: CoreEvidenceKind; text: string }[] {
+  const reasons: { kind: CoreEvidenceKind; text: string }[] = [];
+  const group = (value: unknown): string | null => {
+    if (!value || typeof value !== "object") return null;
+    const record = value as { name?: unknown; external_id?: unknown };
+    const label = record.name ?? record.external_id;
+    return label ? String(label) : null;
+  };
+  for (const evidence of detail.edge.evidence) {
+    const a = evidence.attributes;
+    const specific = explainInteraction(evidence, detail);
+    if (specific) {
+      reasons.push(specific);
+      continue;
+    }
+    const target = group(a.target_security_group);
+    const source = group(a.source_security_group);
+    if (evidence.kind === "permitted" && source && target) {
+      reasons.push({
+        kind: "permitted",
+        text: `Security group ${target} allows ${ruleLabel(a)} from ${source}.`,
+      });
+      if (a.egress_permitted === true)
+        reasons.push({
+          kind: "permitted",
+          text: `Outbound rules of ${source} allow this traffic.`,
+        });
+      else
+        reasons.push({
+          kind: "permitted",
+          text: `Outbound rules of ${source} were not proven to allow this traffic.`,
+        });
+      if (a.same_vpc === true)
+        reasons.push({
+          kind: "permitted",
+          text: "Both security groups are in the same VPC.",
+        });
+    } else if (
+      evidence.kind === "permitted" &&
+      Array.isArray(a.ranges) &&
+      target
+    ) {
+      reasons.push({
+        kind: "permitted",
+        text: `Security group ${target} allows ${ruleLabel(a)} from ${a.ranges.join(", ")}.`,
+      });
+    } else if (
+      evidence.kind === "configured" &&
+      Array.isArray(a.listeners) &&
+      a.listeners.length
+    ) {
+      const listeners = (a.listeners as { protocol?: string; port?: number }[])
+        .map((item) => `${item.protocol ?? ""}:${item.port ?? ""}`)
+        .join(", ");
+      reasons.push({
+        kind: "configured",
+        text: `Listeners ${listeners} are configured on ${name(detail.source)}${a.target_port ? `, forwarding to port ${String(a.target_port)}` : ""}.`,
+      });
+    } else if (
+      evidence.kind === "configured" &&
+      a.container_port !== undefined
+    ) {
+      reasons.push({
+        kind: "configured",
+        text: `${name(detail.target)} registers container ${String(a.container_name ?? "")}:${String(a.container_port)} with ${name(detail.source)}.`,
+      });
+    } else if (
+      evidence.kind === "configured" &&
+      Array.isArray(a.destinations)
+    ) {
+      reasons.push({
+        kind: "configured",
+        text: `Route ${a.destinations.join(", ")} → ${name(detail.target)}.`,
+      });
+    } else if (evidence.kind === "configured" && a.public_ip) {
+      reasons.push({
+        kind: "configured",
+        text: `${name(detail.target)} has public address ${String(a.public_ip)} in a subnet routed to the internet.`,
+      });
+    } else if (evidence.kind === "configured") {
+      reasons.push({
+        kind: "configured",
+        text: `Provider configuration declares: ${name(detail.source)} ${RELATIONSHIP_LABELS[detail.edge.relationship_type] ?? detail.edge.relationship_type} ${name(detail.target)}.`,
+      });
+    } else if (evidence.kind === "observed") {
+      reasons.push({
+        kind: "observed",
+        text: `Traffic was observed (last ${relative(evidence.last_observed_at)}).`,
+      });
+    } else if (evidence.kind === "inferred") {
+      reasons.push({
+        kind: "inferred",
+        text: `Inferred from context with ${Math.round((evidence.confidence ?? 0) * 100)}% confidence.`,
+      });
+    } else if (evidence.kind === "user_confirmed") {
+      reasons.push({
+        kind: "user_confirmed",
+        text: "Confirmed by a member of your organization.",
+      });
+    }
+  }
+  if (
+    !detail.status.observed &&
+    ["connects_to", "exposes"].includes(detail.edge.relationship_type)
+  ) {
+    reasons.push({
+      kind: "observed",
+      text: "No traffic has been observed — Dilanix only reports observed communication from telemetry.",
+    });
+  }
+  return reasons;
+}
+
+function formatBytes(value: number) {
+  if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GB`;
+  if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(1)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${value} B`;
+}
+
+/** Sentences for runtime-interaction evidence (configuration, IAM, X-Ray,
+ *  flow logs, AI); `null` for evidence the generic rules explain. */
+function explainInteraction(
+  evidence: CoreGraphEvidence,
+  detail: CoreConnectionDetail,
+): { kind: CoreEvidenceKind; text: string } | null {
+  const a = evidence.attributes;
+  if (evidence.kind === "configured" && typeof a.variable === "string") {
+    const container =
+      typeof a.container === "string" && a.container
+        ? ` (container ${a.container})`
+        : "";
+    return {
+      kind: "configured",
+      text: `Environment variable ${a.variable}${container} of ${name(detail.source)} references ${name(detail.target)}.`,
+    };
+  }
+  if (
+    evidence.kind === "configured" &&
+    detail.edge.relationship_type === "triggers"
+  ) {
+    return {
+      kind: "configured",
+      text: `An event source mapping makes ${name(detail.source)} trigger ${name(detail.target)}${a.state ? ` (${String(a.state)})` : ""}.`,
+    };
+  }
+  if (evidence.kind === "permitted" && typeof a.role === "string") {
+    const actions = Array.isArray(a.actions) ? a.actions.join(", ") : "";
+    return {
+      kind: "permitted",
+      text: `IAM policy ${String(a.policy)} on role ${a.role} allows ${actions} on ${name(detail.target)}${a.has_conditions ? " (with conditions)" : ""}. Permission is not proof of use.`,
+    };
+  }
+  if (evidence.kind === "observed" && a.source === "xray") {
+    return {
+      kind: "observed",
+      text: `AWS X-Ray traced ${Number(a.requests ?? 0).toLocaleString("en-US")} calls (${Number(a.errors ?? 0)} errors), last ${relative(evidence.last_observed_at)}.`,
+    };
+  }
+  if (evidence.kind === "observed" && a.source === "alb_access_logs") {
+    const ports = Array.isArray(a.target_ports)
+      ? (a.target_ports as number[]).join(", ")
+      : "";
+    return {
+      kind: "observed",
+      text: `ALB access logs recorded ${Number(a.requests ?? 0).toLocaleString("en-US")} requests from ${name(detail.source)} to ${name(detail.target)}${ports ? ` (port ${ports})` : ""}, ${Number(a.server_errors ?? 0)} with a 5xx response, last ${relative(evidence.last_observed_at)}. Access logs are best-effort and show only what passed through the load balancer.${evidence.endpoint_identity === "heuristic" ? " The address was not registered in the logged target group, so it may belong to another resource." : ""}`,
+    };
+  }
+  if (evidence.kind === "observed" && a.source === "dns_query_logs") {
+    return {
+      kind: "observed",
+      text: `Route 53 Resolver query logs recorded ${name(detail.source)} looking up ${name(detail.target)}'s name ${Number(a.queries ?? 0).toLocaleString("en-US")} times, last ${relative(evidence.last_observed_at)}. A lookup does not show that a connection followed.`,
+    };
+  }
+  if (evidence.kind === "observed" && a.source === "vpc_flow_logs") {
+    const sides = Array.isArray(a.endpoints)
+      ? (a.endpoints as FlowEndpoint[])
+      : [];
+    const ports = sides
+      .map((side) => {
+        const node =
+          side.resource_id === detail.source.id ? detail.source : detail.target;
+        return `${name(node)} on ${flowPorts(side)}`;
+      })
+      .join(", ");
+    return {
+      kind: "observed",
+      text: `VPC Flow Logs recorded ${formatBytes(Number(a.bytes ?? 0))} over ${Number(a.flows ?? 0)} ${String(a.protocol ?? "").toUpperCase()} flows between these resources${ports ? ` (${ports})` : ""}, last ${relative(evidence.last_observed_at)}. Flow logs do not show which side opens the connection.${evidence.endpoint_identity === "heuristic" ? " One side's network interface was matched to its resource by security groups and subnet, not stated by AWS, so it may belong to another resource." : ""}`,
+    };
+  }
+  if (evidence.kind === "inferred" && typeof a.rationale === "string") {
+    return {
+      kind: "inferred",
+      text: `AI (${Math.round((evidence.confidence ?? 0) * 100)}% confidence): ${a.rationale}`,
+    };
+  }
+  return null;
+}
+
+type ConnectionTab = "overview" | "path" | "evidence" | "raw";
+
+export function ConnectionInspector({
+  detail,
+  hops,
+  hopLabels,
+  activeHop,
+  onSelectHop,
+  onClose,
+  onSelectResource,
+}: {
+  detail: CoreConnectionDetail;
+  /** Every relationship behind the selected line (a collapsed chain's hops in order). */
+  hops: string[];
+  /** Relationship type of each hop. */
+  hopLabels?: string[];
+  activeHop: string;
+  onSelectHop: (id: string) => void;
+  onClose: () => void;
+  onSelectResource: (id: string) => void;
+}) {
+  const [tab, setTab] = useState<ConnectionTab>("overview");
+  const { edge, source, target, status } = detail;
+  const ports = formatPorts(
+    edge.evidence
+      .filter((item) => "protocol" in item.attributes)
+      .map((item) => ({
+        protocol: (item.attributes.protocol as string | null) ?? null,
+        from_port: (item.attributes.from_port as number | null) ?? null,
+        to_port: (item.attributes.to_port as number | null) ?? null,
+      })),
+  );
+  const reasons = explain(detail);
+  const sourceVisual = resourceVisual(source.resource_type, source.category);
+  const targetVisual = resourceVisual(target.resource_type, target.category);
+
+  return (
+    <Shell
+      onClose={onClose}
+      tourAnchor={infrastructureGraphAnchors.connection}
+      header={
+        <div>
+          <p className="flex items-center gap-1.5 text-base font-semibold">
+            {sourceVisual.label}{" "}
+            <ArrowRight size={15} className="text-muted-foreground" />{" "}
+            {targetVisual.label}
+          </p>
+          <p className="text-muted-foreground text-xs">
+            Connection details and evidence
+          </p>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-3 px-4 pb-3">
+        {hops.length > 1 ? (
+          <div className="flex gap-1.5">
+            {hops.map((hop, index) => (
+              <button
+                key={hop}
+                type="button"
+                onClick={() => onSelectHop(hop)}
+                className={cn(
+                  "rounded-lg border px-2 py-1 text-[11px]",
+                  hop === activeHop
+                    ? "border-accent/50 bg-accent/10 text-accent"
+                    : "border-border-soft text-muted-foreground",
+                )}
+              >
+                {hopLabels?.[index]
+                  ? (RELATIONSHIP_LABELS[hopLabels[index]] ?? hopLabels[index])
+                  : `Hop ${index + 1}`}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div
+          data-tour={infrastructureGraphAnchors.connectionStatus}
+          className="flex flex-wrap gap-1.5"
+        >
+          <StatusChip
+            label="Configured"
+            value={status.configured}
+            tone={EVIDENCE_STYLES.configured.color}
+          />
+          <ReachabilityChip
+            reachability={status.reachability}
+            tone={EVIDENCE_STYLES.permitted.color}
+          />
+          <StatusChip
+            label="Observed"
+            value={status.observed}
+            tone={EVIDENCE_STYLES.observed.color}
+            note={
+              status.observed_identity === "heuristic"
+                ? "resource guessed"
+                : undefined
+            }
+          />
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+              status.internet_exposed
+                ? "border-sky-400/40 bg-sky-400/10 text-sky-300"
+                : "border-border-soft text-muted-foreground",
+            )}
+          >
+            <Globe size={13} /> Internet path:{" "}
+            {status.internet_exposed ? "Yes" : "No"}
+          </span>
+        </div>
+        <div className="border-border-soft bg-foreground/[0.02] flex items-center gap-2 rounded-xl border p-2.5">
+          <button
+            type="button"
+            onClick={() => onSelectResource(source.id)}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          >
+            <ResourceTile node={source} size={30} />
+            <span className="min-w-0">
+              <span className="block truncate text-xs font-semibold">
+                {name(source)}
+              </span>
+              <span className="text-muted-foreground block truncate text-[10px]">
+                {sourceVisual.label}
+              </span>
+            </span>
+          </button>
+          <span className="flex flex-col items-center px-1">
+            <span className="font-mono text-[10px]">
+              {ports ||
+                RELATIONSHIP_LABELS[edge.relationship_type] ||
+                edge.relationship_type}
+            </span>
+            <ArrowRight size={14} className="text-muted-foreground" />
+          </span>
+          <button
+            type="button"
+            onClick={() => onSelectResource(target.id)}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          >
+            <ResourceTile node={target} size={30} />
+            <span className="min-w-0">
+              <span className="block truncate text-xs font-semibold">
+                {name(target)}
+              </span>
+              <span className="text-muted-foreground block truncate text-[10px]">
+                {targetVisual.label}
+              </span>
+            </span>
+          </button>
+        </div>
+      </div>
+      <Tabs<ConnectionTab>
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { id: "overview", label: "Overview" },
+          { id: "path", label: "Path" },
+          { id: "evidence", label: "Evidence", count: edge.evidence.length },
+          { id: "raw", label: "Raw data" },
+        ]}
+      />
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {tab === "overview" ? (
+          <div className="flex flex-col gap-5">
+            <Rows
+              rows={[
+                ["Source", `${name(source)} (${sourceVisual.label})`],
+                ["Target", `${name(target)} (${targetVisual.label})`],
+                [
+                  "Relationship",
+                  RELATIONSHIP_LABELS[edge.relationship_type] ??
+                    edge.relationship_type,
+                ],
+                ["Protocol / port", ports || "—"],
+                [
+                  "Evidence",
+                  <span key="e" className="flex flex-wrap gap-1">
+                    {[...new Set(edge.evidence.map((item) => item.kind))].map(
+                      (kind) => (
+                        <EvidenceChip key={kind} kind={kind} />
+                      ),
+                    )}
+                  </span>,
+                ],
+                ["Last confirmed", relative(edge.last_seen_at)],
+                [
+                  "Last observed",
+                  status.last_observed_at
+                    ? relative(status.last_observed_at)
+                    : "Never observed",
+                ],
+                [
+                  "Confidence",
+                  status.confidence !== null
+                    ? `${Math.round(status.confidence * 100)}%`
+                    : "—",
+                ],
+              ]}
+            />
+            <div>
+              <p className="mb-2 text-sm font-semibold">
+                Why this connection exists
+              </p>
+              <ul className="flex flex-col gap-2">
+                {reasons.map((reason, index) => (
+                  <li key={index} className="flex gap-2 text-xs leading-5">
+                    <span
+                      className="mt-1.5 size-2 shrink-0 rounded-full"
+                      style={{ background: EVIDENCE_STYLES[reason.kind].color }}
+                    />
+                    <span>{reason.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {status.reachability.checks.length ? (
+              <div>
+                <p className="mb-2 text-sm font-semibold">
+                  {REACHABILITY_LABELS[status.reachability.state]}
+                </p>
+                <ul className="flex flex-col gap-2">
+                  {status.reachability.checks.map((check) => {
+                    const Icon = CHECK_ICONS[check.result];
+                    return (
+                      <li
+                        key={check.name}
+                        className="flex gap-2 text-xs leading-5"
+                      >
+                        <Icon
+                          size={14}
+                          className={cn(
+                            "mt-0.5 shrink-0",
+                            CHECK_TONES[check.result],
+                          )}
+                          aria-label={check.result}
+                        />
+                        <span>{check.detail}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {tab === "path" ? (
+          <ol className="flex flex-col items-stretch">
+            {detail.path.map((node, index) => (
+              <li
+                key={`${node.id}-${index}`}
+                className="flex flex-col items-center"
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelectResource(node.id)}
+                  className="border-border-soft hover:border-accent/40 flex w-full items-center gap-2.5 rounded-xl border p-2 text-left"
+                >
+                  <ResourceTile node={node} size={30} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-semibold">
+                      {name(node)}
+                    </span>
+                    <span className="text-muted-foreground block truncate text-[10px]">
+                      {resourceVisual(node.resource_type, node.category).label}
+                    </span>
+                  </span>
+                </button>
+                {index < detail.path.length - 1 ? (
+                  <ArrowDown size={14} className="text-muted-foreground my-1" />
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        ) : null}
+        {tab === "evidence" ? (
+          <ul className="flex flex-col gap-2">
+            {edge.evidence.map((evidence: CoreGraphEvidence, index) => (
+              <li
+                key={index}
+                className="border-border-soft rounded-xl border p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <EvidenceChip kind={evidence.kind} />
+                  <span className="text-muted-foreground font-mono text-[10px]">
+                    {evidence.producer}
+                  </span>
+                </div>
+                <p className="text-muted-foreground mt-2 text-[11px]">
+                  First {dateTime(evidence.first_observed_at)} · last{" "}
+                  {relative(evidence.last_observed_at)}
+                  {evidence.confidence !== null
+                    ? ` · ${Math.round(evidence.confidence * 100)}% confidence`
+                    : ""}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {tab === "raw" ? (
+          <pre className="bg-foreground/[0.04] overflow-x-auto rounded-xl p-3 font-mono text-[11px] leading-5">
+            {JSON.stringify(edge, null, 2)}
+          </pre>
+        ) : null}
+      </div>
+    </Shell>
+  );
+}

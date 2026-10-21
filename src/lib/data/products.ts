@@ -1,15 +1,67 @@
-import type { Product, ProductDashboardSnapshot } from "@/types";
+import type { Product } from "@/types";
 
 const fallbackProducts: Product[] = [
+  {
+    slug: "costops",
+    name: "Dilanix CostOps",
+    shortName: "CostOps",
+    eyebrow: "Featured Product",
+    headline:
+      "AWS Cost Optimization & Multicloud Cost Visibility, Backed by FOCUS 1.2 Data",
+    description:
+      "Dilanix CostOps unifies AWS Cost Explorer and FOCUS 1.2 Data Export billing into one cost overview, so engineering and finance teams see where cloud spend actually goes and where AWS cost optimization opportunities are hiding — per account, per service, per resource.",
+    status: "active",
+    featured: true,
+    tag: "Live",
+    category: "Cloud Cost Optimization",
+    capabilities: [
+      { label: "AWS FOCUS 1.2 cost data export support" },
+      { label: "AWS Cost Explorer breakdown by service" },
+      { label: "Unified cost overview across billing sources" },
+      { label: "Per-connection, per-account cost visibility" },
+    ],
+    features: [
+      "AWS FOCUS 1.2 cost data export support",
+      "AWS Cost Explorer breakdown by service",
+      "Unified cost overview across billing sources",
+      "Per-connection, per-account cost visibility",
+    ],
+    highlights: [
+      { label: "Billing datasets", value: "FOCUS + Cost Explorer" },
+      { label: "Cost metrics", value: "Billed, effective, list, contracted" },
+    ],
+    faqs: [
+      {
+        question:
+          "What is AWS FOCUS cost data, and why does it matter for cost optimization?",
+        answer:
+          "FOCUS (FinOps Open Cost & Usage Specification) is a standardized, resource-level AWS billing export. Unlike Cost Explorer's rolled-up totals, FOCUS 1.2 data exposes per-resource, per-SKU charge detail across billed, effective, list, and contracted cost — the granularity real AWS cost optimization work needs.",
+      },
+      {
+        question: "How is this different from using AWS Cost Explorer alone?",
+        answer:
+          "Cost Explorer is a great starting point but only shows one view of spend. Dilanix CostOps reads both AWS Cost Explorer and FOCUS data side by side in one cost overview, and always shows which dataset actually answered a given number, so you're never guessing which source to trust.",
+      },
+      {
+        question: "Does Dilanix CostOps support more than AWS?",
+        answer:
+          "The current focus is deep AWS cost optimization support via Cost Explorer and FOCUS 1.2 exports, with the connection model designed to extend to additional cloud providers as the product grows.",
+      },
+    ],
+    ctaLabel: "Talk to us about AWS cost optimization",
+    ctaHref: "/contact",
+  },
   {
     slug: "dena",
     name: "Dena Cloud Storage",
     shortName: "Dena",
     eyebrow: "Pipeline Q4",
-    headline: "High-Throughput Global Object & Block Storage for AI Datasets and Artifacts",
-    description: "S3-compatible distributed object storage engineered for low-latency checkpointing and large dataset streaming.",
+    headline:
+      "High-Throughput Global Object & Block Storage for AI Datasets and Artifacts",
+    description:
+      "S3-compatible distributed object storage engineered for low-latency checkpointing and large dataset streaming.",
     status: "upcoming",
-    featured: true,
+    featured: false,
     tag: "Pipeline Q4",
     category: "Cloud Storage",
     capabilities: [
@@ -36,8 +88,10 @@ const fallbackProducts: Product[] = [
     name: "Dilanix Pulse",
     shortName: "Pulse",
     eyebrow: "Private Beta",
-    headline: "Next-Generation Application Performance Monitoring & Distributed Tracing",
-    description: "Low-overhead telemetry agents with eBPF-powered kernel tracing and automatic anomaly detection.",
+    headline:
+      "Next-Generation Application Performance Monitoring & Distributed Tracing",
+    description:
+      "Low-overhead telemetry agents with eBPF-powered kernel tracing and automatic anomaly detection.",
     status: "upcoming",
     featured: false,
     tag: "Private Beta",
@@ -66,8 +120,10 @@ const fallbackProducts: Product[] = [
     name: "Dilanix Guard",
     shortName: "Guard",
     eyebrow: "Roadmap 2027",
-    headline: "Cloud Infrastructure Security Posture Management & Continuous Compliance",
-    description: "Continuous IAM drift detection, exposed bucket scanners, and automated CIS Benchmark compliance auditing.",
+    headline:
+      "Cloud Infrastructure Security Posture Management & Continuous Compliance",
+    description:
+      "Continuous IAM drift detection, exposed bucket scanners, and automated CIS Benchmark compliance auditing.",
     status: "upcoming",
     featured: false,
     tag: "Roadmap 2027",
@@ -93,40 +149,15 @@ const fallbackProducts: Product[] = [
   },
 ];
 
-const defaultDashboardSnapshots: Record<string, ProductDashboardSnapshot> = {
-  dena: {
-    monthlySpendUsd: 14200,
-    potentialSavingsUsd: 2800,
-    spendTrend: [
-      11200, 11800, 12350, 11950, 13100, 13800, 12950, 14010, 14460, 13990,
-      14610, 14280, 14950, 14200,
-    ],
-    breakdown: [
-      { label: "Object Storage", amountUsd: 8240 },
-      { label: "Block Storage", amountUsd: 3980 },
-      { label: "Data Transfer", amountUsd: 1980 },
-    ],
-    recommendation: {
-      title: "Cold archive tiering opportunity",
-      description: "Auto-tiering objects unread for 30+ days saves substantial storage spend.",
-      monthlySavingUsd: 2800,
-      metrics: [
-        { label: "Cold tier ratio", value: "64%" },
-        { label: "Average latency impact", value: "0ms" },
-      ],
-    },
-  },
-};
-
-function mapDtoToProduct(
-  dto: Record<string, unknown>,
-): Product {
+function mapDtoToProduct(dto: Record<string, unknown>): Product {
   const slug = String(dto.slug || "");
   const name = String(dto.name || "");
   const shortName = dto.short_name ? String(dto.short_name) : name;
   const isFeatured = Boolean(dto.is_featured);
   const status = dto.product_status === "active" ? "active" : "upcoming";
-  const features = Array.isArray(dto.features) ? (dto.features as string[]) : [];
+  const features = Array.isArray(dto.features)
+    ? (dto.features as string[])
+    : [];
   const highlights = Array.isArray(dto.highlights)
     ? (dto.highlights as { label: string; value: string }[])
     : [];
@@ -139,19 +170,25 @@ function mapDtoToProduct(
     name,
     shortName,
     eyebrow: isFeatured ? "Featured Product" : "Upcoming Product",
-    headline: dto.headline ? String(dto.headline) : dto.description ? String(dto.description) : "",
+    headline: dto.headline
+      ? String(dto.headline)
+      : dto.description
+        ? String(dto.description)
+        : "",
     description: dto.description ? String(dto.description) : "",
     status,
     featured: isFeatured,
     tag: dto.tag ? String(dto.tag) : undefined,
     category: dto.category ? String(dto.category) : "Infrastructure",
-    capabilities: features.length > 0
-      ? features.map((label) => ({ label }))
-      : [{ label: "High Availability" }, { label: "Enterprise Security" }],
+    capabilities:
+      features.length > 0
+        ? features.map((label) => ({ label }))
+        : [{ label: "High Availability" }, { label: "Enterprise Security" }],
     features,
     highlights,
     faqs,
-    documentation: typeof dto.documentation === "string" ? dto.documentation : undefined,
+    documentation:
+      typeof dto.documentation === "string" ? dto.documentation : undefined,
     ctaLabel: "Request Early Access",
     ctaHref: "/contact",
   };
@@ -174,17 +211,14 @@ export async function getProducts(): Promise<Product[]> {
     });
 
     if (unique.length > 0) {
-      return unique.map((p) => mapDtoToProduct(p as unknown as Record<string, unknown>));
+      return unique.map((p) =>
+        mapDtoToProduct(p as unknown as Record<string, unknown>),
+      );
     }
   } catch {
     // Graceful fallback
   }
   return fallbackProducts;
-}
-
-export async function getFeaturedProduct(): Promise<Product | undefined> {
-  const all = await getProducts();
-  return all.find((product) => product.featured) || all[0];
 }
 
 export async function getProductBySlug(
@@ -201,16 +235,4 @@ export async function getProductBySlug(
   }
   const all = await getProducts();
   return all.find((product) => product.slug === slug);
-}
-
-export async function getUpcomingProducts(): Promise<Product[]> {
-  const all = await getProducts();
-  const featured = await getFeaturedProduct();
-  return all.filter((product) => product.slug !== featured?.slug);
-}
-
-export async function getProductDashboardSnapshot(
-  slug: string,
-): Promise<ProductDashboardSnapshot | undefined> {
-  return defaultDashboardSnapshots[slug] ?? defaultDashboardSnapshots.dena;
 }

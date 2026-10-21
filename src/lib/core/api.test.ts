@@ -2,10 +2,29 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { coreRequest } from "./api";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("coreRequest", () => {
+  it("times out when Core does not respond within 10 seconds", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+
+    const request = coreRequest<unknown>("/v1/resource", "token", undefined, {
+      timeoutMs: 10_000,
+    });
+    const expectation = expect(request).rejects.toThrow(
+      "Dilanix Core did not respond within 10 seconds. Please try again.",
+    );
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expectation;
+  });
+
   it("handles successful 204 responses without parsing JSON", async () => {
     const response = new Response(null, { status: 204 });
     const json = vi.spyOn(response, "json");
@@ -38,9 +57,7 @@ describe("coreRequest", () => {
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "/v1/organizations/org-123/products/dena/docs",
-      ),
+      expect.stringContaining("/v1/organizations/org-123/products/dena/docs"),
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: "Bearer test-token",
@@ -48,5 +65,1368 @@ describe("coreRequest", () => {
       }),
     );
     expect(result).toEqual(mockDocs);
+  });
+
+  it("creates an integration connection for an organization", async () => {
+    const mockConnection = {
+      id: "conn-1",
+      organization_id: "org-123",
+      integration_id: "integration-1",
+      name: "AWS Production",
+      status: "draft",
+      configuration: {},
+      external_reference: null,
+      last_verified_at: null,
+      last_success_at: null,
+      last_error_at: null,
+      last_error_code: null,
+      created_at: "2026-08-21T10:00:00Z",
+      last_synced_at: null,
+    };
+    const response = new Response(JSON.stringify(mockConnection), {
+      status: 201,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { createConnection } = await import("./api");
+    const result = await createConnection("org-123", "test-token", {
+      integration_id: "integration-1",
+      name: "AWS Production",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockConnection);
+  });
+});
+
+describe("cost analytics", () => {
+  it("posts an organization-wide Explorer query", async () => {
+    const mockResponse = { items: [] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { queryCostExplorer } = await import("./api");
+    const input = {
+      period_start: "2026-09-01T00:00:00.000Z",
+      period_end: "2026-09-12T00:00:00.000Z",
+      metric: "effective_cost" as const,
+      connection_id: "connection-1",
+      target_id: "target-1",
+      granularity: "daily" as const,
+      group_by: [{ dimension: "service_name" as const }],
+      scope: [],
+    };
+    const result = await queryCostExplorer("org-123", "test-token", input);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/v1/organizations/org-123/cost/explorer/query"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify(input),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("runs a saved Explorer view within the selected account scope", async () => {
+    const mockResponse = { items: [] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { runCostExplorerSavedView } = await import("./api");
+    await runCostExplorerSavedView("org-123", "view-1", "test-token", {
+      periodStart: "2026-09-01T00:00:00Z",
+      periodEnd: "2026-09-12T00:00:00Z",
+      connectionId: "connection-1",
+      targetId: "target-1",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/explorer/saved-views/view-1?period_start=2026-09-01T00%3A00%3A00Z&period_end=2026-09-12T00%3A00%3A00Z&connection_id=connection-1&target_id=target-1",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+  });
+
+  it("requests the overview period and top-services limit", async () => {
+    const mockResponse = {
+      period_start: "2026-09-01T00:00:00Z",
+      period_end: "2026-09-11T00:00:00Z",
+      previous_period_start: "2026-08-22T00:00:00Z",
+      previous_period_end: "2026-09-01T00:00:00Z",
+      by_currency: [],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCostOverview } = await import("./api");
+    const result = await getCostOverview("org-123", "test-token", {
+      periodStart: "2026-09-01T00:00:00Z",
+      periodEnd: "2026-09-11T00:00:00Z",
+      connectionId: "connection-1",
+      targetId: "target-1",
+      topN: 5,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/overview?period_start=2026-09-01T00%3A00%3A00Z&period_end=2026-09-11T00%3A00%3A00Z&connection_id=connection-1&target_id=target-1&top_n=5",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("requests the allocation breakdown for a metric and period", async () => {
+    const mockResponse = {
+      period_start: "2026-09-01T00:00:00Z",
+      period_end: "2026-09-12T00:00:00Z",
+      items: [
+        {
+          target_label: "Platform",
+          currency: "USD",
+          amount: "42.000000",
+        },
+      ],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getAllocationBreakdown } = await import("./api");
+    const result = await getAllocationBreakdown("org-123", "test-token", {
+      periodStart: "2026-09-01T00:00:00Z",
+      periodEnd: "2026-09-12T00:00:00Z",
+      metric: "effective_cost",
+      connectionId: "connection-1",
+      targetId: "target-1",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/allocations/breakdown?period_start=2026-09-01T00%3A00%3A00Z&period_end=2026-09-12T00%3A00%3A00Z&metric=effective_cost&connection_id=connection-1&target_id=target-1",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+});
+
+describe("sync", () => {
+  it("starts a sync with the requested datasets", async () => {
+    const mockRun = {
+      id: "run-1",
+      organization_id: "org-123",
+      connection_id: "conn-1",
+      trigger: "manual",
+      status: "queued",
+      created_at: "2026-08-27T10:00:00Z",
+      started_at: null,
+      finished_at: null,
+    };
+    const response = new Response(JSON.stringify(mockRun), { status: 201 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { startSync } = await import("./api");
+    const result = await startSync("org-123", "conn-1", "test-token", {
+      datasets: ["inventory.resources"],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/syncs",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+        body: JSON.stringify({ datasets: ["inventory.resources"] }),
+      }),
+    );
+    expect(result).toEqual(mockRun);
+  });
+
+  it("omits datasets when Core should plan the sync automatically", async () => {
+    const mockRun = {
+      id: "run-auto",
+      organization_id: "org-123",
+      connection_id: "conn-1",
+      trigger: "manual",
+      status: "queued",
+      created_at: "2026-09-07T10:00:00Z",
+      started_at: null,
+      finished_at: null,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockRun), { status: 201 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { startSync } = await import("./api");
+    await startSync("org-123", "conn-1", "test-token", {});
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/syncs",
+      ),
+      expect.objectContaining({ body: "{}" }),
+    );
+  });
+
+  it("reads per-dataset sync health", async () => {
+    const mockHealth = {
+      items: [
+        {
+          dataset: "inventory.resources",
+          status: "healthy",
+          last_successful_sync_at: "2026-09-07T09:00:00Z",
+          policy_enabled: true,
+          interval_seconds: 3600,
+        },
+      ],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockHealth), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getSyncHealth } = await import("./api");
+    const result = await getSyncHealth("org-123", "conn-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/sync-health",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockHealth);
+  });
+
+  it("lists sync runs with pagination query params", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listSyncRuns } = await import("./api");
+    const result = await listSyncRuns("org-123", "conn-1", "test-token", {
+      limit: 10,
+      offset: 20,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/syncs?limit=10&offset=20",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("fetches one sync run's detail including its jobs", async () => {
+    const mockDetail = {
+      id: "run-1",
+      organization_id: "org-123",
+      connection_id: "conn-1",
+      trigger: "manual",
+      status: "succeeded",
+      created_at: "2026-08-27T10:00:00Z",
+      started_at: "2026-08-27T10:00:01Z",
+      finished_at: "2026-08-27T10:00:05Z",
+      jobs: [],
+    };
+    const response = new Response(JSON.stringify(mockDetail), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getSyncRun } = await import("./api");
+    const result = await getSyncRun("org-123", "conn-1", "run-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/syncs/run-1",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockDetail);
+  });
+
+  it("fetches one sync job's durable attempt history", async () => {
+    const mockAttempts = [
+      {
+        id: "attempt-1",
+        attempt: 1,
+        outcome: "retry_scheduled",
+        started_at: "2026-08-27T10:00:00Z",
+        finished_at: "2026-08-27T10:00:02Z",
+        error_code: "throttled",
+        error_message: "AWS throttled the request.",
+        records_read: 7,
+        records_created: 0,
+        records_updated: 0,
+        records_deleted: 0,
+      },
+    ];
+    const response = new Response(JSON.stringify(mockAttempts), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getSyncJobAttempts } = await import("./api");
+    const result = await getSyncJobAttempts(
+      "org-123",
+      "conn-1",
+      "run-1",
+      "job-1",
+      "test-token",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/syncs/run-1/jobs/job-1/attempts",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockAttempts);
+  });
+
+  it("upserts a sync policy by dataset, addressed without a policy id", async () => {
+    const mockPolicy = {
+      id: "policy-1",
+      connection_id: "conn-1",
+      target_id: null,
+      dataset: "inventory.resources",
+      enabled: true,
+      interval_seconds: 3600,
+      next_run_at: "2026-08-27T11:00:00Z",
+      created_at: "2026-08-27T10:00:00Z",
+      updated_at: "2026-08-27T10:00:00Z",
+    };
+    const response = new Response(JSON.stringify(mockPolicy), { status: 200 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { setSyncPolicy } = await import("./api");
+    const result = await setSyncPolicy("org-123", "conn-1", "test-token", {
+      dataset: "inventory.resources",
+      enabled: true,
+      interval_seconds: 3600,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/sync-policies",
+      ),
+      expect.objectContaining({
+        method: "PUT",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+        body: JSON.stringify({
+          dataset: "inventory.resources",
+          enabled: true,
+          interval_seconds: 3600,
+        }),
+      }),
+    );
+    expect(result).toEqual(mockPolicy);
+  });
+
+  it("lists sync policies for a connection", async () => {
+    const mockResponse = { items: [] };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listSyncPolicies } = await import("./api");
+    const result = await listSyncPolicies("org-123", "conn-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/sync-policies",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("requests cancellation of a sync run", async () => {
+    const mockRun = {
+      id: "run-1",
+      organization_id: "org-123",
+      connection_id: "conn-1",
+      trigger: "manual",
+      status: "cancel_requested",
+      created_at: "2026-08-27T10:00:00Z",
+      started_at: "2026-08-27T10:00:01Z",
+      finished_at: null,
+    };
+    const response = new Response(JSON.stringify(mockRun), { status: 200 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { cancelSync } = await import("./api");
+    const result = await cancelSync("org-123", "conn-1", "run-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/syncs/run-1/cancel",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockRun);
+  });
+});
+
+describe("targets", () => {
+  const mockTarget = {
+    id: "target-1",
+    organization_id: "org-123",
+    connection_id: "conn-1",
+    target_type: "account",
+    external_id: "123456789012",
+    display_name: null,
+    parent_target_id: null,
+    status: "verified",
+    provider_metadata: {},
+    created_at: "2026-08-27T10:00:00Z",
+    updated_at: "2026-08-27T10:00:00Z",
+  };
+
+  it("lists targets for a connection", async () => {
+    const response = new Response(JSON.stringify([mockTarget]), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listTargets } = await import("./api");
+    const result = await listTargets("org-123", "conn-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/targets",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual([mockTarget]);
+  });
+
+  it("disables a target", async () => {
+    const disabled = { ...mockTarget, status: "disabled" };
+    const response = new Response(JSON.stringify(disabled), { status: 200 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { disableTarget } = await import("./api");
+    const result = await disableTarget(
+      "org-123",
+      "conn-1",
+      "target-1",
+      "test-token",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/targets/target-1/disable",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(disabled);
+  });
+
+  it("replaces a target's identity with the requested external id", async () => {
+    const replacement = {
+      ...mockTarget,
+      id: "target-2",
+      external_id: "210987654321",
+    };
+    const response = new Response(JSON.stringify(replacement), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { replaceTargetIdentity } = await import("./api");
+    const result = await replaceTargetIdentity(
+      "org-123",
+      "conn-1",
+      "target-1",
+      "test-token",
+      "210987654321",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/targets/target-1/replace",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+          Authorization: "Bearer test-token",
+        }),
+        body: JSON.stringify({ requested_external_id: "210987654321" }),
+      }),
+    );
+    expect(result).toEqual(replacement);
+  });
+});
+
+describe("resources", () => {
+  it("lists resources with pagination and filter query params", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResources } = await import("./api");
+    const result = await listResources("org-123", "conn-1", "test-token", {
+      limit: 20,
+      offset: 0,
+      category: "compute",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/resources?limit=20&offset=0&category=compute",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("omits unset filters from the query string", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResources } = await import("./api");
+    await listResources("org-123", "conn-1", "test-token", {
+      limit: 20,
+      offset: 0,
+    });
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).toContain("limit=20&offset=0");
+    expect(calledUrl).not.toContain("category=");
+  });
+
+  it("sends targetId as a target_id query param", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResources } = await import("./api");
+    await listResources("org-123", "conn-1", "test-token", {
+      limit: 20,
+      offset: 0,
+      targetId: "target-1",
+    });
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).toContain("target_id=target-1");
+  });
+
+  it("sends lifecycleStatus as a lifecycle_status query param", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResources } = await import("./api");
+    await listResources("org-123", "conn-1", "test-token", {
+      limit: 20,
+      offset: 0,
+      lifecycleStatus: "missing",
+    });
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).toContain("lifecycle_status=missing");
+  });
+
+  it("finds a resource across paginated collection results", async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index) => ({
+      id: `resource-${index}`,
+    }));
+    const requestedResource = { id: "resource-requested", name: "Production" };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: firstPage, total: 21 }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ items: [requestedResource], total: 21 }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { findResource } = await import("./api");
+    const result = await findResource(
+      "org-123",
+      "conn-1",
+      "resource-requested",
+      "test-token",
+      {
+        category: "compute",
+        resourceType: "compute.instance",
+        region: "us-east-1",
+        preferredLifecycleStatus: "active",
+      },
+    );
+
+    expect(result).toEqual(requestedResource);
+    const calledUrls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(calledUrls[0]).toContain(
+      "limit=20&offset=0&category=compute&resource_type=compute.instance&region=us-east-1&lifecycle_status=active",
+    );
+    expect(calledUrls[1]).toContain("limit=20&offset=20");
+  });
+
+  it("fetches the distinct category/type/region filter options for a connection", async () => {
+    const mockResponse = {
+      category_types: [
+        { category: "compute", resource_type: "compute.instance" },
+      ],
+      regions: ["us-east-1"],
+    };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResourceFilters } = await import("./api");
+    const result = await listResourceFilters("org-123", "conn-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/resources/filters",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("scopes the filter options to a target when one is given", async () => {
+    const mockResponse = { category_types: [], regions: [] };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listResourceFilters } = await import("./api");
+    await listResourceFilters("org-123", "conn-1", "test-token", "target-1");
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).toContain("resources/filters?target_id=target-1");
+  });
+});
+
+describe("cost summaries", () => {
+  it("lists cost summaries with pagination and filter query params", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listCostSummaries } = await import("./api");
+    const result = await listCostSummaries("org-123", "conn-1", "test-token", {
+      limit: 25,
+      offset: 0,
+      costBasis: "amortized",
+      serviceName: "Amazon EC2",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/data/connections/conn-1/summaries?limit=25&offset=0&service_name=Amazon+EC2&cost_basis=amortized",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("omits unset filters from the query string", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listCostSummaries } = await import("./api");
+    await listCostSummaries("org-123", "conn-1", "test-token", {
+      limit: 25,
+      offset: 0,
+    });
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).toContain("limit=25&offset=0");
+    expect(calledUrl).not.toContain("cost_basis=");
+    expect(calledUrl).not.toContain("service_name=");
+    expect(calledUrl).not.toContain("target_id=");
+  });
+
+  it("surfaces a 403 as a CoreApiError when billing.read is not enabled", async () => {
+    const response = new Response(
+      JSON.stringify({
+        detail:
+          "Connection conn-1 does not have the billing.read capability enabled.",
+      }),
+      { status: 403 },
+    );
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listCostSummaries, CoreApiError } = await import("./api");
+
+    await expect(
+      listCostSummaries("org-123", "conn-1", "test-token", {
+        limit: 25,
+        offset: 0,
+      }),
+    ).rejects.toBeInstanceOf(CoreApiError);
+  });
+});
+
+describe("metrics, applications, and telemetry", () => {
+  it("lists one resource's metric datapoints with series filters", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listMetricDatapoints } = await import("./api");
+    const result = await listMetricDatapoints(
+      "org-123",
+      "conn-1",
+      "test-token",
+      {
+        resourceId: "resource-1",
+        limit: 100,
+        offset: 0,
+        namespace: "AWS/ECS",
+        metricName: "CPUUtilization",
+        start: "2026-09-01T00:00:00Z",
+      },
+    );
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(url).toContain(
+      "/v1/organizations/org-123/integrations/connections/conn-1/metrics?",
+    );
+    expect(url).toContain("resource_id=resource-1");
+    expect(url).toContain("namespace=AWS%2FECS");
+    expect(url).toContain("metric_name=CPUUtilization");
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("gets metric summaries for repeated resource ids and optional filters", async () => {
+    const mockResponse = { items: [] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getMetricUtilizationSummary } = await import("./api");
+    const result = await getMetricUtilizationSummary(
+      "org-123",
+      "conn-1",
+      "test-token",
+      {
+        resourceIds: ["resource-1", "resource-2"],
+        namespace: "AWS/ECS",
+        metricName: "CPUUtilization",
+        start: "2026-09-01T00:00:00Z",
+        end: "2026-09-08T00:00:00Z",
+      },
+    );
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    const parsed = new URL(url);
+    expect(parsed.pathname).toContain(
+      "/v1/organizations/org-123/integrations/connections/conn-1/metrics/summary",
+    );
+    expect(parsed.searchParams.getAll("resource_id")).toEqual([
+      "resource-1",
+      "resource-2",
+    ]);
+    expect(parsed.searchParams.get("namespace")).toBe("AWS/ECS");
+    expect(parsed.searchParams.get("metric_name")).toBe("CPUUtilization");
+    expect(parsed.searchParams.get("start")).toBe("2026-09-01T00:00:00Z");
+    expect(parsed.searchParams.get("end")).toBe("2026-09-08T00:00:00Z");
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("creates an application with the backend contract", async () => {
+    const mockApplication = { id: "app-1", name: "Payments" };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(mockApplication), { status: 201 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { createApplication } = await import("./api");
+    await createApplication("org-123", "test-token", {
+      name: "Payments",
+      slug: "payments",
+      description: "Payment services",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/v1/organizations/org-123/applications"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          name: "Payments",
+          slug: "payments",
+          description: "Payment services",
+        }),
+      }),
+    );
+  });
+
+  it("creates a source-scoped telemetry token at the nested endpoint", async () => {
+    const created = { id: "token-1", token: "dtx_live_secret" };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(created), { status: 201 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { createTelemetryIngestionToken } = await import("./api");
+    const result = await createTelemetryIngestionToken(
+      "org-123",
+      "app-1",
+      "env-1",
+      "source-1",
+      "test-token",
+      { scopes: ["telemetry:logs:write"], expires_at: null },
+    );
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain(
+      "/applications/app-1/environments/env-1/telemetry-sources/source-1/tokens",
+    );
+    expect(init).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          scopes: ["telemetry:logs:write"],
+          expires_at: null,
+        }),
+      }),
+    );
+    expect(result).toEqual(created);
+  });
+});
+
+describe("cost summary totals", () => {
+  it("requests totals with the period and cost basis query params", async () => {
+    const mockResponse = {
+      cost_basis: "net_unblended",
+      period_start: "2026-08-01T00:00:00Z",
+      period_end: "2026-08-02T00:00:00Z",
+      total_amount: "12.50",
+      currency: "USD",
+      is_estimated: false,
+      daily: [],
+    };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCostSummaryTotals } = await import("./api");
+    const result = await getCostSummaryTotals(
+      "org-123",
+      "conn-1",
+      "test-token",
+      {
+        periodStart: "2026-08-01T00:00:00Z",
+        periodEnd: "2026-08-02T00:00:00Z",
+        costBasis: "net_unblended",
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/data/connections/conn-1/summaries/totals?period_start=2026-08-01T00%3A00%3A00Z&period_end=2026-08-02T00%3A00%3A00Z&cost_basis=net_unblended",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("omits cost_basis from the query string when unset, letting Core default it", async () => {
+    const mockResponse = {
+      cost_basis: "net_unblended",
+      period_start: "2026-08-01T00:00:00Z",
+      period_end: "2026-08-02T00:00:00Z",
+      total_amount: "0",
+      currency: null,
+      is_estimated: false,
+      daily: [],
+    };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCostSummaryTotals } = await import("./api");
+    await getCostSummaryTotals("org-123", "conn-1", "test-token", {
+      periodStart: "2026-08-01T00:00:00Z",
+      periodEnd: "2026-08-02T00:00:00Z",
+    });
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).not.toContain("cost_basis=");
+  });
+
+  it("surfaces a 403 as a CoreApiError when billing.read is not enabled", async () => {
+    const response = new Response(
+      JSON.stringify({
+        detail:
+          "Connection conn-1 does not have the billing.read capability enabled.",
+      }),
+      { status: 403 },
+    );
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCostSummaryTotals, CoreApiError } = await import("./api");
+
+    await expect(
+      getCostSummaryTotals("org-123", "conn-1", "test-token", {
+        periodStart: "2026-08-01T00:00:00Z",
+        periodEnd: "2026-08-02T00:00:00Z",
+      }),
+    ).rejects.toBeInstanceOf(CoreApiError);
+  });
+});
+
+describe("cost usage", () => {
+  it("lists cost usage rows with pagination and filter query params", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listCostUsage } = await import("./api");
+    const result = await listCostUsage("org-123", "conn-1", "test-token", {
+      limit: 25,
+      offset: 0,
+      serviceName: "Amazon EC2",
+      billingAccountId: "123456789012",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/data/connections/conn-1/usage?limit=25&offset=0&service_name=Amazon+EC2&billing_account_id=123456789012",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("omits unset filters from the query string", async () => {
+    const mockResponse = { items: [], total: 0 };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listCostUsage } = await import("./api");
+    await listCostUsage("org-123", "conn-1", "test-token", {
+      limit: 25,
+      offset: 0,
+    });
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).toContain("limit=25&offset=0");
+    expect(calledUrl).not.toContain("service_name=");
+    expect(calledUrl).not.toContain("billing_account_id=");
+    expect(calledUrl).not.toContain("target_id=");
+  });
+
+  it("surfaces a 403 as a CoreApiError when billing.read is not enabled", async () => {
+    const response = new Response(
+      JSON.stringify({
+        detail:
+          "Connection conn-1 does not have the billing.read capability enabled.",
+      }),
+      { status: 403 },
+    );
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listCostUsage, CoreApiError } = await import("./api");
+
+    await expect(
+      listCostUsage("org-123", "conn-1", "test-token", {
+        limit: 25,
+        offset: 0,
+      }),
+    ).rejects.toBeInstanceOf(CoreApiError);
+  });
+});
+
+describe("cost usage totals", () => {
+  it("requests totals with the period and metric query params", async () => {
+    const mockResponse = {
+      metric: "effective_cost",
+      period_start: "2026-08-01T00:00:00Z",
+      period_end: "2026-08-02T00:00:00Z",
+      total_amount: "12.50",
+      currency: "USD",
+      daily: [],
+    };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCostUsageTotals } = await import("./api");
+    const result = await getCostUsageTotals("org-123", "conn-1", "test-token", {
+      periodStart: "2026-08-01T00:00:00Z",
+      periodEnd: "2026-08-02T00:00:00Z",
+      metric: "effective_cost",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/data/connections/conn-1/usage/totals?period_start=2026-08-01T00%3A00%3A00Z&period_end=2026-08-02T00%3A00%3A00Z&metric=effective_cost",
+      ),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("omits metric from the query string when unset, letting Core default it", async () => {
+    const mockResponse = {
+      metric: "effective_cost",
+      period_start: "2026-08-01T00:00:00Z",
+      period_end: "2026-08-02T00:00:00Z",
+      total_amount: "0",
+      currency: null,
+      daily: [],
+    };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCostUsageTotals } = await import("./api");
+    await getCostUsageTotals("org-123", "conn-1", "test-token", {
+      periodStart: "2026-08-01T00:00:00Z",
+      periodEnd: "2026-08-02T00:00:00Z",
+    });
+
+    const [calledUrl] = fetchMock.mock.calls[0] as [string];
+    expect(calledUrl).not.toContain("metric=");
+  });
+
+  it("surfaces a 403 as a CoreApiError when billing.read is not enabled", async () => {
+    const response = new Response(
+      JSON.stringify({
+        detail:
+          "Connection conn-1 does not have the billing.read capability enabled.",
+      }),
+      { status: 403 },
+    );
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCostUsageTotals, CoreApiError } = await import("./api");
+
+    await expect(
+      getCostUsageTotals("org-123", "conn-1", "test-token", {
+        periodStart: "2026-08-01T00:00:00Z",
+        periodEnd: "2026-08-02T00:00:00Z",
+      }),
+    ).rejects.toBeInstanceOf(CoreApiError);
+  });
+});
+
+describe("purgeConnection", () => {
+  it("posts to the purge endpoint and returns per-table deletion counts", async () => {
+    const mockResponse = {
+      purge_counts: { sync_checkpoints: 3, sync_jobs: 25, resources: 152 },
+    };
+    const response = new Response(JSON.stringify(mockResponse), {
+      status: 200,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { purgeConnection } = await import("./api");
+    const result = await purgeConnection("org-123", "conn-1", "test-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/integrations/connections/conn-1/purge",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it("surfaces a 409 as a CoreApiError when the connection still has historical data", async () => {
+    const response = new Response(
+      JSON.stringify({
+        detail:
+          "connection conn-1 cannot be removed: one or more of its targets still has historical sync/normalized data referencing it.",
+      }),
+      { status: 409 },
+    );
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { purgeConnection, CoreApiError } = await import("./api");
+
+    await expect(
+      purgeConnection("org-123", "conn-1", "test-token"),
+    ).rejects.toBeInstanceOf(CoreApiError);
+  });
+});
+
+describe("submitContactMessage", () => {
+  it("posts the contact message payload without an auth header", async () => {
+    const response = new Response(null, { status: 204 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { submitContactMessage } = await import("./api");
+    await submitContactMessage({
+      name: "Jane Doe",
+      email: "jane@example.com",
+      message: "Hello there.",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/v1/site/contact-message"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          name: "Jane Doe",
+          email: "jane@example.com",
+          message: "Hello there.",
+        }),
+      }),
+    );
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers).not.toHaveProperty("Authorization");
+  });
+
+  it("throws a CoreApiError with the backend detail message on failure", async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ detail: "Message too long." }), {
+          status: 422,
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { submitContactMessage, CoreApiError } = await import("./api");
+    await expect(
+      submitContactMessage({
+        name: "Jane Doe",
+        email: "jane@example.com",
+        message: "Hello there.",
+      }),
+    ).rejects.toThrow(CoreApiError);
+    await expect(
+      submitContactMessage({
+        name: "Jane Doe",
+        email: "jane@example.com",
+        message: "Hello there.",
+      }),
+    ).rejects.toThrow("Message too long.");
+  });
+
+  it("sends review answers as a JSON body", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: "review-1" }), { status: 202 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { answerRecommendationReview } = await import("./api");
+    await answerRecommendationReview(
+      "org-123",
+      "rec-1",
+      { "resource.purpose": "vpn_gateway" },
+      "test-token",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/v1/organizations/org-123/cost/recommendations/rec-1/review/answers",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          answers: { "resource.purpose": "vpn_gateway" },
+        }),
+      }),
+    );
   });
 });

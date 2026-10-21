@@ -2,10 +2,21 @@ import type { Metadata } from "next";
 import { TrendingDown } from "lucide-react";
 import { getProductBySlug } from "@/lib/data/products";
 import { getDashboardOverview } from "@/lib/data/dashboard";
+import { parseCostDataScope } from "@/lib/billing/cost-data-scope";
+import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { AnimatedNumber } from "@/components/common/animated-number";
 import { Sparkline } from "@/components/product/sparkline";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { CostOverview } from "@/components/dashboard/cost/cost-overview";
+import { CostDataScope } from "@/components/dashboard/cost/cost-data-scope";
+import {
+  CostOverviewTabs,
+  parseCostOverviewView,
+} from "@/components/dashboard/cost/cost-overview-tabs";
+import { CostDataView } from "@/components/dashboard/cost/cost-data-view";
+import { CostTrends } from "@/components/dashboard/cost/cost-trends";
+import { InfrastructureGraph } from "@/components/dashboard/infrastructure/infrastructure-graph";
 
 export async function generateMetadata({
   params,
@@ -20,8 +31,62 @@ export async function generateMetadata({
 
 export default async function ProductOverviewPage({
   params,
+  searchParams,
 }: PageProps<"/dashboard/products/[slug]">) {
   const { slug } = await params;
+
+  if (slug === "cost") {
+    const query = await searchParams;
+    const costDataScope = parseCostDataScope(query);
+    const view = parseCostOverviewView(query.view);
+    const { token, organization } = await requireDashboardOrganization();
+    return (
+      <div className="flex flex-col gap-6">
+        <CostDataScope
+          organizationId={organization.organization_id}
+          token={token}
+        />
+        <CostOverviewTabs active={view} searchParams={query} />
+        {view === "summary" ? (
+          <CostOverview
+            organizationId={organization.organization_id}
+            token={token}
+            connectionId={costDataScope.connectionId}
+            targetId={costDataScope.targetId}
+          />
+        ) : view === "trends" ? (
+          <CostTrends
+            organizationId={organization.organization_id}
+            token={token}
+            connectionId={costDataScope.connectionId}
+            targetId={costDataScope.targetId}
+            searchParams={query}
+          />
+        ) : (
+          <CostDataView
+            view={view}
+            organizationId={organization.organization_id}
+            token={token}
+            connectionId={costDataScope.connectionId}
+            targetId={costDataScope.targetId}
+            searchParams={query}
+          />
+        )}
+      </div>
+    );
+  }
+
+  if (slug === "infrastructure") {
+    const { token, organization } = await requireDashboardOrganization();
+    return (
+      <InfrastructureGraph
+        organizationId={organization.organization_id}
+        token={token}
+        searchParams={await searchParams}
+      />
+    );
+  }
+
   const overview = await getDashboardOverview(slug);
 
   if (!overview) {

@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getBlogPosts, getBlogPostBySlug } from "@/lib/data/blog";
+import { getBlogPostBySlug } from "@/lib/data/blog";
+import { siteConfig } from "@/config/site";
 import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Clock, ArrowRight } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 
-export async function generateStaticParams() {
-  const posts = await getBlogPosts();
-  return posts.map((post) => ({ slug: post.slug }));
-}
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
@@ -19,9 +22,19 @@ export async function generateMetadata({
   if (!post) return { title: "Blog" };
 
   return {
-    title: `${post.title} — Dilanix Blog`,
+    title: post.title,
     description: post.excerpt,
     alternates: { canonical: `/blog/${post.slug}` },
+    // Setting `openGraph` here replaces the root one, so it names its image
+    // too — the cover, else the site's card.
+    openGraph: {
+      type: "article",
+      url: `/blog/${post.slug}`,
+      publishedTime: post.publishedAtIso,
+      authors: post.author ? [post.author.name] : undefined,
+      section: post.category,
+      images: [post.coverImageUrl ?? "/opengraph-image"],
+    },
   };
 }
 
@@ -35,8 +48,31 @@ export default async function BlogPostPage({
     notFound();
   }
 
+  const articleJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.excerpt,
+    ...(post.publishedAtIso ? { datePublished: post.publishedAtIso } : {}),
+    ...(post.coverImageUrl ? { image: [post.coverImageUrl] } : {}),
+    author: post.author
+      ? { "@type": "Person", name: post.author.name }
+      : { "@type": "Organization", name: siteConfig.name },
+    publisher: {
+      "@type": "Organization",
+      "@id": `${siteConfig.url}/#organization`,
+      name: siteConfig.name,
+      logo: `${siteConfig.url}/dilanix-logo.png`,
+    },
+    mainEntityOfPage: `${siteConfig.url}/blog/${post.slug}`,
+  };
+
   return (
     <article className="py-16 sm:py-24">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }}
+      />
       <Container className="max-w-3xl">
         {/* Back navigation */}
         <Link
@@ -89,63 +125,132 @@ export default async function BlogPostPage({
           )}
         </div>
 
+        {post.coverImageUrl ? (
+          <div className="border-foreground/10 relative mt-10 aspect-[16/9] overflow-hidden rounded-2xl border">
+            <Image
+              src={post.coverImageUrl}
+              alt={post.title}
+              fill
+              priority
+              unoptimized
+              sizes="(min-width: 768px) 768px, 100vw"
+              className="object-cover"
+            />
+          </div>
+        ) : null}
+
         {/* Article Body */}
-        <div className="border-foreground/10 text-foreground/90 mt-12 space-y-6 border-t pt-10 text-base leading-relaxed sm:text-lg">
+        <div className="border-foreground/10 mt-12 border-t pt-10">
           {post.content ? (
-            <div className="prose prose-neutral dark:prose-invert max-w-none space-y-6">
-              {post.content.split("\n\n").map((paragraph, index) => {
-                if (paragraph.startsWith("### ")) {
-                  return (
-                    <h3
-                      key={index}
-                      className="text-foreground mt-8 mb-4 text-xl font-semibold sm:text-2xl"
-                    >
-                      {paragraph.replace("### ", "")}
-                    </h3>
-                  );
-                }
-                if (paragraph.startsWith("## ")) {
-                  return (
-                    <h2
-                      key={index}
-                      className="text-foreground mt-10 mb-4 text-2xl font-semibold sm:text-3xl"
-                    >
-                      {paragraph.replace("## ", "")}
+            <div className="max-w-none">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw, rehypeSanitize]}
+                components={{
+                  h1: ({ children }) => (
+                    <h2 className="text-foreground mt-10 mb-4 text-2xl font-semibold sm:text-3xl">
+                      {children}
                     </h2>
-                  );
-                }
-                if (paragraph.startsWith("# ")) {
-                  return null; // already handled by header
-                }
-                if (paragraph.startsWith("- ")) {
-                  const items = paragraph.split("\n- ");
-                  return (
-                    <ul
-                      key={index}
-                      className="text-muted-foreground my-4 list-inside list-disc space-y-2"
-                    >
-                      {items.map((item, i) => (
-                        <li key={i} className="text-foreground/90 text-base">
-                          {item.replace(/^- /, "")}
-                        </li>
-                      ))}
+                  ),
+                  h2: ({ children }) => (
+                    <h2 className="text-foreground mt-10 mb-4 text-2xl font-semibold sm:text-3xl">
+                      {children}
+                    </h2>
+                  ),
+                  h3: ({ children }) => (
+                    <h3 className="text-foreground mt-8 mb-4 text-xl font-semibold sm:text-2xl">
+                      {children}
+                    </h3>
+                  ),
+                  h4: ({ children }) => (
+                    <h4 className="text-foreground mt-7 mb-3 text-lg font-semibold sm:text-xl">
+                      {children}
+                    </h4>
+                  ),
+                  p: ({ children }) => (
+                    <p className="text-muted-foreground my-5 text-base leading-relaxed sm:text-lg">
+                      {children}
+                    </p>
+                  ),
+                  strong: ({ children }) => (
+                    <strong className="text-foreground font-semibold">
+                      {children}
+                    </strong>
+                  ),
+                  em: ({ children }) => (
+                    <em className="text-foreground/90 italic">{children}</em>
+                  ),
+                  del: ({ children }) => (
+                    <del className="text-muted-foreground line-through">
+                      {children}
+                    </del>
+                  ),
+                  ul: ({ children }) => (
+                    <ul className="text-muted-foreground my-5 list-outside list-disc space-y-2 pl-6">
+                      {children}
                     </ul>
-                  );
-                }
-                if (paragraph.startsWith("---")) {
-                  return (
-                    <hr key={index} className="border-foreground/10 my-8" />
-                  );
-                }
-                return (
-                  <p
-                    key={index}
-                    className="text-muted-foreground text-base leading-relaxed sm:text-lg"
-                  >
-                    {paragraph}
-                  </p>
-                );
-              })}
+                  ),
+                  ol: ({ children }) => (
+                    <ol className="text-muted-foreground my-5 list-outside list-decimal space-y-2 pl-6">
+                      {children}
+                    </ol>
+                  ),
+                  li: ({ children }) => (
+                    <li className="text-foreground/90 pl-1 text-base leading-relaxed sm:text-lg">
+                      {children}
+                    </li>
+                  ),
+                  blockquote: ({ children }) => (
+                    <blockquote className="border-accent/60 text-muted-foreground my-6 border-l-4 pl-5 italic">
+                      {children}
+                    </blockquote>
+                  ),
+                  hr: () => <hr className="border-foreground/10 my-10" />,
+                  a: ({ href, children }) => {
+                    const external = href?.startsWith("http");
+
+                    return (
+                      <a
+                        href={href}
+                        target={external ? "_blank" : undefined}
+                        rel={external ? "noreferrer" : undefined}
+                        className="text-accent underline decoration-current/40 underline-offset-4 transition-opacity hover:opacity-80"
+                      >
+                        {children}
+                      </a>
+                    );
+                  },
+                  pre: ({ children }) => (
+                    <pre className="border-foreground/10 bg-foreground/[0.04] my-6 overflow-x-auto rounded-xl border p-5 text-sm leading-relaxed">
+                      {children}
+                    </pre>
+                  ),
+                  code: ({ children }) => (
+                    <code className="bg-foreground/[0.06] text-foreground rounded px-1.5 py-0.5 font-mono text-[0.9em]">
+                      {children}
+                    </code>
+                  ),
+                  table: ({ children }) => (
+                    <div className="my-7 overflow-x-auto">
+                      <table className="border-foreground/10 w-full border-collapse border text-sm">
+                        {children}
+                      </table>
+                    </div>
+                  ),
+                  th: ({ children }) => (
+                    <th className="border-foreground/10 bg-foreground/[0.04] border px-4 py-3 text-left font-semibold">
+                      {children}
+                    </th>
+                  ),
+                  td: ({ children }) => (
+                    <td className="border-foreground/10 border px-4 py-3">
+                      {children}
+                    </td>
+                  ),
+                }}
+              >
+                {post.content}
+              </ReactMarkdown>
             </div>
           ) : null}
         </div>
@@ -160,7 +265,8 @@ export default async function BlogPostPage({
               Explore custom infrastructure software with Dilanix
             </h3>
             <p className="text-muted-foreground mt-2 max-w-md text-xs sm:text-sm">
-              We partner with high-scale engineering organizations to build focused solutions.
+              We partner with high-scale engineering organizations to build
+              focused solutions.
             </p>
           </div>
 

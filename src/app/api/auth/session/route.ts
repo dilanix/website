@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server";
-import { getRefreshToken } from "@/lib/auth/session";
+import { getAccessToken, getRefreshToken } from "@/lib/auth/session";
 
 /**
  * Lets the (client-rendered) Navbar know whether the visitor is signed in
  * without forcing every static marketing page into dynamic rendering —
  * the session cookies are httpOnly, so they can't be read from client JS.
- * Keyed off the refresh token rather than the access token: the access
- * token can be momentarily absent while `proxy.ts` is rotating it, but the
- * user is still very much signed in.
+ * Treat either token as enough for the marketing header. `refresh` is the
+ * more durable signal, but some browsers can temporarily retain only the
+ * short-lived access token, which would otherwise incorrectly render the
+ * signed-out header state.
  */
 export async function GET() {
-  const token = await getRefreshToken();
+  const [accessToken, refreshToken] = await Promise.all([
+    getAccessToken(),
+    getRefreshToken(),
+  ]);
   return NextResponse.json(
-    { authenticated: Boolean(token) },
+    { authenticated: Boolean(refreshToken || accessToken) },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

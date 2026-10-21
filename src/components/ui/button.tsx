@@ -2,13 +2,13 @@ import type { AnchorHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 const base =
-  "inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-medium transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50";
+  "inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-medium transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50";
 
 const variants = {
   primary:
-    "bg-accent text-accent-foreground hover:opacity-90 focus-visible:outline-accent",
+    "text-accent-foreground bg-[linear-gradient(135deg,var(--accent),var(--accent-secondary))] shadow-[0_14px_34px_var(--shadow-brand)] hover:-translate-y-0.5 focus-visible:outline-accent",
   secondary:
-    "border border-foreground/15 text-foreground hover:border-accent/50 hover:text-accent focus-visible:outline-foreground/40",
+    "border border-border-soft bg-card-strong/85 text-foreground shadow-[0_12px_30px_var(--shadow-card)] hover:border-accent/35 hover:bg-surface-strong hover:text-accent focus-visible:outline-foreground/40",
   ghost: "text-muted-foreground hover:text-accent",
 } as const;
 

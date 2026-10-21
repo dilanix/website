@@ -1,11 +1,12 @@
 import type { Metadata, Route } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { getBlogPosts } from "@/lib/data/blog";
 import { Container } from "@/components/ui/container";
 import { ArrowRight, Clock, BookOpen } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Blog & Engineering Notes — Dilanix",
+  title: "Blog & Engineering Notes",
   description:
     "Technical articles, cloud optimization guides, and AI unit economics insights from the Dilanix engineering team.",
   alternates: { canonical: "/blog" },
@@ -45,6 +46,23 @@ export default async function BlogPage() {
                 key={post.slug}
                 className="group border-foreground/10 bg-card-strong hover:border-foreground/25 flex flex-col justify-between rounded-2xl border p-6 transition-all duration-300 hover:shadow-xl hover:shadow-black/5 sm:p-8"
               >
+                {post.coverImageUrl ? (
+                  <Link
+                    href={`/blog/${post.slug}` as Route}
+                    className="border-foreground/10 relative mb-6 block aspect-[16/9] overflow-hidden rounded-xl border"
+                    aria-label={post.title}
+                  >
+                    <Image
+                      src={post.coverImageUrl}
+                      alt={post.title}
+                      fill
+                      unoptimized
+                      sizes="(min-width: 768px) 50vw, 100vw"
+                      className="object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                    />
+                  </Link>
+                ) : null}
+
                 <div>
                   <div className="flex items-center justify-between gap-2 text-xs">
                     {post.category ? (

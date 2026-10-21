@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Container } from "@/components/ui/container";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — Dilanix",
+  title: "Terms of Service",
   description:
     "Terms and conditions for using Dilanix software products and services.",
   alternates: { canonical: "/terms" },
@@ -27,8 +27,8 @@ export default function TermsPage() {
             <p>
               By accessing or using Dilanix software, services, or APIs, you
               agree to be bound by these Terms of Service. If you are entering
-              into this agreement on behalf of an entity, you represent that
-              you have the authority to bind such entity.
+              into this agreement on behalf of an entity, you represent that you
+              have the authority to bind such entity.
             </p>
           </section>
 

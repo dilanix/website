@@ -1,0 +1,1617 @@
+"use client";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
+import {
+  AlertCircle,
+  Ban,
+  Boxes,
+  CalendarClock,
+  ChevronRight,
+  CircleDollarSign,
+  Database,
+  Gauge,
+  HeartPulse,
+  Loader2,
+  RefreshCw,
+  Settings2,
+  X,
+} from "lucide-react";
+import type {
+  CoreSyncJob,
+  CoreSyncJobAttempt,
+  CoreSyncDatasetHealth,
+  CoreIntegrationTarget,
+  CoreSyncPolicy,
+  CoreSyncRun,
+  CoreSyncRunDetail,
+  SyncJobAttemptOutcome,
+  SyncJobStatus,
+  SyncDatasetHealthStatus,
+  SyncRunStatus,
+} from "@/lib/core/api";
+import {
+  cancelSyncAction,
+  getSyncJobAttemptsAction,
+  getSyncHealthAction,
+  getSyncRunAction,
+  listSyncRunsAction,
+  setSyncPolicyAction,
+  startSyncAction,
+} from "@/app/dashboard/integrations/actions";
+import {
+  eligibleSyncDatasets,
+  SYNC_DATASETS,
+  SYNC_INTERVAL_PRESETS,
+  SYNC_RUNS_PAGE_SIZE,
+} from "@/lib/sync/datasets";
+import { stageProgress } from "@/lib/sync/progress";
+import { useSyncRunEvents } from "@/hooks/use-sync-run-events";
+import {
+  syncPanelAnchors as tourAnchors,
+  type SyncPanelTourRequest,
+} from "@/lib/tours/definitions/sync-panel";
+import { ModalOverlay } from "./modal-overlay";
+import { EmptyState, StatusBadge } from "./primitives";
+import { Toast } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
+
+const ACTIVE_RUN_STATUSES = new Set<SyncRunStatus>([
+  "queued",
+  "running",
+  "cancel_requested",
+]);
+const POLL_INTERVAL_MS = 4000;
+
+function runStatusTone(
+  status: SyncRunStatus,
+): "success" | "neutral" | "warning" {
+  if (status === "succeeded") return "success";
+  if (status === "failed" || status === "partially_succeeded") return "warning";
+  return "neutral";
+}
+
+function jobStatusTone(
+  status: SyncJobStatus,
+): "success" | "neutral" | "warning" {
+  if (status === "succeeded") return "success";
+  if (status === "failed") return "warning";
+  return "neutral";
+}
+
+function attemptOutcomeTone(
+  outcome: SyncJobAttemptOutcome,
+): "success" | "neutral" | "warning" {
+  if (outcome === "succeeded") return "success";
+  if (outcome === "failed") return "warning";
+  return "neutral";
+}
+
+function formatRelativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const seconds = Math.round(diffMs / 1000);
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function formatDuration(
+  startedAt: string | null,
+  finishedAt: string | null,
+): string | null {
+  if (!startedAt || !finishedAt) return null;
+  const totalSeconds = Math.max(
+    0,
+    Math.round(
+      (new Date(finishedAt).getTime() - new Date(startedAt).getTime()) / 1000,
+    ),
+  );
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return `${minutes}m ${seconds}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
+
+/** For a future timestamp such as `SyncPolicy.next_run_at` — `formatRelativeTime`
+ * above is "ago" phrasing only and would misread a future date as "just now". */
+function formatNextRun(iso: string | null): string {
+  if (!iso) return "not scheduled";
+  const diffMs = new Date(iso).getTime() - Date.now();
+  if (diffMs <= 30_000) return "due now";
+  const minutes = Math.round(diffMs / 60_000);
+  if (minutes < 60) return `in ${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `in ${hours}h`;
+  const days = Math.round(hours / 24);
+  return `in ${days}d`;
+}
+
+function syncHealthLabel(status: SyncDatasetHealthStatus): string {
+  return {
+    healthy: "Healthy",
+    degraded: "Degraded",
+    delayed: "Delayed",
+    failing: "Failing",
+    never_synced: "Never synced",
+  }[status];
+}
+
+function syncHealthTone(
+  status: SyncDatasetHealthStatus,
+): "success" | "neutral" | "warning" {
+  if (status === "healthy") return "success";
+  if (status === "never_synced") return "neutral";
+  return "warning";
+}
+
+function datasetLabel(slug: string): string {
+  return (
+    SYNC_DATASETS.find((dataset) => dataset.slug === slug)?.label ??
+    slug
+      .split(/[._-]+/)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ")
+  );
+}
+
+function DatasetIcon({ dataset }: { dataset: string }) {
+  if (dataset === "inventory.resources") return <Boxes size={15} />;
+  if (dataset.startsWith("billing.")) return <CircleDollarSign size={15} />;
+  if (dataset === "metrics.utilization") return <Gauge size={15} />;
+  return <Database size={15} />;
+}
+
+function jobScope(job: CoreSyncJob): { label: string; value: string } {
+  if (!job.scope_key) return { label: "Scope", value: "All configured scopes" };
+  if (job.dataset.startsWith("billing.")) {
+    return { label: "Billing period", value: job.scope_key };
+  }
+  if (
+    job.dataset === "inventory.resources" ||
+    job.dataset === "metrics.utilization"
+  ) {
+    return { label: "Region", value: job.scope_key };
+  }
+  return { label: "Scope", value: job.scope_key };
+}
+
+function formatInterval(seconds: number | null): string {
+  if (seconds === null) return "No schedule";
+  const preset = SYNC_INTERVAL_PRESETS.find(
+    (candidate) => candidate.seconds === seconds,
+  );
+  if (preset) return preset.label;
+  if (seconds % 86_400 === 0)
+    return `Every ${seconds / 86_400} ${seconds === 86_400 ? "day" : "days"}`;
+  if (seconds % 3_600 === 0)
+    return `Every ${seconds / 3_600} ${seconds === 3_600 ? "hour" : "hours"}`;
+  return `Every ${seconds}s`;
+}
+
+/** Merges a freshly-polled first page into the currently-held list, keeping any
+ * additional pages loaded via "Load more" untouched (and de-duplicated). */
+function mergeFirstPage(
+  current: CoreSyncRun[],
+  freshFirstPage: CoreSyncRun[],
+): CoreSyncRun[] {
+  const freshIds = new Set(freshFirstPage.map((run) => run.id));
+  const rest = current
+    .slice(freshFirstPage.length)
+    .filter((run) => !freshIds.has(run.id));
+  return [...freshFirstPage, ...rest];
+}
+
+function JobAttemptHistory({
+  connectionId,
+  syncRunId,
+  syncJobId,
+}: {
+  connectionId: string;
+  syncRunId: string;
+  syncJobId: string;
+}) {
+  const [attempts, setAttempts] = useState<CoreSyncJobAttempt[] | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const result = await getSyncJobAttemptsAction(
+        connectionId,
+        syncRunId,
+        syncJobId,
+      );
+      if (cancelled) return;
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setAttempts(result.data ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionId, syncRunId, syncJobId]);
+
+  if (error) {
+    return <p className="text-xs text-red-500">{error}</p>;
+  }
+  if (!attempts) {
+    return (
+      <div className="text-muted-foreground flex items-center gap-1.5 py-1 text-xs">
+        <Loader2 size={11} className="animate-spin" />
+        Loading attempt history…
+      </div>
+    );
+  }
+  if (attempts.length === 0) {
+    return (
+      <p className="text-muted-foreground text-xs">No recorded attempts.</p>
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {attempts.map((attempt) => (
+        <li
+          key={attempt.id}
+          className="border-foreground/10 bg-foreground/[0.02] flex flex-col gap-1 rounded-md border p-2 text-xs"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-mono">attempt {attempt.attempt}</span>
+            <StatusBadge status={attemptOutcomeTone(attempt.outcome)}>
+              {attempt.outcome.replace("_", " ")}
+            </StatusBadge>
+            <span className="text-muted-foreground font-mono">
+              {formatRelativeTime(attempt.finished_at)}
+            </span>
+          </div>
+          {attempt.error_code || attempt.error_message ? (
+            <p className="flex items-start gap-1.5 text-red-500/90">
+              <AlertCircle size={12} className="mt-0.5 shrink-0" />
+              <span>
+                {attempt.error_code ? (
+                  <span className="font-medium">{attempt.error_code}: </span>
+                ) : null}
+                {attempt.error_message}
+              </span>
+            </p>
+          ) : null}
+          <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 font-mono">
+            <span>read {attempt.records_read}</span>
+            <span>created {attempt.records_created}</span>
+            <span>updated {attempt.records_updated}</span>
+            <span>deleted {attempt.records_deleted}</span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function JobRow({
+  job,
+  target,
+  connectionId,
+  syncRunId,
+  anchor,
+}: {
+  job: CoreSyncJob;
+  target?: CoreIntegrationTarget;
+  connectionId: string;
+  syncRunId: string;
+  /** The product-tour anchor, on the run's first job. */
+  anchor?: string;
+}) {
+  const progress = stageProgress(job);
+  const scope = jobScope(job);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const targetName =
+    target?.display_name ??
+    target?.external_id ??
+    `Target ${job.target_id.slice(0, 8)}…`;
+
+  return (
+    <article
+      data-tour={anchor}
+      className="border-foreground/10 bg-background overflow-hidden rounded-lg border text-xs"
+    >
+      <button
+        type="button"
+        aria-expanded={detailsOpen}
+        onClick={() => setDetailsOpen((current) => !current)}
+        className="hover:bg-foreground/[0.025] flex w-full items-center gap-3 p-3 text-left transition-colors"
+      >
+        <ChevronRight
+          size={14}
+          className={cn(
+            "text-muted-foreground shrink-0 transition-transform",
+            detailsOpen && "rotate-90",
+          )}
+        />
+        <span className="bg-accent/10 text-accent flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+          <DatasetIcon dataset={job.dataset} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">
+            {datasetLabel(job.dataset)}
+          </span>
+          <span className="text-muted-foreground mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="truncate">{targetName}</span>
+            {target?.display_name ? (
+              <span className="font-mono">{target.external_id}</span>
+            ) : null}
+            <span aria-hidden="true">·</span>
+            <span>
+              {scope.label}: <span className="font-mono">{scope.value}</span>
+            </span>
+          </span>
+        </span>
+        <span className="shrink-0">
+          <StatusBadge status={jobStatusTone(job.status)}>
+            {job.status}
+          </StatusBadge>
+        </span>
+      </button>
+
+      {detailsOpen ? (
+        <div className="border-foreground/10 bg-foreground/[0.012] space-y-4 border-t p-4">
+          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              ["Read", job.records_read],
+              ["Created", job.records_created],
+              ["Updated", job.records_updated],
+              ["Deleted", job.records_deleted],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className="border-border-soft bg-background/60 rounded-lg border px-3 py-2.5"
+              >
+                <dt className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+                  {label}
+                </dt>
+                <dd className="mt-1 font-mono text-base font-semibold">
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          {progress && job.status === "running" ? (
+            <div className="flex items-center gap-2">
+              <div className="bg-foreground/10 h-1.5 flex-1 overflow-hidden rounded-full">
+                <div
+                  className="bg-accent h-full rounded-full transition-[width] duration-500 ease-out"
+                  style={{ width: `${progress.percent}%` }}
+                />
+              </div>
+              <span className="text-muted-foreground shrink-0 font-mono">
+                {progress.label}
+              </span>
+            </div>
+          ) : null}
+
+          <dl className="grid gap-x-5 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt className="text-muted-foreground">Dataset</dt>
+              <dd className="mt-0.5 font-mono">{job.dataset}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">{scope.label}</dt>
+              <dd className="mt-0.5 font-mono">{scope.value}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Strategy</dt>
+              <dd className="mt-0.5 capitalize">{job.strategy}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Attempt</dt>
+              <dd className="mt-0.5 font-mono">{job.attempt}</dd>
+            </div>
+          </dl>
+
+          {job.collector_version || job.normalizer_version ? (
+            <p
+              className="text-muted-foreground font-mono text-[11px]"
+              title="Which version of the collector, and of its provider-field mapping, produced this job's data."
+            >
+              collector v{job.collector_version ?? "?"} · normalizer v
+              {job.normalizer_version ?? "?"}
+            </p>
+          ) : null}
+
+          {job.status === "running" && job.current_stage ? (
+            <div
+              className="text-muted-foreground truncate font-mono"
+              title={job.current_stage}
+            >
+              last: {job.current_stage}
+            </div>
+          ) : null}
+
+          {job.status === "running" && job.heartbeat_at ? (
+            <div className="text-accent flex items-center gap-1.5 font-mono">
+              <span className="bg-accent inline-block h-1.5 w-1.5 animate-pulse rounded-full" />
+              <span>
+                progress updated {formatRelativeTime(job.heartbeat_at)}
+              </span>
+            </div>
+          ) : null}
+
+          {job.status === "cancel_requested" ? (
+            <div className="text-muted-foreground flex items-center gap-1.5 font-mono">
+              <Loader2 size={12} className="animate-spin" />
+              <span>
+                cancellation requested — waiting for a safe point to stop
+              </span>
+            </div>
+          ) : null}
+
+          {job.status === "failed" && job.error_message ? (
+            <p className="flex items-start gap-1.5 text-red-500/90">
+              <AlertCircle size={13} className="mt-0.5 shrink-0" />
+              <span>
+                {job.error_code ? (
+                  <span className="font-medium">{job.error_code}: </span>
+                ) : null}
+                {job.error_message}
+              </span>
+            </p>
+          ) : null}
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowHistory((current) => !current)}
+              className="text-accent text-xs font-medium hover:underline"
+            >
+              {showHistory ? "Hide attempt history" : "Show attempt history"}
+            </button>
+            {showHistory ? (
+              <div className="mt-3">
+                <JobAttemptHistory
+                  connectionId={connectionId}
+                  syncRunId={syncRunId}
+                  syncJobId={job.id}
+                />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function DatasetTotals({ jobs }: { jobs: CoreSyncJob[] }) {
+  const totals = new Map<
+    string,
+    {
+      tasks: number;
+      read: number;
+      created: number;
+      updated: number;
+      deleted: number;
+    }
+  >();
+
+  for (const job of jobs) {
+    const current = totals.get(job.dataset) ?? {
+      tasks: 0,
+      read: 0,
+      created: 0,
+      updated: 0,
+      deleted: 0,
+    };
+    current.tasks += 1;
+    current.read += job.records_read;
+    current.created += job.records_created;
+    current.updated += job.records_updated;
+    current.deleted += job.records_deleted;
+    totals.set(job.dataset, current);
+  }
+
+  if (totals.size === 0) return null;
+
+  return (
+    <section
+      aria-labelledby="dataset-totals-title"
+      data-tour={tourAnchors.totals}
+      className="border-border-soft bg-background rounded-xl border p-4"
+    >
+      <div>
+        <h4 id="dataset-totals-title" className="text-sm font-semibold">
+          Dataset totals
+        </h4>
+        <p className="text-muted-foreground mt-0.5 text-xs">
+          Aggregated across every target and scope task in this run.
+        </p>
+      </div>
+      <div className="mt-3 grid gap-3 xl:grid-cols-2">
+        {[...totals.entries()].map(([dataset, values]) => (
+          <article
+            key={dataset}
+            aria-label={`${datasetLabel(dataset)} totals`}
+            className="border-border-soft bg-foreground/[0.015] rounded-lg border p-3"
+          >
+            <div className="flex items-center gap-2">
+              <span className="bg-accent/10 text-accent flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+                <DatasetIcon dataset={dataset} />
+              </span>
+              <div className="min-w-0">
+                <h5 className="truncate text-xs font-medium">
+                  {datasetLabel(dataset)}
+                </h5>
+                <p className="text-muted-foreground text-[10px]">
+                  {values.tasks} {values.tasks === 1 ? "task" : "tasks"}
+                </p>
+              </div>
+            </div>
+            <dl className="mt-3 grid grid-cols-4 gap-2">
+              {[
+                ["Read", values.read],
+                ["Created", values.created],
+                ["Updated", values.updated],
+                ["Deleted", values.deleted],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <dt className="text-muted-foreground truncate text-[9px] font-semibold tracking-wide uppercase">
+                    {label}
+                  </dt>
+                  <dd className="mt-0.5 truncate font-mono text-sm font-semibold">
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RunStatusIndicator({ status }: { status: SyncRunStatus }) {
+  if (status === "running" || status === "cancel_requested") {
+    return (
+      <span className="border-accent/25 bg-accent/10 text-accent inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium">
+        <Loader2 size={12} className="animate-spin" />
+        {status === "cancel_requested" ? "cancelling" : "running"}
+      </span>
+    );
+  }
+  return <StatusBadge status={runStatusTone(status)}>{status}</StatusBadge>;
+}
+
+function CancelRunButton({
+  status,
+  pending,
+  onCancel,
+}: {
+  status: SyncRunStatus;
+  pending: boolean;
+  onCancel: (event: React.MouseEvent) => void;
+}) {
+  if (status !== "queued" && status !== "running") return null;
+  return (
+    <button
+      onClick={onCancel}
+      disabled={pending}
+      title="Cancel this sync"
+      className="text-muted-foreground inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 hover:text-red-500 disabled:opacity-50"
+    >
+      {pending ? (
+        <Loader2 size={12} className="animate-spin" />
+      ) : (
+        <Ban size={12} />
+      )}
+      Cancel
+    </button>
+  );
+}
+
+export function SyncPanel({
+  connectionId,
+  providerSlug,
+  enabledCapabilitySlugs,
+  activeOrganizationCapabilityCodes,
+  connectionUsable,
+  initialRuns,
+  initialTotal,
+  initialPolicies,
+  initialHealth,
+  initialTargets,
+  tourRequest = null,
+}: {
+  connectionId: string;
+  providerSlug: string;
+  enabledCapabilitySlugs: string[];
+  activeOrganizationCapabilityCodes: string[];
+  connectionUsable: boolean;
+  initialRuns: CoreSyncRun[];
+  initialTotal: number;
+  initialPolicies: CoreSyncPolicy[];
+  initialHealth: CoreSyncDatasetHealth[];
+  initialTargets: CoreIntegrationTarget[];
+  /** What a product tour shows — the schedules, the Sync now dialog or the
+   *  newest run — until it moves on. */
+  tourRequest?: SyncPanelTourRequest | null;
+}) {
+  const [runs, setRuns] = useState(initialRuns);
+  const [total, setTotal] = useState(initialTotal);
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [jobsByRunId, setJobsByRunId] = useState<Record<string, CoreSyncJob[]>>(
+    {},
+  );
+  const [loadingJobsForRunId, setLoadingJobsForRunId] = useState<string | null>(
+    null,
+  );
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [syncMode, setSyncMode] = useState<"auto" | "manual">("auto");
+  const [selectedDatasets, setSelectedDatasets] = useState<Set<string>>(
+    new Set(),
+  );
+  const [dialogError, setDialogError] = useState("");
+  const [toast, setToast] = useState<{
+    message: string;
+    variant: "success" | "error";
+  } | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [policies, setPolicies] = useState(initialPolicies);
+  const [policyDialogOpen, setPolicyDialogOpen] = useState(false);
+  const policyDialogTriggerRef = useRef<HTMLButtonElement>(null);
+  const policyDialogCloseRef = useRef<HTMLButtonElement>(null);
+  const [savingPolicyDataset, setSavingPolicyDataset] = useState<string | null>(
+    null,
+  );
+  const [policyError, setPolicyError] = useState("");
+  const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
+  const [health, setHealth] = useState(initialHealth);
+  const [healthRefreshing, setHealthRefreshing] = useState(false);
+  const [healthError, setHealthError] = useState("");
+
+  const eligibleDatasets = useMemo(
+    () =>
+      eligibleSyncDatasets(
+        enabledCapabilitySlugs,
+        activeOrganizationCapabilityCodes,
+        providerSlug,
+      ),
+    [activeOrganizationCapabilityCodes, enabledCapabilitySlugs, providerSlug],
+  );
+  const eligibleDatasetSlugs = new Set<string>(
+    eligibleDatasets.map((dataset) => dataset.slug),
+  );
+  const visibleHealth = connectionUsable
+    ? health.filter((entry) => eligibleDatasetSlugs.has(entry.dataset))
+    : [];
+  const canSync = connectionUsable && eligibleDatasets.length > 0;
+  const targetById = useMemo(
+    () => new Map(initialTargets.map((target) => [target.id, target])),
+    [initialTargets],
+  );
+
+  // Connection-wide policies only (`target_id: null`) — matching "Sync now",
+  // which fans a manual run out across every verified target rather than asking
+  // which one, automatic sync applies the same way per dataset.
+  const policyByDataset = useMemo(() => {
+    const map = new Map<string, CoreSyncPolicy>();
+    for (const policy of policies) {
+      if (policy.target_id === null) map.set(policy.dataset, policy);
+    }
+    return map;
+  }, [policies]);
+
+  const enabledPolicies = eligibleDatasets
+    .map((dataset) => policyByDataset.get(dataset.slug))
+    .filter((policy): policy is CoreSyncPolicy => Boolean(policy?.enabled));
+  const nextAutomaticRunAt = enabledPolicies
+    .map((policy) => policy.next_run_at)
+    .filter((value): value is string => Boolean(value))
+    .sort((left, right) => Date.parse(left) - Date.parse(right))[0];
+
+  useEffect(() => {
+    if (!policyDialogOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const trigger = policyDialogTriggerRef.current;
+    document.body.style.overflow = "hidden";
+    policyDialogCloseRef.current?.focus();
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setPolicyDialogOpen(false);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+      trigger?.focus();
+    };
+  }, [policyDialogOpen]);
+
+  function applyPolicy(
+    datasetSlug: string,
+    patch: { enabled?: boolean; intervalSeconds?: number },
+  ) {
+    if (!canSync) return;
+    const existing = policyByDataset.get(datasetSlug);
+    const enabled = patch.enabled ?? existing?.enabled ?? false;
+    const intervalSeconds =
+      patch.intervalSeconds ??
+      existing?.interval_seconds ??
+      SYNC_INTERVAL_PRESETS[0].seconds;
+    setPolicyError("");
+    setSavingPolicyDataset(datasetSlug);
+    startTransition(async () => {
+      const result = await setSyncPolicyAction(connectionId, {
+        dataset: datasetSlug,
+        enabled,
+        interval_seconds: intervalSeconds,
+      });
+      setSavingPolicyDataset(null);
+      if (result.error) {
+        setPolicyError(result.error);
+        return;
+      }
+      if (result.data) {
+        setPolicies((current) => [
+          ...current.filter(
+            (policy) =>
+              !(policy.dataset === datasetSlug && policy.target_id === null),
+          ),
+          result.data!,
+        ]);
+        setHealth((current) =>
+          current.map((entry) =>
+            entry.dataset === datasetSlug
+              ? {
+                  ...entry,
+                  policy_enabled: result.data!.enabled,
+                  interval_seconds: result.data!.enabled
+                    ? result.data!.interval_seconds
+                    : null,
+                }
+              : entry,
+          ),
+        );
+      }
+    });
+  }
+
+  function openPolicyDialog() {
+    if (!canSync) return;
+    setPolicyError("");
+    setPolicyDialogOpen(true);
+  }
+
+  const hasActiveRun = runs
+    .slice(0, SYNC_RUNS_PAGE_SIZE)
+    .some((run) => ACTIVE_RUN_STATUSES.has(run.status));
+
+  const refreshHealth = useCallback(async () => {
+    setHealthRefreshing(true);
+    setHealthError("");
+    const result = await getSyncHealthAction(connectionId);
+    setHealthRefreshing(false);
+    if (result.error) {
+      setHealthError(result.error);
+      return;
+    }
+    if (result.data) setHealth(result.data.items);
+  }, [connectionId]);
+
+  const previousHasActiveRun = useRef(hasActiveRun);
+
+  useEffect(() => {
+    if (previousHasActiveRun.current && !hasActiveRun) {
+      void refreshHealth();
+    }
+    previousHasActiveRun.current = hasActiveRun;
+  }, [hasActiveRun, refreshHealth]);
+
+  // Keeps the run list itself (status badges, duration, "Load more" totals)
+  // fresh. Per-job progress for the *expanded* run is handled below by a live
+  // SSE stream instead — see `useSyncRunEvents`.
+  useEffect(() => {
+    if (!hasActiveRun) return;
+    const interval = setInterval(() => {
+      void (async () => {
+        const result = await listSyncRunsAction(connectionId, {
+          limit: SYNC_RUNS_PAGE_SIZE,
+          offset: 0,
+        });
+        if (result.data) {
+          setTotal(result.data.total);
+          setRuns((current) => mergeFirstPage(current, result.data!.items));
+        }
+      })();
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [hasActiveRun, connectionId]);
+
+  // A tour's request opens what it shows only while it lasts, on top of
+  // whatever the user has open.
+  const showPolicies =
+    policyDialogOpen || (canSync && tourRequest === "schedules");
+  const showStartDialog = dialogOpen || (canSync && tourRequest === "sync-now");
+  const tourRunId = tourRequest === "latest-run" ? (runs[0]?.id ?? null) : null;
+
+  const expandedRun = useMemo(
+    () => runs.find((run) => run.id === expandedRunId) ?? null,
+    [runs, expandedRunId],
+  );
+  const expandedRunActive = Boolean(
+    expandedRun && ACTIVE_RUN_STATUSES.has(expandedRun.status),
+  );
+
+  // Persists every live frame — including the final one, sent just before the
+  // stream's `done` event — directly into the same state the rest of the
+  // panel already reads (`runs`, `jobsByRunId`). Doing this from the frame
+  // callback itself, rather than mirroring a "latest frame" value from the
+  // hook through a `useEffect`, is what makes the finished state stick: once
+  // a run turns terminal, `expandedRunActive` below flips to `false` and the
+  // stream tears down, so nothing would ever re-deliver that final frame for
+  // an effect to react to later.
+  const handleLiveFrame = useCallback((frame: CoreSyncRunDetail) => {
+    setJobsByRunId((current) => ({ ...current, [frame.id]: frame.jobs }));
+    setRuns((current) =>
+      current.map((run) =>
+        run.id === frame.id
+          ? {
+              ...run,
+              status: frame.status,
+              started_at: frame.started_at,
+              finished_at: frame.finished_at,
+            }
+          : run,
+      ),
+    );
+  }, []);
+
+  // Live progress for the expanded run — same `SyncRunDetailRead` shape as
+  // `GET .../syncs/{id}`, pushed roughly once a second while the run is in
+  // flight instead of the 4s list-poll cadence above.
+  const { failed: liveStreamFailed } = useSyncRunEvents(
+    connectionId,
+    expandedRunId,
+    expandedRunActive,
+    handleLiveFrame,
+  );
+
+  // Fallback only — if the live stream can't connect (e.g. a proxy blocking
+  // SSE), poll the expanded run's job detail the same way the panel did
+  // before the live stream existed, so progress still updates eventually.
+  useEffect(() => {
+    if (!expandedRunActive || !liveStreamFailed || !expandedRunId) return;
+    const interval = setInterval(() => {
+      void (async () => {
+        const detail = await getSyncRunAction(connectionId, expandedRunId);
+        if (detail.data) handleLiveFrame(detail.data);
+      })();
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [
+    expandedRunActive,
+    liveStreamFailed,
+    expandedRunId,
+    connectionId,
+    handleLiveFrame,
+  ]);
+
+  // The newest run's jobs, for a tour that opens it.
+  const tourRunLoaded = tourRunId ? Boolean(jobsByRunId[tourRunId]) : true;
+  useEffect(() => {
+    if (!tourRunId || tourRunLoaded) return;
+    let cancelled = false;
+    void getSyncRunAction(connectionId, tourRunId).then((result) => {
+      if (!cancelled && result.data) handleLiveFrame(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tourRunId, tourRunLoaded, connectionId, handleLiveFrame]);
+
+  function openDialog() {
+    if (!canSync) return;
+    setDialogError("");
+    setSyncMode("auto");
+    setSelectedDatasets(
+      new Set(eligibleDatasets.length === 1 ? [eligibleDatasets[0].slug] : []),
+    );
+    setDialogOpen(true);
+  }
+
+  function toggleDataset(slug: string) {
+    setSelectedDatasets((current) => {
+      const next = new Set(current);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
+  }
+
+  function submitStartSync() {
+    setDialogError("");
+    startTransition(async () => {
+      const result = await startSyncAction(
+        connectionId,
+        syncMode === "manual" ? Array.from(selectedDatasets) : undefined,
+      );
+      if (result.error) {
+        setDialogError(result.error);
+        return;
+      }
+      if (result.data) {
+        setRuns((current) => [result.data!, ...current]);
+        setTotal((current) => current + 1);
+        setDialogOpen(false);
+        setToast({ message: "Sync started", variant: "success" });
+      }
+    });
+  }
+
+  function cancelRun(runId: string, event: React.MouseEvent) {
+    event.stopPropagation(); // don't also toggle the row's expand/collapse
+    setCancellingRunId(runId);
+    startTransition(async () => {
+      const result = await cancelSyncAction(connectionId, runId);
+      setCancellingRunId(null);
+      if (result.error) {
+        setToast({ message: result.error, variant: "error" });
+        return;
+      }
+      if (result.data) {
+        const cancelled = result.data;
+        setRuns((current) =>
+          current.map((run) => (run.id === cancelled.id ? cancelled : run)),
+        );
+        setToast({
+          message:
+            cancelled.status === "cancelled"
+              ? "Sync cancelled"
+              : "Cancellation requested",
+          variant: "success",
+        });
+      }
+    });
+  }
+
+  function toggleExpand(run: CoreSyncRun) {
+    if (expandedRunId === run.id) {
+      setExpandedRunId(null);
+      return;
+    }
+    setExpandedRunId(run.id);
+    if (jobsByRunId[run.id]) return;
+    setLoadingJobsForRunId(run.id);
+    startTransition(async () => {
+      const result = await getSyncRunAction(connectionId, run.id);
+      setLoadingJobsForRunId(null);
+      if (result.data) handleLiveFrame(result.data);
+    });
+  }
+
+  function loadMore() {
+    setLoadingMore(true);
+    startTransition(async () => {
+      const result = await listSyncRunsAction(connectionId, {
+        limit: SYNC_RUNS_PAGE_SIZE,
+        offset: runs.length,
+      });
+      setLoadingMore(false);
+      if (result.data) {
+        setRuns((current) => [...current, ...result.data!.items]);
+      }
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <section
+        aria-labelledby="sync-health-heading"
+        data-tour={tourAnchors.health}
+        className="border-border-soft bg-card-strong/55 rounded-xl border p-4 shadow-[0_10px_30px_var(--shadow-card)]"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="bg-accent/10 text-accent flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+              <HeartPulse size={17} />
+            </span>
+            <div>
+              <h3 id="sync-health-heading" className="text-sm font-semibold">
+                Dataset sync health
+              </h3>
+              <p className="text-muted-foreground mt-0.5 text-xs leading-5">
+                Freshness and reliability for each enabled dataset, independent
+                of connection verification.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refreshHealth()}
+            disabled={healthRefreshing}
+            aria-label="Refresh sync health"
+            className="border-foreground/15 bg-background/70 hover:bg-foreground/5 inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium disabled:opacity-50"
+          >
+            <RefreshCw
+              size={13}
+              className={healthRefreshing ? "animate-spin" : undefined}
+            />
+            Refresh
+          </button>
+        </div>
+
+        {visibleHealth.length > 0 ? (
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {visibleHealth.map((entry) => (
+              <article
+                key={entry.dataset}
+                className="border-border-soft bg-background/45 rounded-xl border p-3.5"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {datasetLabel(entry.dataset)}
+                    </p>
+                    <p className="text-muted-foreground mt-0.5 truncate font-mono text-[11px]">
+                      {entry.dataset}
+                    </p>
+                  </div>
+                  <StatusBadge status={syncHealthTone(entry.status)}>
+                    {syncHealthLabel(entry.status)}
+                  </StatusBadge>
+                </div>
+                <dl className="border-border-soft mt-3 grid grid-cols-2 gap-3 border-t pt-3 text-xs">
+                  <div>
+                    <dt className="text-muted-foreground">Last successful</dt>
+                    <dd
+                      className="mt-1 font-medium"
+                      title={entry.last_successful_sync_at ?? undefined}
+                    >
+                      {entry.last_successful_sync_at
+                        ? formatRelativeTime(entry.last_successful_sync_at)
+                        : "Never"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Schedule</dt>
+                    <dd className="mt-1 font-medium">
+                      {entry.policy_enabled
+                        ? formatInterval(entry.interval_seconds)
+                        : "Not enabled"}
+                    </dd>
+                  </div>
+                </dl>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="border-border-soft text-muted-foreground mt-4 rounded-xl border border-dashed px-4 py-5 text-sm">
+            No enabled datasets are available for health evaluation.
+          </p>
+        )}
+
+        {healthError ? (
+          <p role="alert" className="mt-3 text-sm text-red-500">
+            {healthError}
+          </p>
+        ) : null}
+      </section>
+
+      {canSync ? (
+        <div
+          data-tour={tourAnchors.automatic}
+          className="border-border-soft bg-card-strong/55 flex flex-col justify-between gap-4 rounded-xl border px-4 py-3.5 shadow-[0_10px_30px_var(--shadow-card)] sm:flex-row sm:items-center"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              className={cn(
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                enabledPolicies.length > 0
+                  ? "bg-success/10 text-success"
+                  : "bg-foreground/5 text-muted-foreground",
+              )}
+            >
+              <CalendarClock size={17} />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <h3 className="text-sm font-semibold">Automatic sync</h3>
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    enabledPolicies.length > 0
+                      ? "bg-success"
+                      : "bg-muted-foreground/50",
+                  )}
+                  aria-hidden="true"
+                />
+                <span className="text-muted-foreground text-xs">
+                  {enabledPolicies.length === 0
+                    ? "No schedules enabled"
+                    : `${enabledPolicies.length} of ${eligibleDatasets.length} ${enabledPolicies.length === 1 ? "schedule" : "schedules"} enabled`}
+                </span>
+              </div>
+              <p className="text-muted-foreground mt-0.5 truncate text-xs">
+                {enabledPolicies.length === 0
+                  ? "Set a recurring schedule for each dataset."
+                  : nextAutomaticRunAt
+                    ? `Next sync ${formatNextRun(nextAutomaticRunAt)}`
+                    : "The scheduler is preparing the next run."}
+              </p>
+            </div>
+          </div>
+          <button
+            ref={policyDialogTriggerRef}
+            type="button"
+            onClick={openPolicyDialog}
+            className="border-foreground/15 bg-background/70 hover:bg-foreground/5 inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium"
+          >
+            <Settings2 size={14} />
+            Configure
+          </button>
+        </div>
+      ) : null}
+
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-muted-foreground max-w-md text-sm leading-6">
+          Start an on-demand sync to pull the latest data for this connection.
+          Core can select every eligible dataset automatically.
+        </p>
+        {canSync ? (
+          <button
+            data-tour={tourAnchors.syncNow}
+            onClick={openDialog}
+            className="bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
+          >
+            <RefreshCw size={14} />
+            Sync now
+          </button>
+        ) : null}
+      </div>
+
+      {runs.length === 0 ? (
+        <EmptyState
+          title="No syncs yet"
+          description="Run an on-demand sync to see history and job status here."
+          actions={
+            canSync ? (
+              <button
+                onClick={openDialog}
+                className="bg-accent text-accent-foreground inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
+              >
+                <RefreshCw size={14} />
+                Sync now
+              </button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <div className="border-foreground/10 divide-foreground/10 divide-y rounded-xl border">
+          {runs.map((run, index) => {
+            const expanded = expandedRunId === run.id || tourRunId === run.id;
+            const duration = formatDuration(run.started_at, run.finished_at);
+            const jobs = jobsByRunId[run.id] ?? [];
+            return (
+              <div key={run.id}>
+                {/* A `div` (not `button`) — it needs to contain the Cancel
+                    button below, and a `<button>` cannot nest another one. */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  data-tour={index === 0 ? tourAnchors.run : undefined}
+                  onClick={() => toggleExpand(run)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    toggleExpand(run);
+                  }}
+                  className="hover:bg-foreground/[0.02] flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left text-sm transition-colors"
+                  aria-expanded={expanded}
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <ChevronRight
+                      size={14}
+                      className={cn(
+                        "text-muted-foreground shrink-0 transition-transform",
+                        expanded && "rotate-90",
+                      )}
+                    />
+                    <RunStatusIndicator status={run.status} />
+                    <span className="text-muted-foreground text-xs capitalize">
+                      {run.trigger}
+                    </span>
+                  </div>
+                  <div className="text-muted-foreground flex shrink-0 items-center gap-4 text-xs">
+                    {duration ? (
+                      <span className="font-mono">{duration}</span>
+                    ) : null}
+                    <span>{formatRelativeTime(run.created_at)}</span>
+                    <CancelRunButton
+                      status={run.status}
+                      pending={cancellingRunId === run.id}
+                      onCancel={(event) => cancelRun(run.id, event)}
+                    />
+                  </div>
+                </div>
+                {expanded ? (
+                  <div className="border-foreground/10 bg-foreground/[0.015] flex flex-col gap-2 border-t p-4">
+                    {loadingJobsForRunId === run.id ? (
+                      <div className="flex justify-center py-2">
+                        <Loader2
+                          size={16}
+                          className="text-muted-foreground animate-spin"
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <DatasetTotals jobs={jobs} />
+                        {jobs.map((job, jobIndex) => (
+                          <JobRow
+                            key={job.id}
+                            job={job}
+                            target={targetById.get(job.target_id)}
+                            connectionId={connectionId}
+                            syncRunId={run.id}
+                            anchor={
+                              jobIndex === 0 ? tourAnchors.job : undefined
+                            }
+                          />
+                        ))}
+                      </>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {runs.length < total ? (
+        <button
+          onClick={loadMore}
+          disabled={pending || loadingMore}
+          className="border-foreground/15 hover:bg-foreground/5 self-center rounded-lg border px-4 py-2 text-xs font-medium disabled:opacity-50"
+        >
+          {loadingMore ? "Loading…" : "Load more"}
+        </button>
+      ) : null}
+
+      {showPolicies ? (
+        <ModalOverlay onClose={() => setPolicyDialogOpen(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="automatic-sync-title"
+            aria-describedby="automatic-sync-description"
+            className="border-border-soft bg-background relative flex max-h-[min(46rem,calc(100dvh-2rem))] w-full max-w-2xl flex-col !overflow-hidden rounded-2xl border shadow-2xl"
+          >
+            <div className="border-border-soft flex items-start justify-between gap-4 border-b px-5 py-4 sm:px-6 sm:py-5">
+              <div className="flex items-start gap-3">
+                <span className="bg-accent/10 text-accent mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+                  <CalendarClock size={17} />
+                </span>
+                <div>
+                  <h2
+                    id="automatic-sync-title"
+                    className="text-lg font-semibold tracking-tight"
+                  >
+                    Configure automatic sync
+                  </h2>
+                  <p
+                    id="automatic-sync-description"
+                    className="text-muted-foreground mt-1 text-xs leading-5"
+                  >
+                    Choose which datasets stay fresh automatically and how often
+                    each one runs.
+                  </p>
+                </div>
+              </div>
+              <button
+                ref={policyDialogCloseRef}
+                type="button"
+                onClick={() => setPolicyDialogOpen(false)}
+                aria-label="Close dialog"
+                className="text-muted-foreground hover:bg-foreground/5 hover:text-foreground rounded-lg p-2"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-3 overflow-y-auto p-5 sm:p-6">
+              {eligibleDatasets.map((dataset, index) => {
+                const policy = policyByDataset.get(dataset.slug);
+                const enabled = policy?.enabled ?? false;
+                const intervalSeconds =
+                  policy?.interval_seconds ?? SYNC_INTERVAL_PRESETS[0].seconds;
+                const saving = savingPolicyDataset === dataset.slug;
+                return (
+                  <div
+                    key={dataset.slug}
+                    data-tour={index === 0 ? tourAnchors.schedule : undefined}
+                    className={cn(
+                      "border-border-soft rounded-xl border p-4 transition-colors",
+                      enabled ? "bg-accent/[0.045]" : "bg-card-strong/45",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <label className="flex min-w-0 cursor-pointer items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={enabled}
+                          disabled={saving}
+                          onChange={(event) =>
+                            applyPolicy(dataset.slug, {
+                              enabled: event.target.checked,
+                            })
+                          }
+                          className="border-foreground/20 text-accent focus:ring-accent mt-0.5 h-4 w-4 rounded disabled:opacity-50"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium">
+                            {dataset.label}
+                          </span>
+                          <span className="text-muted-foreground mt-0.5 block font-mono text-[11px] break-all">
+                            {dataset.slug}
+                          </span>
+                        </span>
+                      </label>
+                      {saving ? (
+                        <Loader2
+                          size={15}
+                          aria-label="Saving schedule"
+                          className="text-muted-foreground mt-0.5 shrink-0 animate-spin"
+                        />
+                      ) : (
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold tracking-wide uppercase",
+                            enabled
+                              ? "bg-success/10 text-success"
+                              : "bg-foreground/5 text-muted-foreground",
+                          )}
+                        >
+                          {enabled ? "Enabled" : "Off"}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="border-border-soft mt-4 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                      <label
+                        htmlFor={`sync-interval-${dataset.slug}`}
+                        className="text-muted-foreground text-xs"
+                      >
+                        Frequency
+                      </label>
+                      <div className="flex flex-wrap items-center gap-3">
+                        {enabled ? (
+                          <span
+                            className="text-muted-foreground text-[11px]"
+                            title={policy?.next_run_at ?? undefined}
+                          >
+                            Next: {formatNextRun(policy?.next_run_at ?? null)}
+                          </span>
+                        ) : null}
+                        <select
+                          id={`sync-interval-${dataset.slug}`}
+                          value={intervalSeconds}
+                          disabled={!enabled || saving}
+                          onChange={(event) =>
+                            applyPolicy(dataset.slug, {
+                              intervalSeconds: Number(event.target.value),
+                            })
+                          }
+                          className="border-foreground/15 bg-background h-9 min-w-36 rounded-lg border px-3 text-xs outline-none disabled:opacity-45"
+                        >
+                          {SYNC_INTERVAL_PRESETS.map((preset) => (
+                            <option key={preset.seconds} value={preset.seconds}>
+                              {preset.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {policyError ? (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-red-500/20 bg-red-500/8 px-3 py-2.5 text-sm text-red-500"
+                >
+                  {policyError}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="border-border-soft bg-card-strong/45 flex items-center justify-between gap-4 border-t px-5 py-4 sm:px-6">
+              <p className="text-muted-foreground hidden text-xs sm:block">
+                Changes are saved automatically.
+              </p>
+              <button
+                type="button"
+                onClick={() => setPolicyDialogOpen(false)}
+                className="bg-accent text-accent-foreground ml-auto rounded-lg px-4 py-2 text-sm font-medium"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </ModalOverlay>
+      ) : null}
+
+      {showStartDialog ? (
+        <ModalOverlay onClose={() => setDialogOpen(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="start-sync-title"
+            className="bg-background border-foreground/15 w-full max-w-md rounded-xl border p-6 shadow-2xl"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 id="start-sync-title" className="text-lg font-semibold">
+                  Start sync
+                </h2>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Let Core plan eligible datasets or select a specific subset.
+                </p>
+              </div>
+              <button
+                onClick={() => setDialogOpen(false)}
+                aria-label="Close dialog"
+                className="text-muted-foreground p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <fieldset data-tour={tourAnchors.planning} className="mt-5">
+              <legend className="text-muted-foreground mb-2 text-[11px] font-semibold tracking-wide uppercase">
+                Dataset planning
+              </legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label
+                  className={cn(
+                    "cursor-pointer rounded-xl border p-3 transition-colors",
+                    syncMode === "auto"
+                      ? "border-accent/40 bg-accent/[0.06]"
+                      : "border-foreground/10 hover:bg-foreground/[0.02]",
+                  )}
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <input
+                      type="radio"
+                      name="sync-mode"
+                      value="auto"
+                      checked={syncMode === "auto"}
+                      onChange={() => setSyncMode("auto")}
+                      className="border-foreground/20 text-accent focus:ring-accent"
+                    />
+                    Automatic
+                  </span>
+                  <span className="text-muted-foreground mt-1.5 block pl-6 text-xs leading-5">
+                    Core selects datasets from product access and connection
+                    capabilities.
+                  </span>
+                </label>
+                <label
+                  className={cn(
+                    "rounded-xl border p-3 transition-colors",
+                    eligibleDatasets.length === 0
+                      ? "cursor-not-allowed opacity-50"
+                      : "cursor-pointer",
+                    syncMode === "manual"
+                      ? "border-accent/40 bg-accent/[0.06]"
+                      : "border-foreground/10 hover:bg-foreground/[0.02]",
+                  )}
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <input
+                      type="radio"
+                      name="sync-mode"
+                      value="manual"
+                      checked={syncMode === "manual"}
+                      disabled={eligibleDatasets.length === 0}
+                      onChange={() => setSyncMode("manual")}
+                      className="border-foreground/20 text-accent focus:ring-accent"
+                    />
+                    Select manually
+                  </span>
+                  <span className="text-muted-foreground mt-1.5 block pl-6 text-xs leading-5">
+                    Run only the datasets selected below.
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+
+            {syncMode === "manual" ? (
+              <div className="mt-4 space-y-2">
+                {eligibleDatasets.map((dataset) => {
+                  const selected = selectedDatasets.has(dataset.slug);
+                  return (
+                    <label
+                      key={dataset.slug}
+                      className="border-foreground/10 hover:bg-foreground/[0.02] flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleDataset(dataset.slug)}
+                        className="border-foreground/20 text-accent focus:ring-accent rounded"
+                      />
+                      <span className="flex-1">
+                        <span className="font-medium">{dataset.label}</span>
+                        <span className="text-muted-foreground ml-2 font-mono text-xs">
+                          {dataset.slug}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="border-border-soft bg-foreground/[0.02] text-muted-foreground mt-4 rounded-lg border px-3 py-2.5 text-xs leading-5">
+                The request will omit the datasets field so Core can use the
+                current entitlement and capability rules.
+              </p>
+            )}
+
+            {dialogError ? (
+              <p
+                role="alert"
+                className="mt-4 rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2.5 text-sm leading-6 text-amber-700 dark:text-amber-300"
+              >
+                {dialogError}
+              </p>
+            ) : null}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDialogOpen(false)}
+                className="border-foreground/15 rounded-lg border px-4 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                data-tour={tourAnchors.start}
+                onClick={submitStartSync}
+                disabled={
+                  pending ||
+                  (syncMode === "manual" && selectedDatasets.size === 0)
+                }
+                className="bg-accent text-accent-foreground rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+              >
+                {pending ? "Starting…" : "Start sync"}
+              </button>
+            </div>
+          </div>
+        </ModalOverlay>
+      ) : null}
+
+      {toast ? (
+        <Toast
+          message={toast.message}
+          variant={toast.variant}
+          onDismiss={() => setToast(null)}
+        />
+      ) : null}
+    </div>
+  );
+}

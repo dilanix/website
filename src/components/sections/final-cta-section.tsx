@@ -1,29 +1,56 @@
 import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
+import { ArrowRight, CalendarCheck, MousePointerClick } from "lucide-react";
 import { Reveal } from "@/components/common/reveal";
 
-export function FinalCtaSection() {
+export function FinalCtaSection({ calendlyUrl }: { calendlyUrl: string }) {
   return (
-    <section className="border-foreground/5 border-t py-24 sm:py-32">
+    <section className="relative pt-20 pb-24 sm:pt-24 sm:pb-32">
       <Container>
         <Reveal>
-          <div className="border-foreground/10 relative overflow-hidden rounded-2xl border px-6 py-16 text-center sm:px-12 sm:py-20">
+          <div className="border-accent/14 relative overflow-hidden rounded-[2rem] border bg-[linear-gradient(145deg,color-mix(in_oklab,var(--card-strong)_88%,var(--accent)_12%),color-mix(in_oklab,var(--surface)_78%,var(--accent-secondary)_22%))] px-6 py-16 text-center shadow-[0_28px_76px_var(--shadow-brand)] sm:px-12 sm:py-20">
             <div
               aria-hidden="true"
-              className="absolute top-1/2 left-1/2 h-72 w-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-20 blur-[110px]"
-              style={{ background: "var(--accent)" }}
+              className="absolute top-1/2 left-[35%] h-72 w-[36rem] -translate-y-1/2 rounded-full opacity-18 blur-[92px]"
+              style={{ background: "var(--glow-blue)" }}
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-[10%] w-20 rotate-[16deg] bg-[linear-gradient(180deg,transparent_0%,rgba(255,255,255,0.16)_50%,transparent_100%)] opacity-28 blur-[1px]"
             />
             <div className="relative flex flex-col items-center gap-6">
-              <h2 className="max-w-lg text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-                See what we&apos;re building.
+              <span className="border-accent/20 bg-card-strong/55 text-accent inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.14em] uppercase backdrop-blur-sm">
+                <CalendarCheck size={12} /> See it on your own account
+              </span>
+              <h2 className="max-w-3xl text-3xl font-semibold tracking-[-0.04em] text-balance sm:text-5xl">
+                Find out what your cloud really needs to cost.
               </h2>
-              <p className="text-muted-foreground max-w-md text-lg">
-                Explore Dilanix products and the problems we&apos;re working to
-                solve.
+              <p className="text-muted-foreground max-w-xl text-lg leading-7">
+                Give Dilanix read-only access and walk through your own ranked
+                savings with us — each one with the steps to make it.
               </p>
-              <Button href="/products" variant="primary" className="mt-2">
-                Explore products
-              </Button>
+              <div className="mt-2 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
+                <Button
+                  href={calendlyUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="primary"
+                  className="group justify-center px-6 py-3"
+                >
+                  Book a demo
+                  <ArrowRight
+                    size={15}
+                    className="transition-transform group-hover:translate-x-0.5"
+                  />
+                </Button>
+                <Button
+                  href="#demo"
+                  variant="secondary"
+                  className="justify-center px-6 py-3"
+                >
+                  <MousePointerClick size={15} /> Take the product tour
+                </Button>
+              </div>
             </div>
           </div>
         </Reveal>

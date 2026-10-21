@@ -20,7 +20,7 @@ const serverSchema = z.object({
 
 const clientSchema = z.object({
   // Central service: auth, users, orgs.
-  NEXT_PUBLIC_API_URL: z.url().default("https://api.dilanix.org"),
+  NEXT_PUBLIC_API_URL: z.url().default("http://demo-api.dilanix.org"),
 });
 
 // Next.js inlines `NEXT_PUBLIC_*` vars at build time, so each one must be

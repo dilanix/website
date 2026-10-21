@@ -16,6 +16,192 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+SEO: `siteConfig.url` (`https://www.dilanix.org`) is the canonical origin — the
+apex domain redirects there on Vercel — and feeds `metadataBase`, canonical
+links, `sitemap.ts`, `robots.ts` and the Organization/WebSite JSON-LD in the root
+layout. The root `openGraph`/`twitter` deliberately carry no title, description
+or URL, so each page's cards come from its own `title`/`description`; a page
+that sets `openGraph` itself must also set `images` (the root card is
+`/opengraph-image`). Titles get `| Dilanix` from the template — don't add the
+brand to a page title. `/dashboard` is `noindex` and disallowed in robots.
+
+The authenticated dashboard treats `/v1/auth/me` as the source of truth for effective
+organization access. When the user has no active, non-deleted organization, the UI
+shows only personal settings: organization-scoped navigation and entry points such as
+Products, Integrations, API Keys, and Billing are omitted, and direct requests to those
+routes redirect to Settings. Product dashboard routes additionally require an active
+organization-product entitlement.
+
+The Integrations dashboard treats Core's `connection_supported` response field as
+the source of truth for executable provider onboarding. Planned catalog providers
+remain visible with a disabled “Coming soon” action; provider slugs are never used as
+a frontend availability allowlist. The static sync dataset list (`src/lib/sync/datasets.ts`)
+mirrors only Core's currently runnable `DEFAULT_DATASETS` entries (`inventory.resources`,
+`billing.cost_summary`, and `billing.cost_usage` today).
+
+The Cost product dashboard at `/dashboard/products/cost` is the only cost
+workspace. Its Overview provides Summary, Services, Resources, and Trends
+views (`?view=`) while preserving the selected connection/target in the URL:
+
+- **Summary** — `cost/overview` plus Explorer series (`CostOverview`,
+  `SpendOverviewClient`) and the cost-management entry points.
+- **Services** — Cost Explorer-sourced service rows and per-cost-basis totals
+  from `GET .../cost/data/connections/{connection_id}/summaries`(`/totals`)
+  (`CostSummaryPanel`).
+- **Resources** — normalized FOCUS charge rows (resource, region, SKU, charge
+  category) from `GET .../cost/data/connections/{connection_id}/usage`
+  (`CostUsagePanel`); shown only when the organization has the FOCUS export
+  capability.
+- **Trends** — `POST .../cost/spend-trends/query` (`CostTrends`): 30/90 completed
+  days or 12 completed months (`?range=`), each bucket against the equal-length
+  previous period, with the answering source (FOCUS or Cost Explorer) disclosed.
+
+Services and Resources are connection-scoped and require `billing.read` on the
+connection. Billing remains an internal normalized-data boundary with no
+frontend-facing routes of its own.
+
+Product tours are a platform feature, not product code. Declarative,
+versioned definitions live in `src/lib/tours` (`definitions/*.ts`, listed in
+`registry.ts`); each step targets a `data-tour` anchor the component sets from
+the same constant, and a step whose anchor is not rendered (permissions,
+layout, missing data) is skipped. A tour belongs to a `product` or, on a
+platform page, to a sidebar `section` (`workspace`/`manage`). `TourProvider`
+(dashboard layout) gates product tours on active product access and platform
+tours on having an organization, auto-starts a tour once on the page that
+offers it (`usePageTour`, screens ≥768px), resumes or restarts it from the
+header **Help & Support** menu (grouped like the sidebar — Workspace, each
+product, Manage — one group open at a time, the current page's opened first),
+and saves progress per user through Core's
+`/v1/onboarding/tours` (`tour-actions.ts`); bumping a tour's `version` offers
+it again. `tour-runner.ts` is the only module that uses driver.js (pinned).
+Infrastructure → Graph has `infrastructure.graph`, which covers every graph
+control; page-registered actions switch it to Runtime and open a real resource
+and connection, and an action the page cannot run (e.g. no relationships yet)
+returns `false`, so the steps that need it are skipped. Infrastructure →
+Resources has `infrastructure.resources` (connection/account scope, every
+filter, lifecycle vs provider status), offered whenever the inventory panel
+shows. Recommendations has `workspace.recommendations`: the inbox controls and
+row columns, then a ready-to-fix and a needs-input recommendation opened by
+`prepare` actions (listing past the top 10 if needed) and closed again.
+Integrations has `manage.integrations` (the page, then the real Connect form,
+closed unsaved); a connection's page has `manage.connection`, whose `route` is
+`null` — a per-item page's tour is listed in Help & Support only while that
+page offers it — and walks every tab, the Add scope form and the sync panel;
+Sync has `manage.sync`. The sync panel's steps are shared
+(`definitions/sync-panel.ts`): a page asks the panel, through its
+`tourRequest` prop, to show its schedules, Sync now dialog or newest run until
+the tour moves on.
+
+Video guides are animated, video-like explainers (`src/lib/guides` for the
+scenes' text and timing, `src/components/guides` for the player and each
+scene's visual — `GUIDE_VISUALS`, by scene id). Scenes are laid out on a fixed
+960×540 canvas scaled to the stage; their CSS animations (`guide-*` in
+`globals.css`) pause with the player and show their end state under reduced
+motion, and a scene's pointer finds its targets by `data-cursor`. Four guides
+exist: `guide.cost` (How Cost works — every Cost page) and
+`guide.infrastructure` (How Infrastructure works — the graph, its evidence and
+sources, and the inventory) belong to their products, `guide.integrations` and
+`guide.sync` to Manage. They play from Help & Support (grouped with the tours),
+from **How it works** — in a product's header (`productGuide`) and on
+Integrations, a connection's page and Sync — and inline on the matching
+Documentation pages. Each opens once on its own (`usePageGuide`'s `autoOpen`):
+the product guides on a first visit to Cost → Overview and Infrastructure →
+Graph, the Integrations guide before the first connection; that page's own tour
+then waits for the guide's end screen, while tours of the guide's other pages
+still start as usual. Their progress is saved like a tour's (`guide.*` keys,
+the scene as the step), so they resume; the end screen hands over to the tour
+the page offers. The public `/guides` page (`GuideLibrary`, linked from the
+marketing nav and footer) plays every guide without sign-in — setup guides
+first, then products; nothing is saved there and there are no tours. The
+landing hero plays `HeroReel` (`src/components/sections/hero-reel*.tsx`): a
+~25-second looping film on the same scene kit (its own 720×600 canvas, ~3 s
+shots dissolving into each other) on sample data — paused off-screen, in a
+background tab and, until played, under reduced motion.
+Cost → Overview has `cost.overview` and Cost → Explorer has `cost.explorer`;
+with no cost data (or an empty query) the page withdraws the offer
+(`usePageTour`'s `available: false`), so starting it explains why. Cost →
+Budgets, Allocations, Saved Views and Reports have `cost.budgets`,
+`cost.allocations`, `cost.saved-views` and `cost.reports`; none needs data,
+and each walks through the real create form field by field: the steps'
+`prepare` action opens it, and the cleanup that action returns closes it
+unsaved once the tour moves past the form or ends. Cost → Anomalies has
+`cost.anomalies` (how detection works, statuses and severity).
+
+The Infrastructure product dashboard has exactly two sections (`ProductTabs`):
+**Graph** at `/dashboard/products/infrastructure` (default) — an interactive
+React Flow canvas laid out and edge-routed by ELK in a Web Worker
+(`src/lib/infrastructure/graph-layout.ts`, `elk.worker.ts`)
+over Core's scoped graph (`?connection=&target=&region=`), with two modes —
+Provisioned (Architecture/Network/Security views) and Runtime (service
+interactions filtered by evidence kind, with a per-source status panel) —
+search, category filters, expand/collapse, semantic zoom, path tracing,
+fullscreen, minimap,
+and resource/connection inspectors loaded lazily through
+`infrastructure-actions.ts`. View logic is provider-neutral and unit-tested
+(`src/lib/infrastructure/graph-model.ts`); nothing is drawn without a Core
+resource or relationship behind it — and
+**Resources** at `/dashboard/products/infrastructure/resources[/{resourceId}]`,
+the normalized inventory UI. The former `/dashboard/resources` routes redirect
+there (`next.config.ts`); Resources is no longer a Workspace sidebar item.
+
+Cost Overview (`SpendOverviewClient`) defaults to calendar
+month-to-date, with explicit rolling 1 day/3 days/Week/30 days presets plus a
+custom range. It queries `GET .../cost/overview` first to resolve the actual
+source and the largest complete trailing FOCUS range. The FOCUS-only current
+spend and dimension widgets then query `POST .../cost/explorer/query` only for
+that disclosed effective range; when Overview falls back to `cost_summary`,
+they render an explicit unavailable state instead of a misleading zero or
+partial total. The page also renders current-vs-equal-length-previous-period
+comparison, a daily "Spend trend" line/area chart, per-currency top
+services (with an explicit "Other services & credits" remainder so the
+visible breakdown always reconciles to the header total), a "By charge
+type" panel (the FOCUS `Usage`/`Credit`/`Tax`/... split, `by_charge_category`)
+that makes a near-zero net total's usage/credit offsetting visible directly,
+and a "Net cost breakdown" panel (`financial_breakdown`) reconciling the
+header total into named `gross_usage`/`tax`/`credits`/`other_adjustments`
+buckets down to `net_cost`, plus an informational discount-vs-list-price
+figure shown only when Core reports one (never folded into the reconciling
+buckets, to avoid double-counting a discount the header total already
+reflects) — while retaining the Budget/Allocation/Anomaly
+management summary below. The header stat cards also show each currency's
+absolute change (`absolute_delta`) alongside the existing percentage. The
+dedicated Explorer route at
+`/dashboard/products/cost/explorer` reads `POST .../cost/explorer/query` and the
+saved-view execution endpoint, with metric, daily/weekly/monthly granularity,
+multi-dimension grouping (including tag keys), and the shared Cost scope-filter
+DSL. The former Cost `/usage` route redirects to Explorer. Every query also
+fires a second, parallel `cost/explorer/query` grouped only by
+`charge_category` (`granularity: null`, i.e. one total per category for the
+whole period) to render its own "By charge type" panel — the same
+Usage/Credit/Tax context Overview shows, now available for any Explorer query
+too, so a near-zero or unexpectedly small result is never a mystery. Results
+render in one of two view modes (`Summary`/`Detailed` tabs, persisted like the
+other Explorer controls): `Summary` is the existing grouped bar-chart table;
+`Detailed` is a flat, spreadsheet-style table with one column per group
+dimension actually present on the rows (read from the results themselves, not
+the current `group_by` selection, so a saved view's own grouping renders
+correctly too) plus `Currency` and `Amount`. Both views share one "Load more" control (250 rows
+at a time) instead of a hard first-250 cutoff.
+
+The Cost Allocations screen also reads
+`GET .../cost/allocations/breakdown` for a period/metric showback or chargeback
+view. It displays allocated and unallocated spend per currency, following
+Core's first-enabled-rule-by-priority semantics, and recalculates after a rule
+is created, edited, enabled/disabled, or deleted.
+
+Overview, Explorer, saved-view execution, and Allocation breakdown forward the
+shared Cost data scope as optional `connection_id`/`target_id` backend filters.
+The selector only offers connections with an active per-connection
+`billing.read` capability; the default combines all accessible connections,
+while preserving the selected scope in the URL across Cost product tabs.
+
+Dashboard data filters are also persisted in browser `localStorage`, scoped by
+the effective organization. This includes connection/target scope, Resources
+search and filters, billing filters, Cost Explorer and Allocation breakdown
+controls, anomaly status, and resource metric selectors. Restored filters are
+re-applied after refresh and when navigating between dashboard pages; explicit
+URL query parameters take precedence so shared deep links remain deterministic.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

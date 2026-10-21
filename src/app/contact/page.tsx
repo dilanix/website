@@ -5,7 +5,8 @@ import { ContactForm } from "@/components/contact/contact-form";
 
 export const metadata: Metadata = {
   title: "Contact",
-  description: "Get in touch with Dilanix.",
+  description:
+    "Talk to the Dilanix team — book a demo of AWS cost optimization and infrastructure mapping on your own account, or ask us anything.",
   alternates: { canonical: "/contact" },
 };
 

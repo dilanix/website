@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import type { NavLink, SiteSettings } from "@/types";
+import type { NavItem, SiteSettings } from "@/types";
 import { Navbar } from "./navbar";
 import { Footer } from "./footer";
 
@@ -17,7 +17,7 @@ export function SiteChrome({
   settings,
   children,
 }: {
-  links: NavLink[];
+  links: NavItem[];
   calendlyUrl: string;
   settings: SiteSettings;
   children: ReactNode;

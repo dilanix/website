@@ -7,7 +7,16 @@
 export interface NavLink {
   label: string;
   href: string;
+  description?: string;
 }
+
+/** A top-level menu entry that opens a dropdown of links. */
+export interface NavGroup {
+  label: string;
+  children: NavLink[];
+}
+
+export type NavItem = NavLink | NavGroup;
 
 export interface ProductCapability {
   label: string;
@@ -59,15 +68,6 @@ export interface DashboardRecommendation {
   metrics: DashboardMetric[];
 }
 
-export interface ProductDashboardSnapshot {
-  monthlySpendUsd: number;
-  potentialSavingsUsd: number;
-  /** Trailing daily spend, oldest first — drives the sparkline. */
-  spendTrend: number[];
-  breakdown: CostBreakdownItem[];
-  recommendation: DashboardRecommendation;
-}
-
 export interface DashboardOverview {
   monthlySpendUsd: number;
   potentialSavingsUsd: number;
@@ -90,43 +90,12 @@ export interface UsageRow {
   trendPct: number;
 }
 
-export interface Invoice {
-  id: string;
-  date: string;
-  amountUsd: number;
-  status: "paid" | "pending" | "failed";
-}
-
-export interface BillingPlan {
-  name: string;
-  priceUsd: number;
-  interval: "month" | "year";
-  renewsOn: string;
-  seats: number;
-}
-
-export type PhilosophyIcon = "target" | "wrench" | "sparkles" | "gauge";
-
-export interface PhilosophyPrinciple {
-  title: string;
-  description: string;
-  icon: PhilosophyIcon;
-}
-
-export type TechnologyIcon =
-  "ai" | "cloud" | "data" | "automation" | "developer-tools";
-
-export interface TechnologyCategory {
-  label: string;
-  description: string;
-  icon: TechnologyIcon;
-}
-
 export interface BlogPost {
   slug: string;
   title: string;
   excerpt: string;
   content?: string;
+  coverImageUrl?: string;
   category?: string;
   readTime?: string;
   author?: {
@@ -135,19 +104,14 @@ export interface BlogPost {
     avatar?: string;
   };
   publishedAt: string;
+  /** ISO 8601, for structured data and the sitemap. */
+  publishedAtIso?: string;
   status: "draft" | "published";
 }
 
 export interface ProductFaqItem {
   question: string;
   answer: string;
-}
-
-export interface CompanyPage {
-  headline: string;
-  body: string;
-  ctaLabel: string;
-  ctaHref: string;
 }
 
 export interface SiteSocialLinks {
@@ -163,5 +127,5 @@ export interface SiteSettings {
   email: string;
   calendlyUrl: string;
   social: SiteSocialLinks;
-  nav: NavLink[];
+  nav: NavItem[];
 }

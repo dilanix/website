@@ -1,12 +1,18 @@
 import type { SiteSettings } from "@/types";
 import { Container } from "@/components/ui/container";
 import { LinkedinIcon, GithubIcon } from "@/components/icons/social-icons";
+import { BrandLogo } from "./brand-logo";
 
 const columns = [
   {
     title: "Products",
     links: [
       { label: "Overview", href: "/products" },
+      {
+        label: "AWS Cost Optimization",
+        href: "/solutions/aws-cost-optimization",
+      },
+      { label: "Video guides", href: "/guides" },
     ],
   },
   {
@@ -28,12 +34,10 @@ const columns = [
 
 export function Footer({ settings }: { settings: SiteSettings }) {
   return (
-    <footer className="border-foreground/5 border-t">
+    <footer className="relative mt-8 before:absolute before:inset-x-[12%] before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,var(--border-soft),transparent)]">
       <Container className="grid gap-12 py-16 md:grid-cols-[1.5fr_repeat(3,1fr)] md:py-20">
         <div className="flex flex-col gap-4">
-          <span className="text-foreground text-sm font-semibold tracking-[0.25em]">
-            DILANIX
-          </span>
+          <BrandLogo className="h-8 w-auto" />
           <p className="text-muted-foreground max-w-xs text-sm">
             {settings.description}
           </p>
@@ -86,7 +90,7 @@ export function Footer({ settings }: { settings: SiteSettings }) {
         ))}
       </Container>
 
-      <div className="border-foreground/5 border-t">
+      <div className="border-border-soft border-t">
         <Container className="py-6">
           <p className="text-muted-foreground text-xs">
             © {new Date().getFullYear()} {settings.name}. All rights reserved.

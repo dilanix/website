@@ -3,7 +3,7 @@ import { getSiteSettings } from "@/lib/data/site";
 import { Container } from "@/components/ui/container";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — Dilanix",
+  title: "Privacy Policy",
   description:
     "Dilanix privacy policy and customer data isolation commitments.",
   alternates: { canonical: "/privacy" },

@@ -2,12 +2,13 @@
 
 import type { Route } from "next";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { sharedTourAnchors } from "@/lib/tours/anchors";
 import { cn } from "@/lib/utils";
 
 function tabClassName(active: boolean) {
   return cn(
-    "relative px-3 py-2.5 text-sm transition-colors",
+    "relative shrink-0 px-3 py-2.5 text-sm whitespace-nowrap transition-colors",
     active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
   );
 }
@@ -21,38 +22,81 @@ function ActiveUnderline() {
   );
 }
 
+/**
+ * Extra tabs a product can declare beyond the generic Overview/Usage/Docs
+ * set. Cost is the only product with its own module today; its Explorer
+ * replaces generic Usage, and its management tabs are backed by
+ * `src/modules/cost` in Core. Add further slugs here as they gain a module.
+ */
+const PRODUCT_EXTRA_TABS: Record<string, { label: string; path: string }[]> = {
+  cost: [
+    { label: "Explorer", path: "explorer" },
+    { label: "Budgets", path: "budgets" },
+    { label: "Allocations", path: "allocations" },
+    { label: "Anomalies", path: "anomalies" },
+    { label: "Saved Views", path: "saved-views" },
+    { label: "Reports", path: "reports" },
+  ],
+};
+
+/**
+ * Products whose module defines its full section set, replacing the generic
+ * Overview/Usage/Documentation tabs. Infrastructure has exactly Graph (the
+ * default, at the product root) and Resources; graph projections such as
+ * network or security views are modes inside Graph, never extra tabs.
+ */
+const PRODUCT_SECTION_TABS: Record<string, { label: string; path: string }[]> =
+  {
+    infrastructure: [
+      { label: "Graph", path: "" },
+      { label: "Resources", path: "resources" },
+    ],
+  };
+
 export function ProductTabs({ slug }: { slug: string }) {
   const pathname = usePathname();
-  const overviewActive = pathname === `/dashboard/products/${slug}`;
-  const usageActive = pathname === `/dashboard/products/${slug}/usage`;
-  const docsActive = pathname === `/dashboard/products/${slug}/docs`;
+  const searchParams = useSearchParams();
+  const base = `/dashboard/products/${slug}`;
+  const costScopeParams = new URLSearchParams();
+  const connectionId = searchParams.get("connection");
+  const targetId = searchParams.get("target");
+  if (slug === "cost" && connectionId) {
+    costScopeParams.set("connection", connectionId);
+    if (targetId) costScopeParams.set("target", targetId);
+  }
+  const costScopeQuery = costScopeParams.toString();
+
+  const tabs = PRODUCT_SECTION_TABS[slug] ?? [
+    { label: "Overview", path: "" },
+    ...(PRODUCT_EXTRA_TABS[slug] ?? []),
+    ...(slug === "cost" ? [] : [{ label: "Usage", path: "usage" }]),
+    { label: "Documentation", path: "docs" },
+  ];
 
   return (
-    <div className="border-foreground/10 flex gap-1 border-b">
-      <Link
-        href={`/dashboard/products/${slug}` as Route}
-        aria-current={overviewActive ? "page" : undefined}
-        className={tabClassName(overviewActive)}
-      >
-        Overview
-        {overviewActive ? <ActiveUnderline /> : null}
-      </Link>
-      <Link
-        href={`/dashboard/products/${slug}/usage` as Route}
-        aria-current={usageActive ? "page" : undefined}
-        className={tabClassName(usageActive)}
-      >
-        Usage
-        {usageActive ? <ActiveUnderline /> : null}
-      </Link>
-      <Link
-        href={`/dashboard/products/${slug}/docs` as Route}
-        aria-current={docsActive ? "page" : undefined}
-        className={tabClassName(docsActive)}
-      >
-        Documentation
-        {docsActive ? <ActiveUnderline /> : null}
-      </Link>
+    <div
+      data-tour={sharedTourAnchors.productTabs}
+      className="border-foreground/10 flex gap-1 overflow-x-auto border-b"
+    >
+      {tabs.map((tab) => {
+        const path = tab.path ? `${base}/${tab.path}` : base;
+        const href = `${path}${costScopeQuery ? `?${costScopeQuery}` : ""}`;
+        // A section's own detail pages (e.g. one resource) keep it active.
+        const active = tab.path
+          ? pathname === path || pathname.startsWith(`${path}/`)
+          : pathname === path;
+        return (
+          <Link
+            key={tab.label}
+            href={href as Route}
+            aria-current={active ? "page" : undefined}
+            className={tabClassName(active)}
+          >
+            {tab.label}
+            {active ? <ActiveUnderline /> : null}
+          </Link>
+        );
+      })}
     </div>
   );
 }
