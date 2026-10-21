@@ -30,6 +30,11 @@ const defaultSettings: SiteSettings = {
           description: "Click through the real dashboard",
         },
         {
+          label: "Video guides",
+          href: "/guides",
+          description: "Short walkthroughs of every page",
+        },
+        {
           label: "Security",
           href: "/#trust",
           description: "Read-only access and verified commands",

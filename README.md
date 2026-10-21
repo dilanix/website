@@ -101,7 +101,9 @@ Graph, the Integrations guide before the first connection; that page's own tour
 then waits for the guide's end screen, while tours of the guide's other pages
 still start as usual. Their progress is saved like a tour's (`guide.*` keys,
 the scene as the step), so they resume; the end screen hands over to the tour
-the page offers.
+the page offers. The public `/guides` page (`GuideLibrary`, linked from the
+marketing nav and footer) plays every guide without sign-in — setup guides
+first, then products; nothing is saved there and there are no tours.
 Cost → Overview has `cost.overview` and Cost → Explorer has `cost.explorer`;
 with no cost data (or an empty query) the page withdraws the offer
 (`usePageTour`'s `available: false`), so starting it explains why. Cost →
