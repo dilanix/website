@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { BellRing, Pencil, Plus, Trash2, Wallet, X } from "lucide-react";
+import Link from "next/link";
+import {
+  BellRing,
+  ChevronDown,
+  Pencil,
+  Plus,
+  Trash2,
+  Wallet,
+  X,
+} from "lucide-react";
 import {
   createBudgetAction,
   deleteBudgetAction,
@@ -13,6 +22,8 @@ import type {
   BudgetPeriod,
   CoreBudget,
   CoreBudgetStatus,
+  CoreNotificationChannel,
+  CoreNotificationDestination,
   CoreScopeCondition,
 } from "@/lib/core/api";
 import { formatAmount } from "@/components/dashboard/cost/format";
@@ -147,11 +158,9 @@ function parseThresholds(value: string): number[] {
     .filter((n) => Number.isFinite(n) && n >= 0);
 }
 
-function parseRecipients(value: string): string[] {
-  return value
-    .split(/[,\n]/)
-    .map((part) => part.trim())
-    .filter(Boolean);
+function providerLabel(channel: CoreNotificationChannel | undefined) {
+  if (!channel) return "Unknown channel";
+  return `${channel.provider.charAt(0).toUpperCase()}${channel.provider.slice(1)} ? ${channel.name}`;
 }
 
 interface BudgetFormState {
@@ -163,7 +172,7 @@ interface BudgetFormState {
   periodStart: string;
   periodEnd: string;
   alertThresholds: string;
-  recipients: string;
+  destinationIds: string[];
 }
 
 function toFormState(budget?: CoreBudget): BudgetFormState {
@@ -176,7 +185,7 @@ function toFormState(budget?: CoreBudget): BudgetFormState {
     periodStart: toDateInputValue(budget?.period_start ?? null),
     periodEnd: toDateInputValue(budget?.period_end ?? null),
     alertThresholds: budget?.alert_thresholds.join(", ") ?? "50, 80, 100",
-    recipients: budget?.recipients.join(", ") ?? "",
+    destinationIds: budget?.destination_ids ?? [],
   };
 }
 
@@ -184,10 +193,14 @@ function BudgetDialog({
   budget,
   onClose,
   onSaved,
+  channels,
+  destinations,
 }: {
   budget: CoreBudget | null;
   onClose: () => void;
   onSaved: (budget: CoreBudget) => void;
+  channels: CoreNotificationChannel[];
+  destinations: CoreNotificationDestination[];
 }) {
   const [form, setForm] = useState<BudgetFormState>(() =>
     toFormState(budget ?? undefined),
@@ -198,9 +211,15 @@ function BudgetDialog({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const isEditing = Boolean(budget);
+  const channelById = new Map(channels.map((channel) => [channel.id, channel]));
 
   function submit() {
     setError("");
+    if (form.destinationIds.length === 0) {
+      setError("Select at least one notification destination.");
+      return;
+    }
+
     const input = {
       name: form.name,
       description: form.description.trim() || null,
@@ -211,7 +230,10 @@ function BudgetDialog({
         form.period === "custom" ? toIsoDate(form.periodStart) : null,
       periodEnd: form.period === "custom" ? toIsoDate(form.periodEnd) : null,
       alertThresholds: parseThresholds(form.alertThresholds),
-      recipients: parseRecipients(form.recipients),
+      // Preserve the legacy field for API compatibility. New delivery uses
+      // explicit Notification destinations.
+      recipients: budget?.recipients ?? [],
+      destinationIds: form.destinationIds,
       scope,
     };
     startTransition(async () => {
@@ -376,28 +398,116 @@ function BudgetDialog({
               className="border-foreground/15 bg-background focus:border-accent h-10 w-full rounded-lg border px-3 font-mono outline-none"
             />
             <span className="text-muted-foreground mt-1 block text-xs">
-              Percent of the budget amount. A separate alert email fires the
-              first time spend crosses each one.
+              Percent of the budget amount. A notification fires the first time
+              spend crosses each threshold.
             </span>
           </label>
 
-          <label
-            data-tour={tourAnchors.formRecipients}
-            className="block text-sm"
-          >
-            <span className="mb-1.5 block font-medium">
-              Recipients (comma or newline separated)
-            </span>
-            <textarea
-              rows={2}
-              value={form.recipients}
-              onChange={(event) =>
-                setForm((f) => ({ ...f, recipients: event.target.value }))
-              }
-              placeholder="finance@company.com"
-              className="border-foreground/15 bg-background focus:border-accent w-full rounded-lg border px-3 py-2 font-mono text-xs outline-none"
-            />
-          </label>
+          <fieldset data-tour={tourAnchors.formRecipients} className="text-sm">
+            <legend className="mb-1.5 font-medium">
+              Notification destinations
+            </legend>
+
+            {destinations.length === 0 ? (
+              <div className="border-foreground/15 text-muted-foreground rounded-lg border border-dashed p-3 text-xs leading-5">
+                No destinations are configured. Add an Email, Slack, Telegram,
+                or Webhook destination in{" "}
+                <Link
+                  href="/dashboard/notifications"
+                  className="text-accent font-medium hover:underline"
+                >
+                  Notifications
+                </Link>
+                .
+              </div>
+            ) : (
+              <details className="group relative">
+                <summary className="border-foreground/15 bg-background flex h-10 cursor-pointer list-none items-center justify-between gap-3 rounded-lg border px-3 outline-none [&::-webkit-details-marker]:hidden">
+                  <span
+                    className={
+                      form.destinationIds.length === 0
+                        ? "text-muted-foreground"
+                        : "truncate"
+                    }
+                  >
+                    {form.destinationIds.length === 0
+                      ? "Select destinations"
+                      : form.destinationIds.length === 1
+                        ? (destinations.find((destination) =>
+                            form.destinationIds.includes(destination.id),
+                          )?.name ?? "1 destination selected")
+                        : `${form.destinationIds.length} destinations selected`}
+                  </span>
+
+                  <ChevronDown
+                    size={16}
+                    className="text-muted-foreground shrink-0 transition-transform group-open:rotate-180"
+                  />
+                </summary>
+
+                <div className="border-foreground/15 bg-background absolute z-20 mt-1 w-full overflow-hidden rounded-lg border shadow-xl">
+                  <div className="divide-foreground/10 max-h-56 divide-y overflow-y-auto">
+                    {destinations.map((destination) => {
+                      const channel = channelById.get(destination.channel_id);
+                      const selected = form.destinationIds.includes(
+                        destination.id,
+                      );
+                      const available = Boolean(
+                        destination.is_enabled &&
+                        channel?.is_enabled &&
+                        channel.status === "active",
+                      );
+
+                      return (
+                        <label
+                          key={destination.id}
+                          className={[
+                            "flex items-start gap-3 px-3 py-2.5",
+                            available || selected
+                              ? "cursor-pointer"
+                              : "cursor-not-allowed opacity-50",
+                          ].join(" ")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            disabled={!available && !selected}
+                            onChange={(event) =>
+                              setForm((current) => ({
+                                ...current,
+                                destinationIds: event.target.checked
+                                  ? [...current.destinationIds, destination.id]
+                                  : current.destinationIds.filter(
+                                      (id) => id !== destination.id,
+                                    ),
+                              }))
+                            }
+                            className="mt-0.5"
+                          />
+
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">
+                              {destination.name}
+                            </span>
+                            <span className="text-muted-foreground block truncate text-xs">
+                              {providerLabel(channel)}
+                              {!available ? " ? disabled" : ""}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <div className="border-foreground/10 text-muted-foreground border-t px-3 py-2 text-xs">
+                    {form.destinationIds.length === 0
+                      ? "Select at least one destination."
+                      : `${form.destinationIds.length} selected`}
+                  </div>
+                </div>
+              </details>
+            )}
+          </fieldset>
 
           <div data-tour={tourAnchors.formScope}>
             <span className="mb-1.5 block text-sm font-medium">Scope</span>
@@ -426,9 +536,13 @@ function BudgetDialog({
 export function BudgetsClient({
   initialBudgets,
   initialStatuses = [],
+  channels = [],
+  destinations = [],
 }: {
   initialBudgets: CoreBudget[];
   initialStatuses?: CoreBudgetStatus[];
+  channels?: CoreNotificationChannel[];
+  destinations?: CoreNotificationDestination[];
 }) {
   const [budgets, setBudgets] = useState(() => sortBudgets(initialBudgets));
   const [statuses, setStatuses] = useState<Record<string, CoreBudgetStatus>>(
@@ -605,8 +719,8 @@ export function BudgetsClient({
                   Scope: {summarizeScope(budget.scope)}
                 </p>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  {budget.recipients.length} recipient
-                  {budget.recipients.length === 1 ? "" : "s"}
+                  {budget.destination_ids.length} destination
+                  {budget.destination_ids.length === 1 ? "" : "s"}
                   {highestNotified !== null
                     ? ` · highest alert fired: ${highestNotified}%`
                     : ""}
@@ -654,6 +768,8 @@ export function BudgetsClient({
         <BudgetDialog
           key={dialogState === "create" ? "create" : dialogState.id}
           budget={dialogState === "create" ? null : dialogState}
+          channels={channels}
+          destinations={destinations}
           onClose={() => setDialogState("closed")}
           onSaved={(budget) => {
             setBudgets((current) => {

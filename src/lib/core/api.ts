@@ -1830,6 +1830,7 @@ export interface CoreBudget {
    * period — job-managed, read-only. */
   notified_thresholds: number[];
   recipients: string[];
+  destination_ids: string[];
   enabled: boolean;
   scope: CoreScopeCondition[];
   created_at: string;
@@ -1850,6 +1851,7 @@ export interface CreateBudgetInput {
   period_end?: string | null;
   alert_thresholds?: number[];
   recipients?: string[];
+  destination_ids?: string[];
   scope?: CoreScopeCondition[];
 }
 
@@ -1863,6 +1865,7 @@ export interface UpdateBudgetInput {
   period_end?: string | null;
   alert_thresholds?: number[];
   recipients?: string[];
+  destination_ids?: string[];
   enabled?: boolean;
   scope?: CoreScopeCondition[];
 }

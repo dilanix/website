@@ -121,7 +121,7 @@ export const costGuide: GuideDefinition = {
       id: "budget-alerts",
       title: "Alerts and status",
       caption:
-        "Thresholds are percentages of the amount: at 50, 80 and 100 an email goes to the budget's recipients, once per period — add 120 to hear about an overrun. Dilanix checks every hour. Each budget reads On track, Forecast to overrun or Over budget; pause it to stop alerts.",
+        "Thresholds are percentages of the amount: at 50, 80 and 100 a notification goes to the budget's selected destinations, once per period - add 120 to hear about an overrun. Dilanix checks every hour. Each budget reads On track, Forecast to overrun or Over budget; pause it to stop alerts.",
       durationMs: 14000,
     },
     {
@@ -156,7 +156,7 @@ export const costGuide: GuideDefinition = {
       id: "savings",
       title: "From cost to savings",
       caption:
-        "Recommendations ranks what you can change to pay less, checked to be safe. Budget alerts email their recipients; generated reports and new high-priority recommendations go to your notification destinations.",
+        "Budget alerts, generated reports and new high-priority recommendations use your configured notification destinations, including Email, Slack, Telegram and Webhook.",
       durationMs: 11000,
     },
     {
