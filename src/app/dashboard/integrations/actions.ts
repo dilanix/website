@@ -17,6 +17,7 @@ import {
   getConnectionAwsSetup,
   listTargets,
   disableTarget,
+  resumeTarget,
   renameTarget,
   replaceTargetIdentity,
   startSync,
@@ -261,6 +262,29 @@ export async function disableTargetAction(
       token,
     );
     revalidatePath(`/dashboard/integrations/${connectionId}`);
+    revalidatePath("/dashboard/plan");
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+/** Resumes a paused account by re-verifying it; refused while the plan has no
+ * free account slot (the error says so). */
+export async function resumeTargetAction(
+  connectionId: string,
+  targetId: string,
+): Promise<ActionResult<CoreIntegrationTarget>> {
+  try {
+    const { token, organizationId } = await context();
+    const data = await resumeTarget(
+      organizationId,
+      connectionId,
+      targetId,
+      token,
+    );
+    revalidatePath(`/dashboard/integrations/${connectionId}`);
+    revalidatePath("/dashboard/plan");
     return { data };
   } catch (error) {
     return { error: message(error) };

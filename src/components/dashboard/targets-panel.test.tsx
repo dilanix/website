@@ -5,6 +5,7 @@ import { TargetsPanel } from "./targets-panel";
 import {
   listTargetsAction,
   renameTargetAction,
+  resumeTargetAction,
 } from "@/app/dashboard/integrations/actions";
 
 vi.mock("@/app/dashboard/integrations/actions", () => ({
@@ -12,6 +13,7 @@ vi.mock("@/app/dashboard/integrations/actions", () => ({
   listTargetsAction: vi.fn(),
   renameTargetAction: vi.fn(),
   replaceTargetIdentityAction: vi.fn(),
+  resumeTargetAction: vi.fn(),
 }));
 
 afterEach(cleanup);
@@ -68,7 +70,8 @@ describe("TargetsPanel", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Replace" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Disable" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
   });
 
@@ -150,5 +153,34 @@ describe("TargetsPanel", () => {
 
     await screen.findByText("Dev");
     expect(listTargetsAction).toHaveBeenCalledWith("conn-1");
+  });
+
+  it("resumes a paused account and shows the plan's refusal", async () => {
+    const paused: CoreIntegrationTarget = {
+      id: "target-1",
+      organization_id: "org-1",
+      connection_id: "conn-1",
+      target_type: "account",
+      external_id: "123456789012",
+      display_name: null,
+      parent_target_id: null,
+      status: "disabled",
+      provider_metadata: {},
+      created_at: "2026-09-07T10:00:00Z",
+      updated_at: "2026-09-07T10:00:00Z",
+    };
+    vi.mocked(resumeTargetAction).mockResolvedValue({
+      error:
+        "Connected cloud accounts limit reached (2 of 2 in use). Pause or disconnect an account, or ask us to raise your plan's limit.",
+    });
+
+    render(<TargetsPanel connectionId="conn-1" initialTargets={[paused]} />);
+
+    expect(screen.getByText("paused")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+
+    expect(await screen.findByText(/limit reached/)).toBeTruthy();
+    expect(resumeTargetAction).toHaveBeenCalledWith("conn-1", "target-1");
   });
 });

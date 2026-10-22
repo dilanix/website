@@ -27,14 +27,18 @@ import {
   Bell,
   RefreshCw,
   BookOpen,
+  Gauge,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { signOutAction } from "@/app/dashboard/actions";
 import type { DashboardProduct } from "@/lib/data/dashboard-mocks";
+import type { CoreOrganizationPlan } from "@/lib/core/api";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { HelpMenu } from "@/components/tours/help-menu";
 import { SyncNavIndicator } from "./sync-nav-indicator";
+import { PlanBanner } from "./plan/plan-banner";
+import { PlanPill } from "./plan/plan-pill";
 
 const navGroups = [
   {
@@ -88,6 +92,12 @@ const navGroups = [
         icon: KeyRound,
         organizationRequired: true,
         requiredCapability: "platform.api_keys",
+      },
+      {
+        label: "Plan & usage",
+        href: "/dashboard/plan",
+        icon: Gauge,
+        organizationRequired: true,
       },
       {
         label: "Settings",
@@ -235,12 +245,15 @@ export function DashboardShell({
   user,
   organization,
   products,
+  plan = null,
   activeCapabilityCodes,
   children,
 }: {
   user: { firstName: string; lastName: string; email: string };
   organization: { name: string } | null;
   products: DashboardProduct[];
+  /** The organization's plan for the sidebar badge and warning banner. */
+  plan?: CoreOrganizationPlan | null;
   activeCapabilityCodes: string[];
   children: ReactNode;
 }) {
@@ -450,6 +463,7 @@ export function DashboardShell({
               <span className="mt-0.5 block truncate text-[13px] font-semibold">
                 {organization.name}
               </span>
+              {plan ? <PlanPill plan={plan} className="mt-1.5" /> : null}
             </span>
             <span className="bg-success size-1.5 shrink-0 rounded-full shadow-[0_0_8px_var(--success)]" />
           </div>
@@ -576,6 +590,7 @@ export function DashboardShell({
                     <span className="block truncate text-sm font-semibold">
                       {organization.name}
                     </span>
+                    {plan ? <PlanPill plan={plan} className="mt-1" /> : null}
                   </span>
                 </div>
               ) : null}
@@ -604,7 +619,10 @@ export function DashboardShell({
         ) : null}
 
         <main className="relative z-0 flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-          <div className="mx-auto w-full max-w-[96rem]">{children}</div>
+          <div className="mx-auto w-full max-w-[96rem]">
+            <PlanBanner plan={plan} />
+            {children}
+          </div>
         </main>
       </div>
     </div>

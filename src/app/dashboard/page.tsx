@@ -16,6 +16,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import {
+  getOrganizationPlan,
   listConnections,
   listIntegrations,
   listOrganizationCapabilities,
@@ -23,6 +24,7 @@ import {
 } from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { Section, StatusBadge } from "@/components/dashboard/primitives";
+import { PlanSummaryCard } from "@/components/dashboard/plan/plan-summary-card";
 
 export const metadata: Metadata = {
   title: "Overview",
@@ -79,12 +81,15 @@ const workspaceLinks = [
 
 export default async function DashboardPage() {
   const { token, me, organization } = await requireDashboardOrganization();
-  const [connections, integrations, products, organizationCapabilities] =
+  const [connections, integrations, products, organizationCapabilities, plan] =
     await Promise.all([
       listConnections(organization.organization_id, token),
       listIntegrations(token),
       listOrganizationProducts(organization.organization_id, token),
       listOrganizationCapabilities(organization.organization_id, token),
+      getOrganizationPlan(organization.organization_id, token).catch(
+        () => null,
+      ),
     ]);
   const activeCapabilityCodes = organizationCapabilities
     .filter((capability) => capability.access_status === "active")
@@ -355,6 +360,11 @@ export default async function DashboardPage() {
           title="Quick access"
           description="Jump directly to the work that matters."
         >
+          {plan ? (
+            <div className="mb-4">
+              <PlanSummaryCard plan={plan} />
+            </div>
+          ) : null}
           <div className="border-border-soft bg-dashboard-panel flex flex-col gap-1.5 rounded-[1.4rem] border p-2 shadow-[0_18px_48px_var(--shadow-card)] backdrop-blur-sm">
             {visibleWorkspaceLinks.map((item) => {
               const Icon = item.icon;

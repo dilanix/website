@@ -3,6 +3,7 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { TourProvider } from "@/components/tours/tour-provider";
 import { DashboardFilterStorageProvider } from "@/lib/dashboard/filter-storage";
 import {
+  getOrganizationPlan,
   listOrganizationCapabilities,
   listOrganizationProducts,
   listTourProgress,
@@ -21,7 +22,7 @@ export default async function DashboardLayout({
   children,
 }: LayoutProps<"/dashboard">) {
   const { token, me, organization } = await getDashboardSession();
-  const [[products, organizationCapabilities], tourProgress] =
+  const [[products, organizationCapabilities], tourProgress, plan] =
     await Promise.all([
       organization
         ? Promise.all([
@@ -36,6 +37,13 @@ export default async function DashboardLayout({
           ]),
       // Tours are an enhancement: without progress they never auto-start.
       listTourProgress(token).catch(() => null),
+      // The plan badge/banner are an enhancement too: the rest of the
+      // dashboard renders without them if Core can't answer.
+      organization
+        ? getOrganizationPlan(organization.organization_id, token).catch(
+            () => null,
+          )
+        : Promise.resolve(null),
     ]);
 
   return (
@@ -60,6 +68,7 @@ export default async function DashboardLayout({
             : null
         }
         products={products}
+        plan={plan}
         activeCapabilityCodes={organizationCapabilities
           .filter((capability) => capability.access_status === "active")
           .map((capability) => capability.code)}

@@ -13,6 +13,7 @@ const columns = [
         href: "/solutions/aws-cost-optimization",
       },
       { label: "Video guides", href: "/guides" },
+      { label: "Pricing", href: "/pricing" },
     ],
   },
   {

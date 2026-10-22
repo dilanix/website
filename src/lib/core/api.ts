@@ -4,6 +4,9 @@ export class CoreApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    /** Stable machine-readable code when Core sends one, e.g.
+     * `plan_limit_exceeded`, `plan_inactive`, `over_limit_blocked`. */
+    public readonly code: string | null = null,
   ) {
     super(message);
   }
@@ -35,13 +38,14 @@ async function withCoreRequestTimeout<T>(
   }
 }
 
-async function extractErrorMessage(
+async function extractError(
   response: Response,
   fallback: string,
-): Promise<string> {
+): Promise<{ message: string; code: string | null }> {
   try {
     const body = (await response.json()) as { detail?: unknown };
-    if (typeof body.detail === "string") return body.detail;
+    if (typeof body.detail === "string")
+      return { message: body.detail, code: null };
     if (Array.isArray(body.detail)) {
       const details = body.detail
         .map((item) =>
@@ -50,10 +54,36 @@ async function extractErrorMessage(
             : "",
         )
         .filter(Boolean);
-      if (details.length) return details.join(" ");
+      if (details.length) return { message: details.join(" "), code: null };
+    }
+    // Plan enforcement errors: `{"detail": {"code": ..., "message": ...}}`.
+    if (
+      body.detail &&
+      typeof body.detail === "object" &&
+      "message" in body.detail
+    ) {
+      const detail = body.detail as { message: unknown; code?: unknown };
+      return {
+        message: planErrorMessage(
+          typeof detail.code === "string" ? detail.code : null,
+          String(detail.message),
+        ),
+        code: typeof detail.code === "string" ? detail.code : null,
+      };
     }
   } catch {}
-  return fallback;
+  return { message: fallback, code: null };
+}
+
+/** Human wording for plan enforcement codes, keeping Core's specifics. */
+export function planErrorMessage(code: string | null, message: string) {
+  if (code === "plan_limit_exceeded")
+    return `${message}. Pause or disconnect an account, or ask us to raise your plan's limit.`;
+  if (code === "plan_inactive")
+    return "Your plan has ended. Your data is kept — contact us to continue.";
+  if (code === "over_limit_blocked")
+    return "Sync is paused because the workspace is over its account limit. Pause or disconnect accounts to resume.";
+  return message;
 }
 
 export async function coreRequest<T>(
@@ -76,11 +106,11 @@ export async function coreRequest<T>(
     ? await withCoreRequestTimeout(request, options.timeoutMs)
     : await request;
   if (!response.ok) {
-    const message = await extractErrorMessage(
+    const { message, code } = await extractError(
       response,
       "Dilanix Core request failed.",
     );
-    throw new CoreApiError(message, response.status);
+    throw new CoreApiError(message, response.status, code);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
@@ -122,7 +152,11 @@ export interface CoreOrganizationCapability {
   name: string;
   description: string | null;
   domain: string | null;
+  /** Decided by the organization's plan rather than a direct grant. */
+  plan_managed: boolean;
   access_status: "active" | "pending" | "expired" | "disabled";
+  access_expires_at: string | null;
+  access_sources: string[];
 }
 
 /** Mirrors Core's `modules.integrations.repositories.access_repository.provider_capability_code`
@@ -228,6 +262,130 @@ export function listOrganizationProducts(
     token,
   );
 }
+export type PlanPriceInterval = "month" | "year" | "custom";
+
+export interface CorePlanPrice {
+  interval: PlanPriceInterval;
+  /** Decimal string; `null` for custom pricing. Display only — no checkout. */
+  amount: string | null;
+  currency: string;
+  label: string | null;
+}
+
+export interface CorePlanFeature {
+  code: string;
+  name: string;
+  description: string | null;
+  is_product: boolean;
+}
+
+export interface CorePlanLimitValue {
+  code: string;
+  name: string;
+  unit: string;
+  /** `null` means unlimited. */
+  value: number | null;
+}
+
+export interface CorePublicPlan {
+  code: string;
+  name: string;
+  tagline: string | null;
+  description: string | null;
+  is_highlighted: boolean;
+  sort_order: number;
+  cta_kind: "contact_sales" | "request_access";
+  prices: CorePlanPrice[];
+  features: CorePlanFeature[];
+  limits: CorePlanLimitValue[];
+  marketing_features: string[];
+}
+
+/** Public, active plans for the pricing cards. Never throws: the pricing page
+ * falls back to a "talk to us" card when Core is unreachable. */
+export async function getPublicPlans(): Promise<CorePublicPlan[]> {
+  try {
+    const response = await fetch(`${env.NEXT_PUBLIC_API_URL}/v1/plans`, {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 60 },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!response.ok) return [];
+    const body = (await response.json()) as { plans: CorePublicPlan[] };
+    return body.plans;
+  } catch {
+    return [];
+  }
+}
+
+export type OrganizationPlanState =
+  "none" | "active" | "trial" | "pending" | "expired" | "trial_expired";
+
+export type PlanLimitStatus =
+  "ok" | "at_limit" | "over_limit" | "over_limit_grace" | "over_limit_blocked";
+
+export interface CorePlanAccess {
+  code: string;
+  name: string;
+  allowed: boolean;
+  access_status: "active" | "pending" | "expired" | "disabled";
+  expires_at: string | null;
+  sources: string[];
+}
+
+export interface CorePlanLimitUsage {
+  code: string;
+  name: string;
+  unit: string;
+  /** `null` means unlimited. */
+  limit: number | null;
+  usage: number;
+  status: PlanLimitStatus;
+  over_limit_action: "deny_admission" | "block_provider_sync";
+  grace_started_at: string | null;
+  grace_ends_at: string | null;
+}
+
+export interface CorePlanWarning {
+  code: string;
+  severity: "info" | "warning" | "critical";
+  message: string;
+}
+
+export interface CoreOrganizationPlan {
+  organization_id: string;
+  state: OrganizationPlanState;
+  plan: { code: string; name: string; kind: "standard" | "trial" } | null;
+  starts_at: string | null;
+  expires_at: string | null;
+  days_remaining: number | null;
+  addons: {
+    code: string;
+    name: string;
+    quantity: number;
+    starts_at: string;
+    expires_at: string | null;
+  }[];
+  products: CorePlanAccess[];
+  features: CorePlanAccess[];
+  limits: CorePlanLimitUsage[];
+  provider_sync: {
+    allowed: boolean;
+    code: string | null;
+    message: string | null;
+  };
+  warnings: CorePlanWarning[];
+}
+
+/** The organization's plan, trial expiry, access, limits and warnings —
+ * readable whatever the plan state (an ended trial keeps this page). */
+export function getOrganizationPlan(organizationId: string, token: string) {
+  return coreRequest<CoreOrganizationPlan>(
+    `/v1/organizations/${organizationId}/plan`,
+    token,
+  );
+}
+
 export function listOrganizationCapabilities(
   organizationId: string,
   token: string,
@@ -651,11 +809,11 @@ export async function submitContactMessage(
     },
   );
   if (!response.ok) {
-    const message = await extractErrorMessage(
+    const { message, code } = await extractError(
       response,
       "Unable to send your message. Please try again.",
     );
-    throw new CoreApiError(message, response.status);
+    throw new CoreApiError(message, response.status, code);
   }
 }
 
@@ -719,6 +877,21 @@ export function disableTarget(
 ) {
   return coreRequest<CoreIntegrationTarget>(
     `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/targets/${targetId}/disable`,
+    token,
+    { method: "POST" },
+  );
+}
+
+/** Re-verifies a paused target's own identity. Needs a free account slot on
+ * the plan (`plan_limit_exceeded` otherwise) — never happens automatically. */
+export function resumeTarget(
+  organizationId: string,
+  connectionId: string,
+  targetId: string,
+  token: string,
+) {
+  return coreRequest<CoreIntegrationTarget>(
+    `/v1/organizations/${organizationId}/integrations/connections/${connectionId}/targets/${targetId}/resume`,
     token,
     { method: "POST" },
   );

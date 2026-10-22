@@ -51,7 +51,10 @@ const granted: CoreOrganizationCapability[] = [
     name: "AWS Inventory Read",
     description: null,
     domain: "providers",
+    plan_managed: false,
     access_status: "active",
+    access_expires_at: null,
+    access_sources: ["grant"],
   },
 ];
 

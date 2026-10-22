@@ -14,7 +14,16 @@ import {
 
 const initialState: ContactMessageState = {};
 
-export function ContactForm({ email }: { email: SiteSettings["email"] }) {
+export function ContactForm({
+  email,
+  initialSubject,
+  initialMessage,
+}: {
+  email: SiteSettings["email"];
+  /** Prefill from a pricing card's "Contact sales" link. */
+  initialSubject?: string;
+  initialMessage?: string;
+}) {
   const [state, formAction, isPending] = useActionState(
     submitContactMessageAction,
     initialState,
@@ -73,6 +82,7 @@ export function ContactForm({ email }: { email: SiteSettings["email"] }) {
           type="text"
           label="Subject"
           placeholder="What's this about?"
+          defaultValue={initialSubject}
           required
           disabled={isPending}
         />
@@ -82,6 +92,7 @@ export function ContactForm({ email }: { email: SiteSettings["email"] }) {
           label="Message"
           rows={4}
           placeholder="Tell us what you're working on."
+          defaultValue={initialMessage}
           required
           disabled={isPending}
         />

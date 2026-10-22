@@ -5,6 +5,7 @@ import { getBlogPosts } from "@/lib/data/blog";
 const staticRoutes = [
   "",
   "/products",
+  "/pricing",
   "/guides",
   "/solutions/aws-cost-optimization",
   "/company",

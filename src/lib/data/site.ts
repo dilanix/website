@@ -42,6 +42,7 @@ const defaultSettings: SiteSettings = {
       ],
     },
     { label: "Solutions", href: "/solutions/aws-cost-optimization" },
+    { label: "Pricing", href: "/pricing" },
     {
       label: "Company",
       children: [

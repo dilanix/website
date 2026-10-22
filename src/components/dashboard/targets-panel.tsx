@@ -3,9 +3,10 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import {
   ChevronDown,
   Loader2,
+  Pause,
   Pencil,
+  Play,
   RefreshCw,
-  ShieldOff,
   X,
 } from "lucide-react";
 import type {
@@ -17,6 +18,7 @@ import {
   listTargetsAction,
   renameTargetAction,
   replaceTargetIdentityAction,
+  resumeTargetAction,
 } from "@/app/dashboard/integrations/actions";
 import { ModalOverlay } from "./modal-overlay";
 import { EmptyState, StatusBadge } from "./primitives";
@@ -49,6 +51,12 @@ function targetStatusTone(
   return "neutral";
 }
 
+/** A disabled target is a paused account: it doesn't sync and doesn't use a
+ * slot of the plan's account limit until it is resumed. */
+function targetStatusLabel(status: IntegrationTargetStatus) {
+  return status === "disabled" ? "paused" : status;
+}
+
 function TargetRow({
   connectionId,
   target,
@@ -74,6 +82,15 @@ function TargetRow({
     setError("");
     startTransition(async () => {
       const result = await disableTargetAction(connectionId, target.id);
+      if (result.error) return setError(result.error);
+      if (result.data) onChanged();
+    });
+  }
+
+  function resume() {
+    setError("");
+    startTransition(async () => {
+      const result = await resumeTargetAction(connectionId, target.id);
       if (result.error) return setError(result.error);
       if (result.data) onChanged();
     });
@@ -119,7 +136,7 @@ function TargetRow({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <StatusBadge status={targetStatusTone(target.status)}>
-            {target.status}
+            {targetStatusLabel(target.status)}
           </StatusBadge>
           <span className="text-muted-foreground text-xs tracking-wider uppercase">
             {target.target_type}
@@ -156,10 +173,23 @@ function TargetRow({
                 type="button"
                 onClick={disable}
                 disabled={pending}
-                className="text-muted-foreground inline-flex items-center gap-1 text-xs hover:text-red-500 disabled:opacity-50"
+                title="Stops syncing this account and frees its slot in your plan"
+                className="text-muted-foreground inline-flex items-center gap-1 text-xs hover:text-amber-500 disabled:opacity-50"
               >
-                <ShieldOff size={12} />
-                Disable
+                <Pause size={12} />
+                Pause
+              </button>
+            ) : null}
+            {target.status !== "verified" ? (
+              <button
+                type="button"
+                onClick={resume}
+                disabled={pending}
+                title="Re-verifies this account and resumes syncing — needs a free account slot"
+                className="text-accent inline-flex items-center gap-1 text-xs hover:underline disabled:opacity-50"
+              >
+                <Play size={12} />
+                Resume
               </button>
             ) : null}
           </div>
