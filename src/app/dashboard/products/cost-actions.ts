@@ -531,6 +531,7 @@ const budgetInputSchema = z
     periodEnd: z.iso.datetime().nullable(),
     alertThresholds: alertThresholdsSchema,
     recipients: recipientsSchema,
+    destinationIds: z.array(idSchema).max(50),
     scope: scopeSchema,
   })
   .refine(
@@ -560,6 +561,7 @@ export async function createBudgetAction(
       period_end: parsed.data.periodEnd,
       alert_thresholds: parsed.data.alertThresholds,
       recipients: parsed.data.recipients,
+      destination_ids: parsed.data.destinationIds,
       scope: toScopeInput(parsed.data.scope),
     });
     revalidatePath(BASE_PATH);
@@ -590,6 +592,7 @@ export async function updateBudgetAction(
       period_end: parsed.data.periodEnd,
       alert_thresholds: parsed.data.alertThresholds,
       recipients: parsed.data.recipients,
+      destination_ids: parsed.data.destinationIds,
       enabled: input.enabled,
       scope: parsed.data.scope ? toScopeInput(parsed.data.scope) : undefined,
     });

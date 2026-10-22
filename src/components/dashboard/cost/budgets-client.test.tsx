@@ -43,6 +43,7 @@ const budget: CoreBudget = {
   alert_thresholds: [50, 100],
   notified_thresholds: [50],
   recipients: [],
+  destination_ids: [],
   enabled: true,
   scope: [],
   created_at: "2026-08-01T00:00:00Z",
@@ -91,6 +92,19 @@ describe("BudgetsClient", () => {
 
     expect(screen.getByText("Monthly")).toBeTruthy();
     expect(screen.queryByText("Forecast to overrun")).toBeNull();
+  });
+
+  it("uses notification destinations instead of free-form email recipients", () => {
+    render(<BudgetsClient initialBudgets={[budget]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create budget" }));
+
+    expect(screen.getByText("Notification destinations")).toBeTruthy();
+    expect(screen.getByText(/No destinations are configured/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Notifications" })).toBeTruthy();
+    expect(
+      screen.queryByText(/Recipients \(comma or newline separated\)/),
+    ).toBeNull();
   });
 
   describe("product tour", () => {
