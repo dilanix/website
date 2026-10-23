@@ -377,6 +377,13 @@ export interface CoreOrganizationPlan {
     message: string | null;
   };
   warnings: CorePlanWarning[];
+  /** A plan that replaces the current one at `starts_at`; the current plan
+   * stays until then. Optional: older Core versions don't send it. */
+  scheduled_change?: {
+    plan: { code: string; name: string; kind: "standard" | "trial" };
+    starts_at: string;
+    expires_at: string | null;
+  } | null;
 }
 
 /** The organization's plan, trial expiry, access, limits and warnings —

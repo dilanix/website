@@ -54,7 +54,14 @@ function trialProgress(plan: CoreOrganizationPlan) {
   return Math.min(1, Math.max(0, (Date.now() - start) / (end - start)));
 }
 
-function AccessList({ items }: { items: CorePlanAccess[] }) {
+function AccessList({
+  items,
+  startsAt,
+}: {
+  items: CorePlanAccess[];
+  /** When the plan starts, for items waiting on a plan that hasn't started. */
+  startsAt: string | null;
+}) {
   return (
     <ul className="grid gap-2 sm:grid-cols-2">
       {items.map((item) => (
@@ -92,7 +99,9 @@ function AccessList({ items }: { items: CorePlanAccess[] }) {
                     : "Included in your plan"
                 : item.access_status === "expired"
                   ? "Paused — your plan ended"
-                  : "Not in your plan"}
+                  : item.access_status === "pending"
+                    ? `Starts ${formatDate(startsAt) ?? "soon"}`
+                    : "Not in your plan"}
             </span>
           </span>
         </li>
@@ -219,7 +228,9 @@ export default async function PlanPage() {
           </div>
           <dl className="border-border-soft bg-card-strong/55 grid gap-3 rounded-3xl border p-5 backdrop-blur-md">
             <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground text-xs">Started</dt>
+              <dt className="text-muted-foreground text-xs">
+                {plan.state === "pending" ? "Starts" : "Started"}
+              </dt>
               <dd className="text-sm font-semibold">
                 {formatDate(plan.starts_at) ?? "—"}
               </dd>
@@ -232,6 +243,16 @@ export default async function PlanPage() {
                 {formatDate(plan.expires_at) ?? "No end date"}
               </dd>
             </div>
+            {plan.scheduled_change ? (
+              <div className="border-border-soft flex items-center justify-between gap-3 border-t pt-3">
+                <dt className="text-muted-foreground text-xs">
+                  Changes to {plan.scheduled_change.plan.name}
+                </dt>
+                <dd className="text-sm font-semibold">
+                  {formatDate(plan.scheduled_change.starts_at)}
+                </dd>
+              </div>
+            ) : null}
             <div className="border-border-soft flex items-center justify-between gap-3 border-t pt-3">
               <dt className="text-muted-foreground flex items-center gap-1.5 text-xs">
                 <RefreshCw size={12} /> Cloud sync
@@ -312,7 +333,7 @@ export default async function PlanPage() {
       <div className="grid gap-8 xl:grid-cols-2">
         <Section title="Products" description="What your plan unlocks.">
           {plan.products.length ? (
-            <AccessList items={plan.products} />
+            <AccessList items={plan.products} startsAt={plan.starts_at} />
           ) : (
             <p className="text-muted-foreground text-sm">
               No products are available yet.
@@ -321,7 +342,7 @@ export default async function PlanPage() {
         </Section>
         <Section title="Features" description="Platform features on your plan.">
           {plan.features.length ? (
-            <AccessList items={plan.features} />
+            <AccessList items={plan.features} startsAt={plan.starts_at} />
           ) : (
             <p className="text-muted-foreground text-sm">
               No extra features on this plan.
