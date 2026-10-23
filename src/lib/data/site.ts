@@ -30,18 +30,28 @@ const defaultSettings: SiteSettings = {
           description: "Click through the real dashboard",
         },
         {
-          label: "Video guides",
-          href: "/guides",
-          description: "Short walkthroughs of every page",
-        },
-        {
           label: "Security",
           href: "/#trust",
           description: "Read-only access and verified commands",
         },
+        {
+          label: "AWS cost optimization",
+          href: "/solutions/aws-cost-optimization",
+          description: "Ranked, verified savings for your AWS bill",
+        },
       ],
     },
-    { label: "Solutions", href: "/solutions/aws-cost-optimization" },
+    {
+      label: "Resources",
+      children: [
+        {
+          label: "Video guides",
+          href: "/guides",
+          description: "Short walkthroughs of every page",
+        },
+        { label: "Blog", href: "/blog", description: "Notes from the team" },
+      ],
+    },
     { label: "Pricing", href: "/pricing" },
     {
       label: "Company",
@@ -51,7 +61,6 @@ const defaultSettings: SiteSettings = {
           href: "/company",
           description: "What we build and how we build it",
         },
-        { label: "Blog", href: "/blog", description: "Notes from the team" },
         { label: "Contact", href: "/contact", description: "Talk to us" },
       ],
     },
