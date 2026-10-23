@@ -290,6 +290,8 @@ export interface CorePlanLimitValue {
 export interface CorePublicPlan {
   code: string;
   name: string;
+  /** `trial` is the free trial card: shown as free, never with prices. */
+  kind: "standard" | "trial";
   tagline: string | null;
   description: string | null;
   is_highlighted: boolean;

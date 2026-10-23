@@ -104,11 +104,13 @@ function AccessList({ items }: { items: CorePlanAccess[] }) {
 export default async function PlanPage() {
   const { token, organization } = await requireDashboardOrganization();
   const organizationId = organization.organization_id;
-  const [plan, publicPlans, connections] = await Promise.all([
+  const [plan, catalogPlans, connections] = await Promise.all([
     getOrganizationPlan(organizationId, token),
     getPublicPlans(),
     listConnections(organizationId, token).catch(() => []),
   ]);
+  // The trial is one-time and automatic — never a plan to switch to.
+  const publicPlans = catalogPlans.filter((item) => item.kind !== "trial");
   const targetsByConnection = await Promise.all(
     connections
       .filter((connection) => connection.status !== "disabled")

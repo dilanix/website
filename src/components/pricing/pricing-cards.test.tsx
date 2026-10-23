@@ -15,6 +15,7 @@ const plans: CorePublicPlan[] = [
   {
     code: "starter",
     name: "Starter",
+    kind: "standard",
     tagline: "For small teams.",
     description: null,
     is_highlighted: false,
@@ -51,6 +52,7 @@ const plans: CorePublicPlan[] = [
   {
     code: "growth",
     name: "Growth",
+    kind: "standard",
     tagline: null,
     description: null,
     is_highlighted: true,
@@ -80,6 +82,7 @@ const plans: CorePublicPlan[] = [
   {
     code: "enterprise",
     name: "Enterprise",
+    kind: "standard",
     tagline: null,
     description: null,
     is_highlighted: false,
@@ -118,6 +121,51 @@ describe("PricingCards", () => {
     const enterprise = screen.getByRole("article", { name: "Enterprise plan" });
     expect(within(enterprise).getByText("Custom")).toBeTruthy();
     expect(screen.queryByText(/checkout/i)).toBeNull();
+  });
+
+  it("shows the trial as a free card in every billing interval", () => {
+    const trial: CorePublicPlan = {
+      code: "trial",
+      name: "Free trial",
+      kind: "trial",
+      tagline: "Every live product.",
+      description: null,
+      is_highlighted: false,
+      sort_order: -1,
+      cta_kind: "request_access",
+      prices: [],
+      features: [
+        {
+          code: "product.cost",
+          name: "Product Access: Cost",
+          description: null,
+          is_product: true,
+        },
+      ],
+      limits: [
+        {
+          code: "cloud.accounts",
+          name: "Connected cloud accounts",
+          unit: "accounts",
+          value: 2,
+        },
+      ],
+      marketing_features: [],
+    };
+    render(<PricingCards plans={[trial, ...plans]} />);
+
+    const card = () => screen.getByRole("article", { name: "Free trial plan" });
+    expect(within(card()).getByText("Free")).toBeTruthy();
+    expect(within(card()).queryByText("Pricing on request")).toBeNull();
+    expect(within(card()).getByText("Up to 2 accounts")).toBeTruthy();
+    expect(
+      within(card())
+        .getByRole("link", { name: /Request access/ })
+        .getAttribute("href"),
+    ).toBe("/contact?plan=trial");
+
+    fireEvent.click(screen.getByRole("radio", { name: "Yearly" }));
+    expect(within(card()).getByText("Free")).toBeTruthy();
   });
 
   it("switches to yearly prices shown per month", () => {
