@@ -2130,12 +2130,97 @@ export function listAnomalies(
   );
 }
 
-/** `status` must not be `"open"` — only the detection job may set that. */
+export function getAnomaly(
+  organizationId: string,
+  anomalyId: string,
+  token: string,
+) {
+  return costReadRequest<CoreAnomaly>(
+    `/v1/organizations/${organizationId}/cost/anomalies/${anomalyId}`,
+    token,
+  );
+}
+
+export interface CoreAnomalyDailyAmount {
+  day: string;
+  amount: string;
+  /** `baseline` = the seven days the expected amount averages, `anomaly` =
+   * the flagged day, `after` = up to seven later days for context. */
+  kind: "baseline" | "anomaly" | "after";
+}
+
+export interface CoreAnomalyDriver {
+  /** `null` when the charges have no value for this dimension (e.g. a
+   * global service with no region). */
+  value: string | null;
+  actual_amount: string;
+  expected_amount: string;
+  delta: string;
+}
+
+export interface CoreAnomalyDriverGroup {
+  dimension: "service_name" | "sub_account_id" | "region_id";
+  increases: CoreAnomalyDriver[];
+}
+
+/** Read-time explanation of one anomaly. The `cost_summary` fallback only
+ * breaks spend down by service, so account/region groups are absent there. */
+export interface CoreAnomalyBreakdown {
+  source: "cost_usage" | "cost_summary";
+  baseline_days: number;
+  daily: CoreAnomalyDailyAmount[];
+  drivers: CoreAnomalyDriverGroup[];
+}
+
+export function getAnomalyBreakdown(
+  organizationId: string,
+  anomalyId: string,
+  token: string,
+) {
+  return costReadRequest<CoreAnomalyBreakdown>(
+    `/v1/organizations/${organizationId}/cost/anomalies/${anomalyId}/breakdown`,
+    token,
+  );
+}
+
+/** Where newly detected anomalies are sent. No destinations = off. */
+export interface CoreAnomalyNotificationSettings {
+  min_severity: AnomalySeverity;
+  destination_ids: string[];
+}
+
+export function getAnomalyNotificationSettings(
+  organizationId: string,
+  token: string,
+) {
+  return costReadRequest<CoreAnomalyNotificationSettings>(
+    `/v1/organizations/${organizationId}/cost/anomalies/notification-settings`,
+    token,
+  );
+}
+
+export function updateAnomalyNotificationSettings(
+  organizationId: string,
+  token: string,
+  input: CoreAnomalyNotificationSettings,
+) {
+  return coreRequest<CoreAnomalyNotificationSettings>(
+    `/v1/organizations/${organizationId}/cost/anomalies/notification-settings`,
+    token,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+/** Any status may move to any other — e.g. reopen a resolved anomaly. */
 export function updateAnomalyStatus(
   organizationId: string,
   anomalyId: string,
   token: string,
-  status: "acknowledged" | "resolved",
+  status: AnomalyStatus,
 ) {
   return coreRequest<CoreAnomaly>(
     `/v1/organizations/${organizationId}/cost/anomalies/${anomalyId}/status`,

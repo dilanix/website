@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { listAnomalies } from "@/lib/core/api";
+import {
+  getAnomalyNotificationSettings,
+  listAnomalies,
+  listNotificationChannels,
+  listNotificationDestinations,
+} from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { AnomaliesClient } from "@/components/dashboard/cost/anomalies-client";
 
@@ -16,7 +21,25 @@ export default async function CostAnomaliesPage({
   if (slug !== "cost") notFound();
 
   const { token, organization } = await requireDashboardOrganization();
-  const { items } = await listAnomalies(organization.organization_id, token);
+  const organizationId = organization.organization_id;
+  const [
+    { items },
+    notificationSettings,
+    { items: channels },
+    { items: destinations },
+  ] = await Promise.all([
+    listAnomalies(organizationId, token),
+    getAnomalyNotificationSettings(organizationId, token),
+    listNotificationChannels(organizationId, token),
+    listNotificationDestinations(organizationId, token),
+  ]);
 
-  return <AnomaliesClient initialAnomalies={items} />;
+  return (
+    <AnomaliesClient
+      initialAnomalies={items}
+      notificationSettings={notificationSettings}
+      channels={channels}
+      destinations={destinations}
+    />
+  );
 }

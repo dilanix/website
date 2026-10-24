@@ -142,7 +142,7 @@ export const costGuide: GuideDefinition = {
       id: "anomaly-triage",
       title: "Work through them",
       caption:
-        "Open means nobody has looked yet. Acknowledge says someone is on it; Resolve closes it once explained or fixed — for good: a new spike is a new anomaly. Open ones also show on the Overview.",
+        "Open means nobody has looked yet. Acknowledge says someone is on it; Resolve closes it once explained or fixed, and Reopen brings it back. Details shows what grew. Open ones also show on the Overview.",
       durationMs: 11000,
     },
     {

@@ -37,13 +37,16 @@ import {
   restoreRecommendation,
   runCostExplorerSavedView,
   updateAllocation,
+  updateAnomalyNotificationSettings,
   updateAnomalyStatus,
   updateBudget,
   updateReport,
   updateSavedView,
   type CoreAllocation,
   type CoreAllocationBreakdown,
+  type AnomalyStatus,
   type CoreAnomaly,
+  type CoreAnomalyNotificationSettings,
   type CoreBudget,
   type CoreBudgetStatus,
   type CoreCostBreakdown,
@@ -738,12 +741,12 @@ export async function getAllocationBreakdownAction(
 
 export async function updateAnomalyStatusAction(
   anomalyId: string,
-  status: "acknowledged" | "resolved",
+  status: AnomalyStatus,
 ): Promise<CostActionResult<CoreAnomaly>> {
   const parsed = z
     .object({
       anomalyId: idSchema,
-      status: z.enum(["acknowledged", "resolved"]),
+      status: z.enum(["open", "acknowledged", "resolved"]),
     })
     .safeParse({ anomalyId, status });
   if (!parsed.success) return { error: validationMessage(parsed.error) };
@@ -757,6 +760,31 @@ export async function updateAnomalyStatusAction(
       parsed.data.status,
     );
     revalidatePath(BASE_PATH);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function updateAnomalyNotificationSettingsAction(
+  input: CoreAnomalyNotificationSettings,
+): Promise<CostActionResult<CoreAnomalyNotificationSettings>> {
+  const parsed = z
+    .object({
+      min_severity: z.enum(["low", "medium", "high"]),
+      destination_ids: z.array(idSchema).max(50),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await updateAnomalyNotificationSettings(
+      organizationId,
+      token,
+      parsed.data,
+    );
+    revalidatePath(`${BASE_PATH}/anomalies`);
     return { data };
   } catch (error) {
     return { error: message(error) };

@@ -1,9 +1,15 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { CheckCircle2, TriangleAlert } from "lucide-react";
-import { updateAnomalyStatusAction } from "@/app/dashboard/products/cost-actions";
-import type { AnomalyStatus, CoreAnomaly } from "@/lib/core/api";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { Bell, BellOff, ChevronRight, TriangleAlert } from "lucide-react";
+import type {
+  AnomalyStatus,
+  CoreAnomaly,
+  CoreAnomalyNotificationSettings,
+  CoreNotificationChannel,
+  CoreNotificationDestination,
+} from "@/lib/core/api";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { summarizeScope } from "./scope-editor";
 import { cn } from "@/lib/utils";
@@ -13,6 +19,13 @@ import {
   COST_ANOMALIES_TOUR_KEY,
   costAnomaliesAnchors as tourAnchors,
 } from "@/lib/tours/definitions/cost-anomalies";
+import {
+  AnomalyStatusActions,
+  severityTone,
+  statusTone,
+  useAnomalyStatusUpdate,
+} from "./anomaly-status-actions";
+import { AnomalyNotificationSettingsDialog } from "./anomaly-notification-settings-dialog";
 
 const STATUS_FILTERS: { id: AnomalyStatus | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -23,18 +36,6 @@ const STATUS_FILTERS: { id: AnomalyStatus | "all"; label: string }[] = [
 
 function isAnomalyFilter(value: unknown): value is AnomalyStatus | "all" {
   return STATUS_FILTERS.some((filter) => filter.id === value);
-}
-
-function severityTone(severity: CoreAnomaly["severity"]) {
-  if (severity === "high") return "warning" as const;
-  if (severity === "medium") return "neutral" as const;
-  return "neutral" as const;
-}
-
-function statusTone(status: AnomalyStatus) {
-  if (status === "resolved") return "success" as const;
-  if (status === "open") return "warning" as const;
-  return "neutral" as const;
 }
 
 function formatDate(value: string) {
@@ -54,24 +55,41 @@ function sortAnomalies(anomalies: CoreAnomaly[]) {
   );
 }
 
+export function anomalyHref(anomalyId: string) {
+  return `/dashboard/products/cost/anomalies/${anomalyId}`;
+}
+
 export function AnomaliesClient({
   initialAnomalies,
+  notificationSettings,
+  channels,
+  destinations,
 }: {
   initialAnomalies: CoreAnomaly[];
+  notificationSettings: CoreAnomalyNotificationSettings;
+  channels: CoreNotificationChannel[];
+  destinations: CoreNotificationDestination[];
 }) {
   const [anomalies, setAnomalies] = useState(() =>
     sortAnomalies(initialAnomalies),
   );
+  const [settings, setSettings] = useState(notificationSettings);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [filter, setFilter] = useDashboardFilterState<AnomalyStatus | "all">(
     "cost.anomalies.status",
     "all",
     isAnomalyFilter,
   );
-  const [error, setError] = useState("");
-  const [pending, startTransition] = useTransition();
+  const { error, pending, update } = useAnomalyStatusUpdate((updated) =>
+    setAnomalies((current) =>
+      sortAnomalies(
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      ),
+    ),
+  );
 
-  // The product tour needs no anomalies: how detection works and the status
-  // filters are always there, and the per-anomaly steps show the first row.
+  // The product tour needs no anomalies: how detection works, notifications
+  // and the status filters are always there; per-anomaly steps show the first row.
   usePageTour(COST_ANOMALIES_TOUR_KEY, { ready: true });
 
   const visible = useMemo(
@@ -82,36 +100,35 @@ export function AnomaliesClient({
     [anomalies, filter],
   );
 
-  function transition(
-    anomaly: CoreAnomaly,
-    status: "acknowledged" | "resolved",
-  ) {
-    setError("");
-    startTransition(async () => {
-      const result = await updateAnomalyStatusAction(anomaly.id, status);
-      if (result.error) return setError(result.error);
-      if (result.data) {
-        setAnomalies((current) =>
-          sortAnomalies(
-            current.map((item) =>
-              item.id === result.data!.id ? result.data! : item,
-            ),
-          ),
-        );
-      }
-    });
-  }
+  const notifying = settings.destination_ids.length;
 
   return (
     <div className="flex flex-col gap-5">
-      <p
-        data-tour={tourAnchors.detection}
-        className="text-muted-foreground max-w-2xl text-sm leading-6"
-      >
-        Detected hourly by comparing yesterday&apos;s whole-organization spend
-        against a trailing 7-day average. Flags a deviation of 50% or more (and
-        at least 1 currency unit).
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <p
+          data-tour={tourAnchors.detection}
+          className="text-muted-foreground max-w-2xl text-sm leading-6"
+        >
+          Detected hourly by comparing yesterday&apos;s whole-organization spend
+          against a trailing 7-day average. Flags a deviation of 50% or more
+          (and at least 1 currency unit).
+        </p>
+        <button
+          type="button"
+          data-tour={tourAnchors.notifications}
+          onClick={() => setSettingsOpen(true)}
+          className="border-foreground/15 hover:border-foreground/30 inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+        >
+          {notifying ? (
+            <Bell size={15} className="text-accent" />
+          ) : (
+            <BellOff size={15} className="text-muted-foreground" />
+          )}
+          {notifying
+            ? `Notifying ${notifying} destination${notifying === 1 ? "" : "s"}`
+            : "Notifications off"}
+        </button>
+      </div>
 
       <div
         role="tablist"
@@ -188,14 +205,17 @@ export function AnomaliesClient({
                       data-tour={tourAnchors.summary}
                       className="flex flex-wrap items-center gap-2"
                     >
-                      <p className="text-sm font-semibold">
+                      <Link
+                        href={anomalyHref(anomaly.id)}
+                        className="hover:text-accent text-sm font-semibold transition-colors"
+                      >
                         {Number(anomaly.actual_amount).toLocaleString("en-US")}{" "}
                         {anomaly.currency} vs.{" "}
                         {Number(anomaly.expected_amount).toLocaleString(
                           "en-US",
                         )}{" "}
                         expected
-                      </p>
+                      </Link>
                       <StatusBadge status={severityTone(anomaly.severity)}>
                         {anomaly.severity}
                       </StatusBadge>
@@ -215,36 +235,43 @@ export function AnomaliesClient({
                     </div>
                   </div>
                 </div>
-                {anomaly.status !== "resolved" ? (
+                <div className="flex shrink-0 items-center gap-3">
                   <div
                     data-tour={tourAnchors.actions}
-                    className="flex shrink-0 items-center gap-3"
+                    className="flex items-center gap-3"
                   >
-                    {anomaly.status === "open" ? (
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => transition(anomaly, "acknowledged")}
-                        className="text-muted-foreground hover:text-foreground text-xs disabled:opacity-50"
-                      >
-                        Acknowledge
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={pending}
-                      onClick={() => transition(anomaly, "resolved")}
-                      className="text-success inline-flex items-center gap-1 text-xs disabled:opacity-50"
-                    >
-                      <CheckCircle2 size={13} /> Resolve
-                    </button>
+                    <AnomalyStatusActions
+                      anomaly={anomaly}
+                      pending={pending}
+                      onChange={(status) => update(anomaly, status)}
+                    />
                   </div>
-                ) : null}
+                  <Link
+                    href={anomalyHref(anomaly.id)}
+                    data-tour={tourAnchors.open}
+                    className="text-accent inline-flex items-center gap-0.5 text-xs font-medium hover:underline"
+                  >
+                    Details <ChevronRight size={13} />
+                  </Link>
+                </div>
               </div>
             ))}
           </div>
         </div>
       )}
+
+      {settingsOpen ? (
+        <AnomalyNotificationSettingsDialog
+          settings={settings}
+          channels={channels}
+          destinations={destinations}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={(saved) => {
+            setSettings(saved);
+            setSettingsOpen(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

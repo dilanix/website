@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { Clock, FileText, Pencil, Plus, Send, Trash2, X } from "lucide-react";
 import {
   createReportAction,
@@ -21,6 +20,7 @@ import { DestructiveActionDialog } from "@/components/dashboard/destructive-acti
 import { ModalOverlay } from "@/components/dashboard/modal-overlay";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { GeneratedReportsDialog } from "./generated-reports-dialog";
+import { NotificationDestinationPicker } from "./notification-destination-picker";
 import {
   cronToSchedule,
   DEFAULT_SCHEDULE,
@@ -86,11 +86,6 @@ function timeInputValue(schedule: FriendlySchedule): string {
   return `${String(schedule.hour).padStart(2, "0")}:${String(schedule.minute).padStart(2, "0")}`;
 }
 
-function providerLabel(channel: CoreNotificationChannel | undefined) {
-  if (!channel) return "Unknown channel";
-  return `${channel.provider.charAt(0).toUpperCase()}${channel.provider.slice(1)} · ${channel.name}`;
-}
-
 function ReportDialog({
   report,
   onClose,
@@ -113,7 +108,6 @@ function ReportDialog({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const isEditing = Boolean(report);
-  const channelById = new Map(channels.map((channel) => [channel.id, channel]));
 
   function submit() {
     setError("");
@@ -372,63 +366,14 @@ function ReportDialog({
             <legend className="mb-1.5 font-medium">
               Notification destinations
             </legend>
-            {destinations.length === 0 ? (
-              <div className="border-foreground/15 text-muted-foreground rounded-lg border border-dashed p-3 text-xs leading-5">
-                No destinations are configured. Add an Email, Slack, Telegram,
-                or Webhook destination in{" "}
-                <Link
-                  href="/dashboard/notifications"
-                  className="text-accent font-medium hover:underline"
-                >
-                  Notifications
-                </Link>
-                .
-              </div>
-            ) : (
-              <div className="border-foreground/15 divide-foreground/10 max-h-48 divide-y overflow-y-auto rounded-lg border">
-                {destinations.map((destination) => {
-                  const channel = channelById.get(destination.channel_id);
-                  const selected = form.destinationIds.includes(destination.id);
-                  const available = Boolean(
-                    destination.is_enabled &&
-                    channel?.is_enabled &&
-                    channel.status === "active",
-                  );
-                  return (
-                    <label
-                      key={destination.id}
-                      className="flex cursor-pointer items-start gap-3 px-3 py-2.5"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        disabled={!available && !selected}
-                        onChange={(event) =>
-                          setForm((current) => ({
-                            ...current,
-                            destinationIds: event.target.checked
-                              ? [...current.destinationIds, destination.id]
-                              : current.destinationIds.filter(
-                                  (id) => id !== destination.id,
-                                ),
-                          }))
-                        }
-                        className="mt-0.5"
-                      />
-                      <span className="min-w-0">
-                        <span className="block font-medium">
-                          {destination.name}
-                        </span>
-                        <span className="text-muted-foreground block text-xs">
-                          {providerLabel(channel)}
-                          {!available ? " · disabled" : ""}
-                        </span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            )}
+            <NotificationDestinationPicker
+              channels={channels}
+              destinations={destinations}
+              selectedIds={form.destinationIds}
+              onChange={(destinationIds) =>
+                setForm((current) => ({ ...current, destinationIds }))
+              }
+            />
           </fieldset>
 
           <div data-tour={tourAnchors.formScope}>

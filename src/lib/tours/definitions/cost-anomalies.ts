@@ -6,17 +6,19 @@ export const COST_ANOMALIES_TOUR_KEY = "cost.anomalies";
  *  Per-anomaly anchors sit on every row; the tour shows the first. */
 export const costAnomaliesAnchors = {
   detection: "cost-anomalies.detection",
+  notifications: "cost-anomalies.notifications",
   filters: "cost-anomalies.filters",
   summary: "cost-anomalies.summary",
   details: "cost-anomalies.details",
   actions: "cost-anomalies.actions",
+  open: "cost-anomalies.open",
 } as const;
 
 const anchors = costAnomaliesAnchors;
 
 export const costAnomaliesTour: TourDefinition = {
   key: COST_ANOMALIES_TOUR_KEY,
-  version: 1,
+  version: 2,
   title: "Cost Anomalies",
   description: "How spend spikes are detected and how to work through them.",
   product: "cost",
@@ -33,6 +35,13 @@ export const costAnomaliesTour: TourDefinition = {
       placement: "bottom",
       title: "How detection works",
       body: "Every hour, Dilanix compares yesterday's total spend across your organization with the average of the 7 days before, separately for each currency. A day at least 50% above that average — and at least 1 currency unit above it — becomes an anomaly. Drops in spend are never flagged.",
+    },
+    {
+      id: "notifications",
+      target: anchors.notifications,
+      placement: "bottom",
+      title: "Get notified",
+      body: "Choose where a new anomaly is sent — any Email, Slack, Telegram or Webhook destination from Notifications — and the lowest severity worth a message. Each message names the services that grew the most and links to the anomaly's details.",
     },
     {
       id: "filters",
@@ -59,8 +68,15 @@ export const costAnomaliesTour: TourDefinition = {
       id: "actions",
       target: anchors.actions,
       placement: "left",
-      title: "Acknowledge or resolve",
-      body: "Acknowledge tells your team someone is on it. Resolve closes the anomaly once it's explained or fixed. Resolved is final — if spend spikes again, a new anomaly appears.",
+      title: "Acknowledge, resolve or reopen",
+      body: "Acknowledge tells your team someone is on it. Resolve closes the anomaly once it's explained or fixed. Changed your mind? Reopen moves it back to open.",
+    },
+    {
+      id: "open",
+      target: anchors.open,
+      placement: "left",
+      title: "See what caused it",
+      body: "Details shows the daily spend around the spike against the expected average, and which services, accounts and regions grew the most that day.",
     },
     {
       id: "finish",
