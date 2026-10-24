@@ -9,6 +9,8 @@ import {
   updateReportAction,
 } from "@/app/dashboard/products/cost-actions";
 import type {
+  CoreIntegrationConnection,
+  CoreIntegrationTarget,
   CoreNotificationChannel,
   CoreNotificationDestination,
   CoreReport,
@@ -19,6 +21,11 @@ import type {
 import { DestructiveActionDialog } from "@/components/dashboard/destructive-action-dialog";
 import { ModalOverlay } from "@/components/dashboard/modal-overlay";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
+import {
+  CostAccountSelect,
+  describeCostAccount,
+  type CostAccount,
+} from "./cost-account-select";
 import { GeneratedReportsDialog } from "./generated-reports-dialog";
 import { NotificationDestinationPicker } from "./notification-destination-picker";
 import {
@@ -52,12 +59,17 @@ interface ReportFormState {
   periodPreset: ReportPeriodPreset;
   schedule: FriendlySchedule;
   destinationIds: string[];
+  account: CostAccount;
 }
 
 function toFormState(report?: CoreReport): ReportFormState {
   return {
     name: report?.name ?? "",
     description: report?.description ?? "",
+    account: {
+      connectionId: report?.connection_id ?? null,
+      targetId: report?.target_id ?? null,
+    },
     format: report?.format ?? "csv",
     periodPreset: report?.period_preset ?? "last_month",
     schedule: cronToSchedule(report?.schedule_cron ?? null),
@@ -92,12 +104,16 @@ function ReportDialog({
   onSaved,
   channels,
   destinations,
+  connections,
+  targets,
 }: {
   report: CoreReport | null;
   onClose: () => void;
   onSaved: (report: CoreReport) => void;
   channels: CoreNotificationChannel[];
   destinations: CoreNotificationDestination[];
+  connections: CoreIntegrationConnection[];
+  targets: CoreIntegrationTarget[];
 }) {
   const [form, setForm] = useState<ReportFormState>(() =>
     toFormState(report ?? undefined),
@@ -126,6 +142,8 @@ function ReportDialog({
       periodPreset: form.periodPreset,
       scheduleCron: scheduleToCron(form.schedule),
       scope,
+      connectionId: form.account.connectionId,
+      targetId: form.account.targetId,
     };
     startTransition(async () => {
       const result = report
@@ -191,6 +209,19 @@ function ReportDialog({
               className="border-foreground/15 bg-background focus:border-accent w-full rounded-lg border px-3 py-2 outline-none"
             />
           </label>
+
+          <div className="block text-sm">
+            <span className="mb-1.5 block font-medium">Account</span>
+            <CostAccountSelect
+              connections={connections}
+              targets={targets}
+              value={form.account}
+              onChange={(account) => setForm((f) => ({ ...f, account }))}
+            />
+            <p className="text-muted-foreground mt-1.5 text-xs">
+              The report covers only this account&apos;s spend.
+            </p>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <label data-tour={tourAnchors.formFormat} className="block text-sm">
@@ -404,10 +435,16 @@ export function ReportsClient({
   initialReports,
   channels,
   destinations,
+  connections,
+  targets,
 }: {
   initialReports: CoreReport[];
   channels: CoreNotificationChannel[];
   destinations: CoreNotificationDestination[];
+  /** Connections with billing.read and their targets — the accounts a
+   *  report can cover. */
+  connections: CoreIntegrationConnection[];
+  targets: CoreIntegrationTarget[];
 }) {
   const [reports, setReports] = useState(() => sortReports(initialReports));
   const [dialogState, setDialogState] = useState<
@@ -565,7 +602,16 @@ export function ReportsClient({
                       {report.destination_ids.length === 1 ? "" : "s"}
                     </p>
                     <p className="text-muted-foreground mt-1 text-xs">
-                      Scope: {summarizeScope(report.scope)}
+                      Account:{" "}
+                      {describeCostAccount(
+                        {
+                          connectionId: report.connection_id,
+                          targetId: report.target_id,
+                        },
+                        connections,
+                        targets,
+                      ) ?? "Unavailable account"}{" "}
+                      · Scope: {summarizeScope(report.scope)}
                     </p>
                   </div>
                 </div>
@@ -653,6 +699,8 @@ export function ReportsClient({
           }}
           channels={channels}
           destinations={destinations}
+          connections={connections}
+          targets={targets}
         />
       ) : null}
 

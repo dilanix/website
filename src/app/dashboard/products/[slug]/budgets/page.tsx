@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { listBudgetStatuses, listBudgets } from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { BudgetsClient } from "@/components/dashboard/cost/budgets-client";
+import { loadCostDataScopeOptions } from "@/components/dashboard/cost/cost-data-scope";
 
 export const metadata: Metadata = {
   title: "Budgets — Cost",
@@ -16,15 +17,21 @@ export default async function CostBudgetsPage({
   if (slug !== "cost") notFound();
 
   const { token, organization } = await requireDashboardOrganization();
-  const [{ items }, statuses] = await Promise.all([
+  const [{ items }, statuses, { connections, targets }] = await Promise.all([
     listBudgets(organization.organization_id, token),
     // Status is a read-time projection; a failure here must not hide the budgets.
     listBudgetStatuses(organization.organization_id, token).catch(() => ({
       items: [],
     })),
+    loadCostDataScopeOptions(organization.organization_id, token),
   ]);
 
   return (
-    <BudgetsClient initialBudgets={items} initialStatuses={statuses.items} />
+    <BudgetsClient
+      initialBudgets={items}
+      initialStatuses={statuses.items}
+      connections={connections}
+      targets={targets}
+    />
   );
 }

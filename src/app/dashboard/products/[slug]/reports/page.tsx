@@ -6,6 +6,7 @@ import {
   listReports,
 } from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
+import { loadCostDataScopeOptions } from "@/components/dashboard/cost/cost-data-scope";
 import { ReportsClient } from "@/components/dashboard/cost/reports-client";
 
 export const metadata: Metadata = {
@@ -20,18 +21,25 @@ export default async function CostReportsPage({
   if (slug !== "cost") notFound();
 
   const { token, organization } = await requireDashboardOrganization();
-  const [{ items }, { items: channels }, { items: destinations }] =
-    await Promise.all([
-      listReports(organization.organization_id, token),
-      listNotificationChannels(organization.organization_id, token),
-      listNotificationDestinations(organization.organization_id, token),
-    ]);
+  const [
+    { items },
+    { items: channels },
+    { items: destinations },
+    { connections, targets },
+  ] = await Promise.all([
+    listReports(organization.organization_id, token),
+    listNotificationChannels(organization.organization_id, token),
+    listNotificationDestinations(organization.organization_id, token),
+    loadCostDataScopeOptions(organization.organization_id, token),
+  ]);
 
   return (
     <ReportsClient
       initialReports={items}
       channels={channels}
       destinations={destinations}
+      connections={connections}
+      targets={targets}
     />
   );
 }

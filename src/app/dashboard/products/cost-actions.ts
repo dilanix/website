@@ -436,7 +436,12 @@ export async function queryCostBreakdownAction(
 }
 
 const highlightsQuerySchema = z
-  .object({ periodStart: z.iso.datetime(), periodEnd: z.iso.datetime() })
+  .object({
+    periodStart: z.iso.datetime(),
+    periodEnd: z.iso.datetime(),
+    connectionId: idSchema.nullable().optional(),
+    targetId: idSchema.nullable().optional(),
+  })
   .refine(
     (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
     { message: "The period end must be after its start.", path: ["periodEnd"] },
@@ -535,6 +540,8 @@ const budgetInputSchema = z
     alertThresholds: alertThresholdsSchema,
     recipients: recipientsSchema,
     scope: scopeSchema,
+    connectionId: idSchema.nullable(),
+    targetId: idSchema.nullable(),
   })
   .refine(
     (input) =>
@@ -556,6 +563,8 @@ export async function createBudgetAction(
     const data = await createBudget(organizationId, token, {
       name: parsed.data.name,
       description: parsed.data.description,
+      connection_id: parsed.data.connectionId,
+      target_id: parsed.data.targetId,
       amount: parsed.data.amount,
       currency: parsed.data.currency,
       period: parsed.data.period,
@@ -586,6 +595,9 @@ export async function updateBudgetAction(
     const data = await updateBudget(organizationId, idParsed.data, token, {
       name: parsed.data.name,
       description: parsed.data.description,
+      // Omitted (undefined) leaves the account unchanged; null clears it.
+      connection_id: parsed.data.connectionId,
+      target_id: parsed.data.targetId,
       amount: parsed.data.amount,
       currency: parsed.data.currency,
       period: parsed.data.period,
@@ -1045,6 +1057,8 @@ const reportInputSchema = z.object({
   periodPreset: reportPeriodPresetSchema,
   scheduleCron: z.string().trim().min(1).max(120).nullable(),
   scope: scopeSchema,
+  connectionId: idSchema.nullable(),
+  targetId: idSchema.nullable(),
 });
 
 export async function createReportAction(
@@ -1058,6 +1072,8 @@ export async function createReportAction(
     const data = await createReport(organizationId, token, {
       name: parsed.data.name,
       description: parsed.data.description,
+      connection_id: parsed.data.connectionId,
+      target_id: parsed.data.targetId,
       format: parsed.data.format,
       recipients: parsed.data.recipients,
       destination_ids: parsed.data.destinationIds,
@@ -1086,6 +1102,9 @@ export async function updateReportAction(
     const data = await updateReport(organizationId, idParsed.data, token, {
       name: parsed.data.name,
       description: parsed.data.description,
+      // Omitted (undefined) leaves the account unchanged; null clears it.
+      connection_id: parsed.data.connectionId,
+      target_id: parsed.data.targetId,
       format: parsed.data.format,
       recipients: parsed.data.recipients,
       destination_ids: parsed.data.destinationIds,

@@ -1829,6 +1829,10 @@ export interface CoreBudget {
   organization_id: string;
   name: string;
   description: string | null;
+  /** The connected account the budget tracks: one target, every target of
+   * one connection (`target_id` null), or every account (both null). */
+  connection_id: string | null;
+  target_id: string | null;
   amount: string;
   currency: string;
   period: BudgetPeriod;
@@ -1852,6 +1856,8 @@ export interface CoreBudgetListResponse {
 export interface CreateBudgetInput {
   name: string;
   description?: string | null;
+  connection_id?: string | null;
+  target_id?: string | null;
   amount: string;
   currency: string;
   period?: BudgetPeriod;
@@ -1865,6 +1871,10 @@ export interface CreateBudgetInput {
 export interface UpdateBudgetInput {
   name?: string;
   description?: string | null;
+  /** Sending `connection_id` (even null) replaces both account fields;
+   * omitting it leaves them unchanged. */
+  connection_id?: string | null;
+  target_id?: string | null;
   amount?: string;
   currency?: string;
   period?: BudgetPeriod;
@@ -2984,12 +2994,19 @@ export interface CoreCostOverviewHighlights {
 export function getCostOverviewHighlights(
   organizationId: string,
   token: string,
-  params: { periodStart: string; periodEnd: string },
+  params: {
+    periodStart: string;
+    periodEnd: string;
+    connectionId?: string | null;
+    targetId?: string | null;
+  },
 ) {
   const query = new URLSearchParams({
     period_start: params.periodStart,
     period_end: params.periodEnd,
   });
+  if (params.connectionId) query.set("connection_id", params.connectionId);
+  if (params.targetId) query.set("target_id", params.targetId);
   return costReadRequest<CoreCostOverviewHighlights>(
     `/v1/organizations/${organizationId}/cost/overview/highlights?${query.toString()}`,
     token,
@@ -3165,6 +3182,10 @@ export interface CoreReport {
   created_by_user_id: string | null;
   name: string;
   description: string | null;
+  /** The connected account the report covers: one target, every target of
+   * one connection (`target_id` null), or every account (both null). */
+  connection_id: string | null;
+  target_id: string | null;
   format: ReportFormat;
   recipients: string[];
   /** Shared Notification destinations explicitly selected for this report. */
@@ -3188,6 +3209,8 @@ export interface CoreReportListResponse {
 export interface CreateReportInput {
   name: string;
   description?: string | null;
+  connection_id?: string | null;
+  target_id?: string | null;
   format?: ReportFormat;
   recipients?: string[];
   destination_ids?: string[];
@@ -3199,6 +3222,10 @@ export interface CreateReportInput {
 export interface UpdateReportInput {
   name?: string;
   description?: string | null;
+  /** Sending `connection_id` (even null) replaces both account fields;
+   * omitting it leaves them unchanged. */
+  connection_id?: string | null;
+  target_id?: string | null;
   format?: ReportFormat;
   recipients?: string[];
   destination_ids?: string[];

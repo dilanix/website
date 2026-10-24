@@ -663,6 +663,8 @@ export function SpendOverviewClient({
       <CostAttentionStrip
         periodStart={displayedPeriodStart}
         periodEnd={displayedPeriodEnd}
+        connectionId={connectionId}
+        targetId={targetId}
         scopeSuffix={scopeSuffix}
       />
 

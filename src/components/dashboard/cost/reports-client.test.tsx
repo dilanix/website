@@ -9,6 +9,8 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
+  CoreIntegrationConnection,
+  CoreIntegrationTarget,
   CoreNotificationChannel,
   CoreNotificationDestination,
   CoreReport,
@@ -68,12 +70,44 @@ const destination: CoreNotificationDestination = {
   updated_at: "2026-09-18T00:00:00Z",
 };
 
+const connection: CoreIntegrationConnection = {
+  id: "10000000-0000-4000-8000-000000000001",
+  organization_id: "org-1",
+  integration_id: "30000000-0000-4000-8000-000000000001",
+  name: "AWS",
+  status: "connected",
+  configuration: {},
+  external_reference: null,
+  last_verified_at: "2026-09-01T00:00:00Z",
+  last_success_at: null,
+  last_error_at: null,
+  last_error_code: null,
+  created_at: "2026-09-01T00:00:00Z",
+  last_synced_at: "2026-09-11T00:00:00Z",
+};
+
+const prodTarget: CoreIntegrationTarget = {
+  id: "40000000-0000-4000-8000-000000000001",
+  organization_id: "org-1",
+  connection_id: connection.id,
+  target_type: "account",
+  external_id: "123456789012",
+  display_name: "Prod",
+  parent_target_id: null,
+  status: "verified",
+  provider_metadata: {},
+  created_at: "2026-09-01T00:00:00Z",
+  updated_at: "2026-09-01T00:00:00Z",
+};
+
 const report: CoreReport = {
   id: "report-1",
   organization_id: "org-1",
   created_by_user_id: "user-1",
   name: "Monthly costs",
   description: null,
+  connection_id: null,
+  target_id: null,
   format: "csv",
   recipients: [],
   destination_ids: [destination.id],
@@ -94,6 +128,8 @@ describe("ReportsClient", () => {
         initialReports={[]}
         channels={[channel]}
         destinations={[destination]}
+        connections={[connection]}
+        targets={[prodTarget]}
       />,
     );
 
@@ -122,6 +158,55 @@ describe("ReportsClient", () => {
     );
   });
 
+  it("narrows a new report to the selected account and names it in the list", async () => {
+    vi.mocked(createReportAction).mockResolvedValue({
+      data: {
+        ...report,
+        connection_id: connection.id,
+        target_id: prodTarget.id,
+      },
+    });
+    render(
+      <ReportsClient
+        initialReports={[]}
+        channels={[channel]}
+        destinations={[destination]}
+        connections={[connection]}
+        targets={[prodTarget]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Create report" })[0],
+    );
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Name"), {
+      target: { value: report.name },
+    });
+    fireEvent.change(
+      within(dialog).getByRole("combobox", { name: "Account" }),
+      {
+        target: { value: `target:${prodTarget.id}` },
+      },
+    );
+    fireEvent.click(
+      within(dialog).getByRole("checkbox", { name: /#finance/i }),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Create report" }),
+    );
+
+    await waitFor(() =>
+      expect(createReportAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          connectionId: connection.id,
+          targetId: prodTarget.id,
+        }),
+      ),
+    );
+    expect(await screen.findByText(/Account: AWS · Prod/)).toBeTruthy();
+  });
+
   it("generates a report through the Notification delivery flow", async () => {
     vi.mocked(generateReportAction).mockResolvedValue({
       data: { notification_request_id: "notification-request-1" },
@@ -131,6 +216,8 @@ describe("ReportsClient", () => {
         initialReports={[report]}
         channels={[channel]}
         destinations={[destination]}
+        connections={[connection]}
+        targets={[prodTarget]}
       />,
     );
 
@@ -154,6 +241,8 @@ describe("ReportsClient", () => {
           initialReports={initialReports}
           channels={[channel]}
           destinations={[destination]}
+          connections={[connection]}
+          targets={[prodTarget]}
         />,
       );
 

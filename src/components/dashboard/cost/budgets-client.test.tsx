@@ -35,6 +35,8 @@ const budget: CoreBudget = {
   organization_id: "o1",
   name: "Monthly",
   description: null,
+  connection_id: null,
+  target_id: null,
   amount: "50",
   currency: "USD",
   period: "monthly",
