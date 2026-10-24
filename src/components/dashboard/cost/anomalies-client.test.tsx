@@ -30,6 +30,7 @@ function renderClient(
   return render(
     <AnomaliesClient
       initialAnomalies={initialAnomalies}
+      accountLabels={{ t1: "Production · 123456789012" }}
       notificationSettings={notificationSettings}
       channels={[]}
       destinations={[]}
@@ -47,6 +48,8 @@ function anomaly(overrides: Partial<CoreAnomaly>): CoreAnomaly {
   return {
     id: "a1",
     organization_id: "o1",
+    connection_id: "c1",
+    target_id: "t1",
     detected_at: "2026-10-02T01:00:00Z",
     period_start: "2026-10-01T00:00:00Z",
     period_end: "2026-10-02T00:00:00Z",
@@ -90,12 +93,17 @@ describe("AnomaliesClient product tour", () => {
           status: "resolved",
           detected_at: "2026-10-03T01:00:00Z",
         }),
-        anomaly({ id: "older" }),
+        anomaly({ id: "older", connection_id: null, target_id: null }),
       ],
       { min_severity: "medium", destination_ids: ["d1", "d2"] },
     );
     expect(anchored("summary")).toHaveLength(2);
-    expect(anchored("details")[0]?.textContent).toContain("All spend");
+    expect(anchored("details")[0]?.textContent).toContain(
+      "Account: Production · 123456789012",
+    );
+    expect(anchored("details")[1]?.textContent).toContain(
+      "Account: All accounts",
+    );
     const actions = anchored("actions");
     expect(actions).toHaveLength(2);
     expect(actions[0]?.textContent?.trim()).toBe("Reopen");

@@ -15,6 +15,8 @@ afterEach(() => {
 const anomaly: CoreAnomaly = {
   id: "a1",
   organization_id: "o1",
+  connection_id: "c1",
+  target_id: "t1",
   detected_at: "2026-10-23T20:10:00Z",
   period_start: "2026-10-22T00:00:00Z",
   period_end: "2026-10-23T00:00:00Z",
@@ -61,11 +63,13 @@ describe("AnomalyDetailClient", () => {
     render(
       <AnomalyDetailClient
         initialAnomaly={anomaly}
+        accountLabels={{ t1: "Production · 123456789012" }}
         breakdown={breakdown}
         breakdownError=""
       />,
     );
     expect(screen.getByText("2.38 USD vs. 1.20 USD expected")).toBeTruthy();
+    expect(screen.getByText(/Production · 123456789012/)).toBeTruthy();
     expect(screen.getByText("+99%")).toBeTruthy();
     expect(screen.getByText("Amazon EC2")).toBeTruthy();
     expect(screen.getByText("+1.10 USD")).toBeTruthy();
@@ -77,6 +81,7 @@ describe("AnomalyDetailClient", () => {
     render(
       <AnomalyDetailClient
         initialAnomaly={anomaly}
+        accountLabels={{}}
         breakdown={null}
         breakdownError="Billing data is unavailable"
       />,

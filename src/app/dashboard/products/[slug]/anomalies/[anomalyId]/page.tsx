@@ -4,15 +4,37 @@ import {
   CoreApiError,
   getAnomaly,
   getAnomalyBreakdown,
+  listConnections,
+  listTargets,
+  type CoreAnomaly,
   type CoreAnomalyBreakdown,
 } from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { AnomalyDetailClient } from "@/components/dashboard/cost/anomaly-detail-client";
+import { costTargetLabels } from "@/components/dashboard/cost/cost-data-scope";
 
 export const metadata: Metadata = {
   title: "Anomaly — Cost",
   robots: { index: false, follow: false },
 };
+
+/** Names the anomaly's account; a failed lookup only loses the name. */
+async function loadAccountLabels(
+  organizationId: string,
+  token: string,
+  anomaly: CoreAnomaly,
+): Promise<Record<string, string>> {
+  if (!anomaly.connection_id) return {};
+  try {
+    const [connections, targets] = await Promise.all([
+      listConnections(organizationId, token),
+      listTargets(organizationId, anomaly.connection_id, token),
+    ]);
+    return costTargetLabels(connections, targets);
+  } catch {
+    return {};
+  }
+}
 
 export default async function CostAnomalyDetailPage({
   params,
@@ -35,6 +57,11 @@ export default async function CostAnomalyDetailPage({
   // when that read fails.
   let breakdown: CoreAnomalyBreakdown | null = null;
   let breakdownError = "";
+  const accountLabelsPromise = loadAccountLabels(
+    organizationId,
+    token,
+    anomaly,
+  );
   try {
     breakdown = await getAnomalyBreakdown(organizationId, anomalyId, token);
   } catch (error) {
@@ -45,6 +72,7 @@ export default async function CostAnomalyDetailPage({
   return (
     <AnomalyDetailClient
       initialAnomaly={anomaly}
+      accountLabels={await accountLabelsPromise}
       breakdown={breakdown}
       breakdownError={breakdownError}
     />

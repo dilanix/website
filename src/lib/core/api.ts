@@ -2093,6 +2093,11 @@ export type AnomalyStatus = "open" | "acknowledged" | "resolved";
 export interface CoreAnomaly {
   id: string;
   organization_id: string;
+  /** The connected account whose spend spiked — detection runs per target.
+   * Both `null` only on an anomaly recorded before that (whole-organization
+   * spend). */
+  connection_id: string | null;
+  target_id: string | null;
   detected_at: string;
   period_start: string;
   period_end: string;
@@ -2104,9 +2109,8 @@ export interface CoreAnomaly {
   status: AnomalyStatus;
   acknowledged_at: string | null;
   resolved_at: string | null;
-  /** Always `[]` today — anomaly detection only ever runs at the
-   * whole-organization level, despite this column existing for future
-   * per-scope detection. */
+  /** Always `[]` today — the account is `connection_id`/`target_id`; this
+   * column is kept for future per-service/tag detection. */
   scope: CoreScopeCondition[];
   created_at: string;
   updated_at: string;
@@ -2119,13 +2123,18 @@ export interface CoreAnomalyListResponse {
 export function listAnomalies(
   organizationId: string,
   token: string,
-  statusFilter?: AnomalyStatus | null,
+  params: {
+    statusFilter?: AnomalyStatus | null;
+    connectionId?: string | null;
+    targetId?: string | null;
+  } = {},
 ) {
-  const query = statusFilter
-    ? `?${new URLSearchParams({ status_filter: statusFilter }).toString()}`
-    : "";
+  const query = new URLSearchParams();
+  if (params.statusFilter) query.set("status_filter", params.statusFilter);
+  if (params.connectionId) query.set("connection_id", params.connectionId);
+  if (params.targetId) query.set("target_id", params.targetId);
   return costReadRequest<CoreAnomalyListResponse>(
-    `/v1/organizations/${organizationId}/cost/anomalies${query}`,
+    `/v1/organizations/${organizationId}/cost/anomalies${query.size ? `?${query}` : ""}`,
     token,
   );
 }

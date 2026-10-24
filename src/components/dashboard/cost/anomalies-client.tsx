@@ -11,7 +11,6 @@ import type {
   CoreNotificationDestination,
 } from "@/lib/core/api";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
-import { summarizeScope } from "./scope-editor";
 import { cn } from "@/lib/utils";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 import { usePageTour } from "@/components/tours/tour-provider";
@@ -21,6 +20,7 @@ import {
 } from "@/lib/tours/definitions/cost-anomalies";
 import {
   AnomalyStatusActions,
+  anomalyAccountLabel,
   severityTone,
   statusTone,
   useAnomalyStatusUpdate,
@@ -61,11 +61,13 @@ export function anomalyHref(anomalyId: string) {
 
 export function AnomaliesClient({
   initialAnomalies,
+  accountLabels,
   notificationSettings,
   channels,
   destinations,
 }: {
   initialAnomalies: CoreAnomaly[];
+  accountLabels: Record<string, string>;
   notificationSettings: CoreAnomalyNotificationSettings;
   channels: CoreNotificationChannel[];
   destinations: CoreNotificationDestination[];
@@ -109,9 +111,9 @@ export function AnomaliesClient({
           data-tour={tourAnchors.detection}
           className="text-muted-foreground max-w-2xl text-sm leading-6"
         >
-          Detected hourly by comparing yesterday&apos;s whole-organization spend
-          against a trailing 7-day average. Flags a deviation of 50% or more
-          (and at least 1 currency unit).
+          Detected hourly for each connected account by comparing
+          yesterday&apos;s spend against its trailing 7-day average. Flags a
+          deviation of 50% or more (and at least 1 currency unit).
         </p>
         <button
           type="button"
@@ -230,7 +232,7 @@ export function AnomaliesClient({
                         detected {formatDate(anomaly.detected_at)}
                       </p>
                       <p className="text-muted-foreground mt-1 text-xs">
-                        Scope: {summarizeScope(anomaly.scope)}
+                        Account: {anomalyAccountLabel(anomaly, accountLabels)}
                       </p>
                     </div>
                   </div>

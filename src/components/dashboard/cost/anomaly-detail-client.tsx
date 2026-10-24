@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { formatAmount } from "./format";
 import {
   AnomalyStatusActions,
+  anomalyAccountLabel,
   severityTone,
   statusTone,
   useAnomalyStatusUpdate,
@@ -209,10 +210,12 @@ function DriverGroup({
 
 export function AnomalyDetailClient({
   initialAnomaly,
+  accountLabels,
   breakdown,
   breakdownError,
 }: {
   initialAnomaly: CoreAnomaly;
+  accountLabels: Record<string, string>;
   breakdown: CoreAnomalyBreakdown | null;
   breakdownError: string;
 }) {
@@ -260,8 +263,8 @@ export function AnomalyDetailClient({
               </StatusBadge>
             </div>
             <p className="text-muted-foreground mt-1 text-sm">
-              Spend on {formatDay(anomaly.period_start, true)} (UTC) · whole
-              organization
+              Spend on {formatDay(anomaly.period_start, true)} (UTC) ·{" "}
+              {anomalyAccountLabel(anomaly, accountLabels)}
             </p>
           </div>
         </div>

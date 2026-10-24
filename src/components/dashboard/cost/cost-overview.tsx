@@ -56,7 +56,7 @@ export async function CostOverview({
   const managementDataPromise = Promise.all([
     listBudgets(organizationId, token),
     listAllocations(organizationId, token),
-    listAnomalies(organizationId, token),
+    listAnomalies(organizationId, token, { connectionId, targetId }),
     listSavedViews(organizationId, token),
     listReports(organizationId, token),
   ]);

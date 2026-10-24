@@ -1,4 +1,5 @@
 import type { TourDefinition } from "../types";
+import { costAnchors } from "./cost";
 
 export const COST_ANOMALIES_TOUR_KEY = "cost.anomalies";
 
@@ -18,7 +19,7 @@ const anchors = costAnomaliesAnchors;
 
 export const costAnomaliesTour: TourDefinition = {
   key: COST_ANOMALIES_TOUR_KEY,
-  version: 2,
+  version: 3,
   title: "Cost Anomalies",
   description: "How spend spikes are detected and how to work through them.",
   product: "cost",
@@ -34,7 +35,14 @@ export const costAnomaliesTour: TourDefinition = {
       target: anchors.detection,
       placement: "bottom",
       title: "How detection works",
-      body: "Every hour, Dilanix compares yesterday's total spend across your organization with the average of the 7 days before, separately for each currency. A day at least 50% above that average — and at least 1 currency unit above it — becomes an anomaly. Drops in spend are never flagged.",
+      body: "Every hour, Dilanix compares each connected account's spend yesterday with that account's average over the 7 days before, separately for each currency. A day at least 50% above that average — and at least 1 currency unit above it — becomes an anomaly. Drops in spend are never flagged.",
+    },
+    {
+      id: "scope",
+      target: costAnchors.dataScope,
+      placement: "bottom",
+      title: "Pick an account",
+      body: "Show the anomalies of one connection, or of one account in it. The choice is shared with Overview, Explorer and Allocations.",
     },
     {
       id: "notifications",
@@ -62,7 +70,7 @@ export const costAnomaliesTour: TourDefinition = {
       target: anchors.details,
       placement: "bottom",
       title: "When and how much",
-      body: "The day the spike happened, how far above the average it was, and when Dilanix detected it. Scope reads All spend: detection covers your whole organization.",
+      body: "The day the spike happened, how far above the average it was, when Dilanix detected it, and the connected account it happened in — each account is checked on its own.",
     },
     {
       id: "actions",

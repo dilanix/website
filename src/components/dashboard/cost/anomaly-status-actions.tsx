@@ -21,6 +21,17 @@ export function statusTone(status: AnomalyStatus) {
   return "neutral" as const;
 }
 
+/** Which connected account an anomaly belongs to, named from
+ *  `costTargetLabels`. Anomalies recorded before per-account detection
+ *  covered the whole organization. */
+export function anomalyAccountLabel(
+  anomaly: CoreAnomaly,
+  accountLabels: Record<string, string>,
+) {
+  if (!anomaly.target_id) return "All accounts";
+  return accountLabels[anomaly.target_id] ?? "Unavailable account";
+}
+
 /** Updates one anomaly's status through the server action. */
 export function useAnomalyStatusUpdate(
   onUpdated: (anomaly: CoreAnomaly) => void,

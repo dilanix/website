@@ -135,7 +135,7 @@ export const costGuide: GuideDefinition = {
       id: "anomaly-detect",
       title: "Anomalies: spikes caught early",
       caption:
-        "Every hour, Dilanix compares yesterday's spend with the average of the 7 days before, per currency. At least 50% — and 1 currency unit — above it is an anomaly: low up to 99%, medium from 100%, high from 300%. Drops are never flagged.",
+        "Every hour, Dilanix compares each connected account's spend yesterday with its average over the 7 days before, per currency. At least 50% — and 1 currency unit — above it is an anomaly: low up to 99%, medium from 100%, high from 300%. Drops are never flagged.",
       durationMs: 13000,
     },
     {
