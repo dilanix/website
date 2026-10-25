@@ -18,6 +18,7 @@ import {
   costAllocationsActions,
   costAllocationsAnchors,
 } from "@/lib/tours/definitions/cost-allocations";
+import { allocationBreakdownCsv } from "./allocation-breakdown-panel";
 import { AllocationsClient } from "./allocations-client";
 
 const { usePageTour } = vi.hoisted(() => ({ usePageTour: vi.fn() }));
@@ -55,12 +56,29 @@ const allocation: CoreAllocation = {
   updated_at: "2026-09-01T00:00:00Z",
 };
 
+const shadowed: CoreAllocation = {
+  ...allocation,
+  id: "10000000-0000-4000-8000-000000000002",
+  name: "Platform leftovers",
+  priority: 5,
+};
+
 const breakdown: CoreAllocationBreakdown = {
   period_start: "2026-09-01T00:00:00Z",
   period_end: "2026-09-12T00:00:00Z",
+  metric: "effective_cost",
   items: [
     { target_label: "Platform", currency: "USD", amount: "80.000000" },
     { target_label: "Unallocated", currency: "USD", amount: "20.000000" },
+  ],
+  rules: [
+    {
+      allocation_id: allocation.id,
+      name: allocation.name,
+      target_label: "Platform",
+      currency: "USD",
+      amount: "80.000000",
+    },
   ],
 };
 
@@ -99,6 +117,42 @@ describe("AllocationsClient", () => {
       }),
     );
   }, 20_000);
+
+  it("shows what each rule claimed and flags a rule that claims nothing", () => {
+    render(
+      <AllocationsClient
+        initialAllocations={[shadowed, allocation]}
+        initialBreakdown={breakdown}
+        initialPeriodStart="2026-09-01"
+        initialPeriodEnd="2026-09-11"
+        connectionId={null}
+        targetId={null}
+      />,
+    );
+
+    expect(screen.getByText(/Claimed in this period: 80\.00/)).toBeTruthy();
+    expect(screen.getByText(/Claims nothing in this period/)).toBeTruthy();
+    // Evaluation order: priority 0 before priority 5.
+    const names = screen
+      .getAllByText(/^Platform (team|leftovers)$/)
+      .map((node) => node.textContent);
+    expect(names).toEqual(["Platform team", "Platform leftovers"]);
+  });
+
+  it("exports the breakdown as CSV with spreadsheet formulas neutralised", () => {
+    const csv = allocationBreakdownCsv({
+      ...breakdown,
+      items: [
+        { target_label: "=HYPERLINK()", currency: "USD", amount: "-5.000000" },
+      ],
+      rules: [],
+    });
+
+    expect(csv.split("\r\n")).toEqual([
+      "level,allocation,target_label,currency,amount",
+      "target,,'=HYPERLINK(),USD,-5.000000",
+    ]);
+  });
 
   it("automatically refreshes breakdown after a rule changes", async () => {
     vi.mocked(updateAllocationAction).mockResolvedValue({

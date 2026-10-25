@@ -30,11 +30,29 @@ import {
   costAllocationsAnchors as tourAnchors,
 } from "@/lib/tours/definitions/cost-allocations";
 import { AllocationBreakdownPanel } from "./allocation-breakdown-panel";
+import { formatAmount } from "./format";
 import { ScopeEditor, summarizeScope } from "./scope-editor";
 import { useDashboardFilterState } from "@/lib/dashboard/filter-storage";
 
+/** Core's evaluation order: priority, then creation order, then id. */
 function sortAllocations(allocations: CoreAllocation[]) {
-  return [...allocations].sort((left, right) => left.priority - right.priority);
+  return [...allocations].sort(
+    (left, right) =>
+      left.priority - right.priority ||
+      left.created_at.localeCompare(right.created_at) ||
+      left.id.localeCompare(right.id),
+  );
+}
+
+/** What each rule claimed in the current breakdown, per currency. */
+function claimedByRule(breakdown: CoreAllocationBreakdown | null) {
+  const result = new Map<string, { currency: string; amount: number }[]>();
+  for (const rule of breakdown?.rules ?? []) {
+    const current = result.get(rule.allocation_id) ?? [];
+    current.push({ currency: rule.currency, amount: Number(rule.amount) });
+    result.set(rule.allocation_id, current);
+  }
+  return result;
 }
 
 function isString(value: unknown): value is string {
@@ -96,8 +114,8 @@ function AllocationDialog({
   function submit() {
     setError("");
     const priority = Number(form.priority);
-    if (!Number.isFinite(priority) || priority < 0) {
-      setError("Priority must be a non-negative number.");
+    if (!Number.isInteger(priority) || priority < 0 || priority > 100000) {
+      setError("Priority must be a whole number from 0 to 100000.");
       return;
     }
     const input = {
@@ -267,6 +285,7 @@ export function AllocationsClient({
   const [breakdownPending, startBreakdownTransition] = useTransition();
   const breakdownAvailable = initialBreakdown !== null;
   const restoredBreakdownApplied = useRef(false);
+  const claimed = claimedByRule(breakdown);
 
   function refreshBreakdown() {
     if (!breakdownAvailable) return;
@@ -459,6 +478,18 @@ export function AllocationsClient({
                     <p className="text-muted-foreground mt-1 text-xs">
                       Scope: {summarizeScope(allocation.scope)}
                     </p>
+                    {breakdown && allocation.enabled ? (
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        {claimed.has(allocation.id)
+                          ? `Claimed in this period: ${claimed
+                              .get(allocation.id)!
+                              .map(({ amount, currency }) =>
+                                formatAmount(amount, currency),
+                              )
+                              .join(" · ")}`
+                          : "Claims nothing in this period — no matching spend, or a higher-priority allocation already claimed it."}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <div

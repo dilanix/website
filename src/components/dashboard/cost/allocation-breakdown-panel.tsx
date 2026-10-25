@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { RefreshCw } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 import type { CoreAllocationBreakdown, CostUsageMetric } from "@/lib/core/api";
 import { EmptyState, StatusBadge } from "@/components/dashboard/primitives";
 import { StatCard } from "@/components/dashboard/stat-card";
@@ -14,6 +14,49 @@ const METRIC_LABELS: Record<CostUsageMetric, string> = {
   list_cost: "List cost",
   contracted_cost: "Contracted cost",
 };
+
+function csvCell(value: string): string {
+  // A leading =, +, -, or @ would run as a formula in a spreadsheet; numbers
+  // (a negative credit amount) stay numbers.
+  const formula = /^[=+\-@]/.test(value) && Number.isNaN(Number(value));
+  const safe = formula ? `'${value}` : value;
+  return /[",\n\r]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
+}
+
+/** The breakdown as CSV: one `target` row per target label and currency,
+ *  then one `rule` row per rule that claimed spend. */
+export function allocationBreakdownCsv(breakdown: CoreAllocationBreakdown) {
+  const rows = [
+    ["level", "allocation", "target_label", "currency", "amount"],
+    ...breakdown.items.map((item) => [
+      "target",
+      "",
+      item.target_label,
+      item.currency,
+      item.amount,
+    ]),
+    ...breakdown.rules.map((rule) => [
+      "rule",
+      rule.name,
+      rule.target_label,
+      rule.currency,
+      rule.amount,
+    ]),
+  ];
+  return rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+}
+
+function downloadCsv(breakdown: CoreAllocationBreakdown) {
+  const blob = new Blob([allocationBreakdownCsv(breakdown)], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `allocations-${breakdown.period_start.slice(0, 10)}-${breakdown.period_end.slice(0, 10)}-${breakdown.metric}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 export function AllocationBreakdownPanel({
   breakdown,
@@ -195,6 +238,16 @@ export function AllocationBreakdownPanel({
                     />,
                   ];
                 })}
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => downloadCsv(breakdown)}
+                  className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs font-medium"
+                >
+                  <Download size={13} /> Download CSV
+                </button>
               </div>
 
               <div

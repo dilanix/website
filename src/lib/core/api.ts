@@ -2022,10 +2022,24 @@ export interface CoreAllocationTotal {
   amount: string;
 }
 
+/** What one enabled rule claimed in one currency. Only rules that claimed
+ * spend appear — an enabled rule missing here matched nothing a
+ * higher-priority rule had not already claimed. */
+export interface CoreAllocationRuleTotal {
+  allocation_id: string;
+  name: string;
+  target_label: string;
+  currency: string;
+  amount: string;
+}
+
 export interface CoreAllocationBreakdown {
   period_start: string;
   period_end: string;
+  metric: CostUsageMetric;
+  /** Per target label (rules sharing a label summed) plus "Unallocated". */
   items: CoreAllocationTotal[];
+  rules: CoreAllocationRuleTotal[];
 }
 
 export function getAllocationBreakdown(

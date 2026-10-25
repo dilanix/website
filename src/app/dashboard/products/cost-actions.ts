@@ -635,9 +635,20 @@ export async function deleteBudgetAction(
 // Allocations
 // ---------------------------------------------------------------------------
 
+// Mirrors Core's allocation limits (`modules.cost.schemas.allocation`).
+const MAX_ALLOCATION_PERIOD_DAYS = 366;
+
 const allocationInputSchema = z.object({
   name: nameSchema,
-  targetLabel: z.string().trim().min(1).max(255),
+  targetLabel: z
+    .string()
+    .trim()
+    .min(1)
+    .max(255)
+    .refine((value) => value.toLowerCase() !== "unallocated", {
+      message:
+        "“Unallocated” is reserved for spend no allocation matches. Choose another target label.",
+    }),
   priority: z.number().int().min(0).max(100000),
   scope: scopeSchema,
 });
@@ -718,6 +729,15 @@ const allocationBreakdownQuerySchema = z
     (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
     {
       message: "The period end must be after its start.",
+      path: ["periodEnd"],
+    },
+  )
+  .refine(
+    (input) =>
+      Date.parse(input.periodEnd) - Date.parse(input.periodStart) <=
+      MAX_ALLOCATION_PERIOD_DAYS * 24 * 60 * 60 * 1000,
+    {
+      message: `Choose a period of at most ${MAX_ALLOCATION_PERIOD_DAYS} days.`,
       path: ["periodEnd"],
     },
   )
