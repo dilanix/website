@@ -28,3 +28,8 @@ interface GuideDefinitionBase {
 /** An animated, video-like explainer of a topic. Its scenes' visuals live
  *  in `src/components/guides` (`GUIDE_VISUALS`), keyed by scene id. */
 export type GuideDefinition = GuideDefinitionBase & TourAudience;
+
+/** What `GuidePlayer` plays: a guide, or a page's own explainer video that
+ *  brings its visuals along and is never saved or listed (e.g. Build on
+ *  Dilanix). */
+export type GuideVideo = Pick<GuideDefinitionBase, "key" | "title" | "scenes">;

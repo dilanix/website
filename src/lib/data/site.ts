@@ -34,10 +34,20 @@ const defaultSettings: SiteSettings = {
           href: "/#trust",
           description: "Read-only access and verified commands",
         },
+      ],
+    },
+    {
+      label: "Solutions",
+      children: [
         {
           label: "AWS cost optimization",
           href: "/solutions/aws-cost-optimization",
           description: "Ranked, verified savings for your AWS bill",
+        },
+        {
+          label: "Build on Dilanix",
+          href: "/solutions/build-on-dilanix",
+          description: "Your own data product on our platform",
         },
       ],
     },

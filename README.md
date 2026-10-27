@@ -117,6 +117,10 @@ landing hero plays `HeroReel` (`src/components/sections/hero-reel*.tsx`): a
 ~25-second looping film on the same scene kit (its own 720×600 canvas, ~3 s
 shots dissolving into each other) on sample data — paused off-screen, in a
 background tab and, until played, under reduced motion.
+`/solutions/build-on-dilanix` embeds its own explainer (`buildOnDilanixVideo`
+in `src/lib/guides/explainers`, visuals in `src/components/solutions`): a
+`GuideVideo` that `GuidePlayer` plays with its `visuals`, never listed or saved,
+whose end screen books a call (`endAction`).
 Cost → Overview has `cost.overview` and Cost → Explorer has `cost.explorer`;
 with no cost data (or an empty query) the page withdraws the offer
 (`usePageTour`'s `available: false`), so starting it explains why. Cost →

@@ -236,7 +236,7 @@ export function Navbar({
       <Container className="flex h-16 items-center justify-between">
         <BrandLogo className="h-7 w-auto" priority />
 
-        <nav ref={navRef} className="hidden items-center gap-8 md:flex">
+        <nav ref={navRef} className="hidden items-center gap-8 lg:flex">
           {links.map((item) => {
             if (isGroup(item)) {
               return (
@@ -271,7 +271,7 @@ export function Navbar({
           })}
         </nav>
 
-        <div className="hidden items-center gap-4 md:flex">
+        <div className="hidden items-center gap-4 lg:flex">
           {authenticated === true ? (
             <Link
               href="/dashboard"
@@ -300,7 +300,7 @@ export function Navbar({
           <ThemeToggle />
         </div>
 
-        <div className="flex items-center gap-1 md:hidden">
+        <div className="flex items-center gap-1 lg:hidden">
           <ThemeToggle />
           <button
             type="button"
@@ -316,7 +316,7 @@ export function Navbar({
 
       {open ? (
         <div
-          className="border-foreground/10 bg-background animate-menu-reveal border-t motion-reduce:animate-none md:hidden"
+          className="border-foreground/10 bg-background animate-menu-reveal border-t motion-reduce:animate-none lg:hidden"
           style={{ transformOrigin: "top" }}
         >
           <Container className="flex flex-col gap-1 py-6">

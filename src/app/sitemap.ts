@@ -8,6 +8,7 @@ const staticRoutes = [
   "/pricing",
   "/guides",
   "/solutions/aws-cost-optimization",
+  "/solutions/build-on-dilanix",
   "/company",
   "/blog",
   "/contact",
