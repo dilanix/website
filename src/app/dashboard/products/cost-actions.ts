@@ -528,30 +528,50 @@ const amountSchema = z
   }, "Amount must be a number greater than 0.");
 const alertThresholdsSchema = z.array(z.number().min(0).max(1000)).max(20);
 
-const budgetInputSchema = z
-  .object({
-    name: nameSchema,
-    description: descriptionSchema,
-    amount: amountSchema,
-    currency: currencySchema,
-    period: budgetPeriodSchema,
-    periodStart: z.iso.datetime().nullable(),
-    periodEnd: z.iso.datetime().nullable(),
-    alertThresholds: alertThresholdsSchema,
-    recipients: recipientsSchema,
-    destinationIds: z.array(idSchema).max(50),
-    scope: scopeSchema,
-    connectionId: idSchema.nullable(),
-    targetId: idSchema.nullable(),
-  })
-  .refine(
-    (input) =>
-      input.period !== "custom" || (input.periodStart && input.periodEnd),
-    {
-      message: "Custom budgets need both a start and end date.",
-      path: ["periodStart"],
-    },
+// Zod 4 refuses `.partial()` on a refined object, so the update schema is
+// built from the bare object and re-applies the same refinement.
+const budgetInputObject = z.object({
+  name: nameSchema,
+  description: descriptionSchema,
+  amount: amountSchema,
+  currency: currencySchema,
+  period: budgetPeriodSchema,
+  periodStart: z.iso.datetime().nullable(),
+  periodEnd: z.iso.datetime().nullable(),
+  alertThresholds: alertThresholdsSchema,
+  recipients: recipientsSchema,
+  destinationIds: z.array(idSchema).max(50),
+  scope: scopeSchema,
+  connectionId: idSchema.nullable(),
+  targetId: idSchema.nullable(),
+});
+
+function customBudgetHasDates(
+  input: Partial<
+    Pick<
+      z.infer<typeof budgetInputObject>,
+      "period" | "periodStart" | "periodEnd"
+    >
+  >,
+) {
+  return (
+    input.period !== "custom" || Boolean(input.periodStart && input.periodEnd)
   );
+}
+
+const customBudgetDatesIssue = {
+  message: "Custom budgets need both a start and end date.",
+  path: ["periodStart"],
+};
+
+const budgetInputSchema = budgetInputObject.refine(
+  customBudgetHasDates,
+  customBudgetDatesIssue,
+);
+
+const budgetUpdateSchema = budgetInputObject
+  .partial()
+  .refine(customBudgetHasDates, customBudgetDatesIssue);
 
 export async function createBudgetAction(
   input: z.infer<typeof budgetInputSchema>,
@@ -589,7 +609,7 @@ export async function updateBudgetAction(
 ): Promise<CostActionResult<CoreBudget>> {
   const idParsed = idSchema.safeParse(budgetId);
   if (!idParsed.success) return { error: "Invalid budget." };
-  const parsed = budgetInputSchema.partial().safeParse(input);
+  const parsed = budgetUpdateSchema.safeParse(input);
   if (!parsed.success) return { error: validationMessage(parsed.error) };
 
   try {
