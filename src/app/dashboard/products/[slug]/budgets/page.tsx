@@ -22,22 +22,20 @@ export default async function CostBudgetsPage({
   if (slug !== "cost") notFound();
 
   const { token, organization } = await requireDashboardOrganization();
-  const [{ items }, statuses, { items: channels }, { items: destinations }] =
-    await Promise.all([
-      listBudgets(organization.organization_id, token),
-      // Status is a read-time projection; a failure here must not hide the budgets.
-      listBudgetStatuses(organization.organization_id, token).catch(() => ({
-        items: [],
-      })),
-      listNotificationChannels(organization.organization_id, token),
-      listNotificationDestinations(organization.organization_id, token),
-    ]);
-  const [{ items }, statuses, { connections, targets }] = await Promise.all([
+  const [
+    { items },
+    statuses,
+    { items: channels },
+    { items: destinations },
+    { connections, targets },
+  ] = await Promise.all([
     listBudgets(organization.organization_id, token),
     // Status is a read-time projection; a failure here must not hide the budgets.
     listBudgetStatuses(organization.organization_id, token).catch(() => ({
       items: [],
     })),
+    listNotificationChannels(organization.organization_id, token),
+    listNotificationDestinations(organization.organization_id, token),
     loadCostDataScopeOptions(organization.organization_id, token),
   ]);
 

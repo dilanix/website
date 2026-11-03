@@ -167,7 +167,7 @@ function parseThresholds(value: string): number[] {
 
 function providerLabel(channel: CoreNotificationChannel | undefined) {
   if (!channel) return "Unknown channel";
-  return `${channel.provider.charAt(0).toUpperCase()}${channel.provider.slice(1)} ? ${channel.name}`;
+  return `${channel.provider.charAt(0).toUpperCase()}${channel.provider.slice(1)} · ${channel.name}`;
 }
 
 interface BudgetFormState {
@@ -180,7 +180,6 @@ interface BudgetFormState {
   periodEnd: string;
   alertThresholds: string;
   destinationIds: string[];
-  recipients: string;
   account: CostAccount;
 }
 
@@ -523,7 +522,7 @@ function BudgetDialog({
                             </span>
                             <span className="text-muted-foreground block truncate text-xs">
                               {providerLabel(channel)}
-                              {!available ? " ? disabled" : ""}
+                              {!available ? " · disabled" : ""}
                             </span>
                           </span>
                         </label>
@@ -570,16 +569,14 @@ export function BudgetsClient({
   initialStatuses = [],
   channels = [],
   destinations = [],
-}: {
-  initialBudgets: CoreBudget[];
-  initialStatuses?: CoreBudgetStatus[];
-  channels?: CoreNotificationChannel[];
-  destinations?: CoreNotificationDestination[];
   connections = [],
   targets = [],
 }: {
   initialBudgets: CoreBudget[];
   initialStatuses?: CoreBudgetStatus[];
+  /** Notification channels and destinations a budget can alert through. */
+  channels?: CoreNotificationChannel[];
+  destinations?: CoreNotificationDestination[];
   /** Connections with billing.read and their targets — the accounts a
    *  budget can track. */
   connections?: CoreIntegrationConnection[];
