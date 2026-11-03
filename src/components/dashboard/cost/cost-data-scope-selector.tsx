@@ -15,6 +15,7 @@ const COST_ANALYTICS_PATHS = new Set([
   "/dashboard/products/cost",
   "/dashboard/products/cost/explorer",
   "/dashboard/products/cost/allocations",
+  "/dashboard/products/cost/anomalies",
 ]);
 
 interface StoredCostDataScope {

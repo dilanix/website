@@ -8,6 +8,7 @@ import {
 } from "@/lib/core/api";
 import { requireDashboardOrganization } from "@/lib/dashboard/session";
 import { BudgetsClient } from "@/components/dashboard/cost/budgets-client";
+import { loadCostDataScopeOptions } from "@/components/dashboard/cost/cost-data-scope";
 
 export const metadata: Metadata = {
   title: "Budgets — Cost",
@@ -31,6 +32,14 @@ export default async function CostBudgetsPage({
       listNotificationChannels(organization.organization_id, token),
       listNotificationDestinations(organization.organization_id, token),
     ]);
+  const [{ items }, statuses, { connections, targets }] = await Promise.all([
+    listBudgets(organization.organization_id, token),
+    // Status is a read-time projection; a failure here must not hide the budgets.
+    listBudgetStatuses(organization.organization_id, token).catch(() => ({
+      items: [],
+    })),
+    loadCostDataScopeOptions(organization.organization_id, token),
+  ]);
 
   return (
     <BudgetsClient
@@ -38,6 +47,8 @@ export default async function CostBudgetsPage({
       initialStatuses={statuses.items}
       channels={channels}
       destinations={destinations}
+      connections={connections}
+      targets={targets}
     />
   );
 }

@@ -1,7 +1,14 @@
 "use client";
 
-import { useEffect, useReducer, useRef, type KeyboardEvent } from "react";
 import {
+  useEffect,
+  useReducer,
+  useRef,
+  type ComponentType,
+  type KeyboardEvent,
+} from "react";
+import {
+  ArrowRight,
   ChevronLeft,
   ChevronRight,
   Compass,
@@ -9,7 +16,7 @@ import {
   Play,
   RotateCcw,
 } from "lucide-react";
-import type { GuideDefinition, GuideScene } from "@/lib/guides/types";
+import type { GuideScene, GuideVideo } from "@/lib/guides/types";
 import { cn } from "@/lib/utils";
 import { SceneCanvas } from "./scene-kit";
 import { GUIDE_VISUALS } from "./visuals";
@@ -91,22 +98,28 @@ function reduce(
  * shows, then the next scene starts. Pause, step back or forward, or jump to
  * any scene; ←/→ step and K toggles. `inline` (Documentation) starts paused;
  * the dialog plays at once. The end screen replays, or hands over to a tour
- * with `onTakeTour`.
+ * with `onTakeTour`, or to a page's next step with `endAction`. `visuals`
+ * plays an explainer that isn't in `GUIDE_VISUALS`.
  */
 export function GuidePlayer({
   guide,
+  visuals = GUIDE_VISUALS[guide.key],
   startIndex = 0,
   inline = false,
   onSceneChange,
   onEnd,
   onTakeTour,
+  endAction,
 }: {
-  guide: GuideDefinition;
+  guide: GuideVideo;
+  visuals?: Record<string, ComponentType>;
   startIndex?: number;
   inline?: boolean;
   onSceneChange?: (scene: GuideScene) => void;
   onEnd?: () => void;
   onTakeTour?: () => void;
+  /** Opened in a new tab, e.g. booking a call. */
+  endAction?: { label: string; href: string };
 }) {
   const scenes = guide.scenes;
   const [state, dispatch] = useReducer(
@@ -123,7 +136,7 @@ export function GuidePlayer({
     }),
   );
   const scene = scenes[state.index];
-  const Visual = GUIDE_VISUALS[guide.key]?.[scene.id];
+  const Visual = visuals?.[scene.id];
 
   useEffect(() => {
     if (!state.playing) return;
@@ -200,6 +213,16 @@ export function GuidePlayer({
                 >
                   <Compass size={15} /> Take the tour on the page
                 </button>
+              ) : null}
+              {endAction ? (
+                <a
+                  href={endAction.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-accent text-accent-foreground inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-[0_10px_30px_var(--shadow-brand)]"
+                >
+                  {endAction.label} <ArrowRight size={15} />
+                </a>
               ) : null}
               <button
                 type="button"

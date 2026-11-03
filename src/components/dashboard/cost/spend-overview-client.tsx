@@ -609,9 +609,7 @@ export function SpendOverviewClient({
   }
 
   // Anomalies within the displayed period, for the trend chart's markers —
-  // detection is always whole-organization today (`CoreAnomaly.scope` is
-  // always `[]`), so these apply to the org-wide trend regardless of the
-  // connection/target narrowing above.
+  // already narrowed server-side to the selected connection/target.
   const anomaliesInRange = anomalies.filter(
     (anomaly) =>
       anomaly.period_start >= displayedPeriodStart &&
@@ -665,6 +663,8 @@ export function SpendOverviewClient({
       <CostAttentionStrip
         periodStart={displayedPeriodStart}
         periodEnd={displayedPeriodEnd}
+        connectionId={connectionId}
+        targetId={targetId}
         scopeSuffix={scopeSuffix}
       />
 

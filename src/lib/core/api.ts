@@ -290,6 +290,8 @@ export interface CorePlanLimitValue {
 export interface CorePublicPlan {
   code: string;
   name: string;
+  /** `trial` is the free trial card: shown as free, never with prices. */
+  kind: "standard" | "trial";
   tagline: string | null;
   description: string | null;
   is_highlighted: boolean;
@@ -375,6 +377,13 @@ export interface CoreOrganizationPlan {
     message: string | null;
   };
   warnings: CorePlanWarning[];
+  /** A plan that replaces the current one at `starts_at`; the current plan
+   * stays until then. Optional: older Core versions don't send it. */
+  scheduled_change?: {
+    plan: { code: string; name: string; kind: "standard" | "trial" };
+    starts_at: string;
+    expires_at: string | null;
+  } | null;
 }
 
 /** The organization's plan, trial expiry, access, limits and warnings —
@@ -1820,6 +1829,10 @@ export interface CoreBudget {
   organization_id: string;
   name: string;
   description: string | null;
+  /** The connected account the budget tracks: one target, every target of
+   * one connection (`target_id` null), or every account (both null). */
+  connection_id: string | null;
+  target_id: string | null;
   amount: string;
   currency: string;
   period: BudgetPeriod;
@@ -1844,6 +1857,8 @@ export interface CoreBudgetListResponse {
 export interface CreateBudgetInput {
   name: string;
   description?: string | null;
+  connection_id?: string | null;
+  target_id?: string | null;
   amount: string;
   currency: string;
   period?: BudgetPeriod;
@@ -1858,6 +1873,10 @@ export interface CreateBudgetInput {
 export interface UpdateBudgetInput {
   name?: string;
   description?: string | null;
+  /** Sending `connection_id` (even null) replaces both account fields;
+   * omitting it leaves them unchanged. */
+  connection_id?: string | null;
+  target_id?: string | null;
   amount?: string;
   currency?: string;
   period?: BudgetPeriod;
@@ -2006,10 +2025,24 @@ export interface CoreAllocationTotal {
   amount: string;
 }
 
+/** What one enabled rule claimed in one currency. Only rules that claimed
+ * spend appear — an enabled rule missing here matched nothing a
+ * higher-priority rule had not already claimed. */
+export interface CoreAllocationRuleTotal {
+  allocation_id: string;
+  name: string;
+  target_label: string;
+  currency: string;
+  amount: string;
+}
+
 export interface CoreAllocationBreakdown {
   period_start: string;
   period_end: string;
+  metric: CostUsageMetric;
+  /** Per target label (rules sharing a label summed) plus "Unallocated". */
   items: CoreAllocationTotal[];
+  rules: CoreAllocationRuleTotal[];
 }
 
 export function getAllocationBreakdown(
@@ -2087,6 +2120,11 @@ export type AnomalyStatus = "open" | "acknowledged" | "resolved";
 export interface CoreAnomaly {
   id: string;
   organization_id: string;
+  /** The connected account whose spend spiked — detection runs per target.
+   * Both `null` only on an anomaly recorded before that (whole-organization
+   * spend). */
+  connection_id: string | null;
+  target_id: string | null;
   detected_at: string;
   period_start: string;
   period_end: string;
@@ -2098,9 +2136,8 @@ export interface CoreAnomaly {
   status: AnomalyStatus;
   acknowledged_at: string | null;
   resolved_at: string | null;
-  /** Always `[]` today — anomaly detection only ever runs at the
-   * whole-organization level, despite this column existing for future
-   * per-scope detection. */
+  /** Always `[]` today — the account is `connection_id`/`target_id`; this
+   * column is kept for future per-service/tag detection. */
   scope: CoreScopeCondition[];
   created_at: string;
   updated_at: string;
@@ -2113,23 +2150,113 @@ export interface CoreAnomalyListResponse {
 export function listAnomalies(
   organizationId: string,
   token: string,
-  statusFilter?: AnomalyStatus | null,
+  params: {
+    statusFilter?: AnomalyStatus | null;
+    connectionId?: string | null;
+    targetId?: string | null;
+  } = {},
 ) {
-  const query = statusFilter
-    ? `?${new URLSearchParams({ status_filter: statusFilter }).toString()}`
-    : "";
+  const query = new URLSearchParams();
+  if (params.statusFilter) query.set("status_filter", params.statusFilter);
+  if (params.connectionId) query.set("connection_id", params.connectionId);
+  if (params.targetId) query.set("target_id", params.targetId);
   return costReadRequest<CoreAnomalyListResponse>(
-    `/v1/organizations/${organizationId}/cost/anomalies${query}`,
+    `/v1/organizations/${organizationId}/cost/anomalies${query.size ? `?${query}` : ""}`,
     token,
   );
 }
 
-/** `status` must not be `"open"` — only the detection job may set that. */
+export function getAnomaly(
+  organizationId: string,
+  anomalyId: string,
+  token: string,
+) {
+  return costReadRequest<CoreAnomaly>(
+    `/v1/organizations/${organizationId}/cost/anomalies/${anomalyId}`,
+    token,
+  );
+}
+
+export interface CoreAnomalyDailyAmount {
+  day: string;
+  amount: string;
+  /** `baseline` = the seven days the expected amount averages, `anomaly` =
+   * the flagged day, `after` = up to seven later days for context. */
+  kind: "baseline" | "anomaly" | "after";
+}
+
+export interface CoreAnomalyDriver {
+  /** `null` when the charges have no value for this dimension (e.g. a
+   * global service with no region). */
+  value: string | null;
+  actual_amount: string;
+  expected_amount: string;
+  delta: string;
+}
+
+export interface CoreAnomalyDriverGroup {
+  dimension: "service_name" | "sub_account_id" | "region_id";
+  increases: CoreAnomalyDriver[];
+}
+
+/** Read-time explanation of one anomaly. The `cost_summary` fallback only
+ * breaks spend down by service, so account/region groups are absent there. */
+export interface CoreAnomalyBreakdown {
+  source: "cost_usage" | "cost_summary";
+  baseline_days: number;
+  daily: CoreAnomalyDailyAmount[];
+  drivers: CoreAnomalyDriverGroup[];
+}
+
+export function getAnomalyBreakdown(
+  organizationId: string,
+  anomalyId: string,
+  token: string,
+) {
+  return costReadRequest<CoreAnomalyBreakdown>(
+    `/v1/organizations/${organizationId}/cost/anomalies/${anomalyId}/breakdown`,
+    token,
+  );
+}
+
+/** Where newly detected anomalies are sent. No destinations = off. */
+export interface CoreAnomalyNotificationSettings {
+  min_severity: AnomalySeverity;
+  destination_ids: string[];
+}
+
+export function getAnomalyNotificationSettings(
+  organizationId: string,
+  token: string,
+) {
+  return costReadRequest<CoreAnomalyNotificationSettings>(
+    `/v1/organizations/${organizationId}/cost/anomalies/notification-settings`,
+    token,
+  );
+}
+
+export function updateAnomalyNotificationSettings(
+  organizationId: string,
+  token: string,
+  input: CoreAnomalyNotificationSettings,
+) {
+  return coreRequest<CoreAnomalyNotificationSettings>(
+    `/v1/organizations/${organizationId}/cost/anomalies/notification-settings`,
+    token,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+/** Any status may move to any other — e.g. reopen a resolved anomaly. */
 export function updateAnomalyStatus(
   organizationId: string,
   anomalyId: string,
   token: string,
-  status: "acknowledged" | "resolved",
+  status: AnomalyStatus,
 ) {
   return coreRequest<CoreAnomaly>(
     `/v1/organizations/${organizationId}/cost/anomalies/${anomalyId}/status`,
@@ -2884,12 +3011,19 @@ export interface CoreCostOverviewHighlights {
 export function getCostOverviewHighlights(
   organizationId: string,
   token: string,
-  params: { periodStart: string; periodEnd: string },
+  params: {
+    periodStart: string;
+    periodEnd: string;
+    connectionId?: string | null;
+    targetId?: string | null;
+  },
 ) {
   const query = new URLSearchParams({
     period_start: params.periodStart,
     period_end: params.periodEnd,
   });
+  if (params.connectionId) query.set("connection_id", params.connectionId);
+  if (params.targetId) query.set("target_id", params.targetId);
   return costReadRequest<CoreCostOverviewHighlights>(
     `/v1/organizations/${organizationId}/cost/overview/highlights?${query.toString()}`,
     token,
@@ -3065,6 +3199,10 @@ export interface CoreReport {
   created_by_user_id: string | null;
   name: string;
   description: string | null;
+  /** The connected account the report covers: one target, every target of
+   * one connection (`target_id` null), or every account (both null). */
+  connection_id: string | null;
+  target_id: string | null;
   format: ReportFormat;
   recipients: string[];
   /** Shared Notification destinations explicitly selected for this report. */
@@ -3088,6 +3226,8 @@ export interface CoreReportListResponse {
 export interface CreateReportInput {
   name: string;
   description?: string | null;
+  connection_id?: string | null;
+  target_id?: string | null;
   format?: ReportFormat;
   recipients?: string[];
   destination_ids?: string[];
@@ -3099,6 +3239,10 @@ export interface CreateReportInput {
 export interface UpdateReportInput {
   name?: string;
   description?: string | null;
+  /** Sending `connection_id` (even null) replaces both account fields;
+   * omitting it leaves them unchanged. */
+  connection_id?: string | null;
+  target_id?: string | null;
   format?: ReportFormat;
   recipients?: string[];
   destination_ids?: string[];

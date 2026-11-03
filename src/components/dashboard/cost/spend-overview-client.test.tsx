@@ -460,6 +460,8 @@ describe("SpendOverviewClient", () => {
         {
           id: "an-1",
           organization_id: "org-1",
+          connection_id: null,
+          target_id: null,
           detected_at: day2,
           period_start: day1,
           period_end: day2,

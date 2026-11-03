@@ -135,14 +135,14 @@ export const costGuide: GuideDefinition = {
       id: "anomaly-detect",
       title: "Anomalies: spikes caught early",
       caption:
-        "Every hour, Dilanix compares yesterday's spend with the average of the 7 days before, per currency. At least 50% — and 1 currency unit — above it is an anomaly: low up to 99%, medium from 100%, high from 300%. Drops are never flagged.",
+        "Every hour, Dilanix compares each connected account's spend yesterday with its average over the 7 days before, per currency. At least 50% — and 1 currency unit — above it is an anomaly: low up to 99%, medium from 100%, high from 300%. Drops are never flagged.",
       durationMs: 13000,
     },
     {
       id: "anomaly-triage",
       title: "Work through them",
       caption:
-        "Open means nobody has looked yet. Acknowledge says someone is on it; Resolve closes it once explained or fixed — for good: a new spike is a new anomaly. Open ones also show on the Overview.",
+        "Open means nobody has looked yet. Acknowledge says someone is on it; Resolve closes it once explained or fixed, and Reopen brings it back. Details shows what grew. Open ones also show on the Overview.",
       durationMs: 11000,
     },
     {

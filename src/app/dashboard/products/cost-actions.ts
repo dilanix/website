@@ -37,13 +37,16 @@ import {
   restoreRecommendation,
   runCostExplorerSavedView,
   updateAllocation,
+  updateAnomalyNotificationSettings,
   updateAnomalyStatus,
   updateBudget,
   updateReport,
   updateSavedView,
   type CoreAllocation,
   type CoreAllocationBreakdown,
+  type AnomalyStatus,
   type CoreAnomaly,
+  type CoreAnomalyNotificationSettings,
   type CoreBudget,
   type CoreBudgetStatus,
   type CoreCostBreakdown,
@@ -433,7 +436,12 @@ export async function queryCostBreakdownAction(
 }
 
 const highlightsQuerySchema = z
-  .object({ periodStart: z.iso.datetime(), periodEnd: z.iso.datetime() })
+  .object({
+    periodStart: z.iso.datetime(),
+    periodEnd: z.iso.datetime(),
+    connectionId: idSchema.nullable().optional(),
+    targetId: idSchema.nullable().optional(),
+  })
   .refine(
     (input) => Date.parse(input.periodEnd) > Date.parse(input.periodStart),
     { message: "The period end must be after its start.", path: ["periodEnd"] },
@@ -533,6 +541,8 @@ const budgetInputSchema = z
     recipients: recipientsSchema,
     destinationIds: z.array(idSchema).max(50),
     scope: scopeSchema,
+    connectionId: idSchema.nullable(),
+    targetId: idSchema.nullable(),
   })
   .refine(
     (input) =>
@@ -554,6 +564,8 @@ export async function createBudgetAction(
     const data = await createBudget(organizationId, token, {
       name: parsed.data.name,
       description: parsed.data.description,
+      connection_id: parsed.data.connectionId,
+      target_id: parsed.data.targetId,
       amount: parsed.data.amount,
       currency: parsed.data.currency,
       period: parsed.data.period,
@@ -585,6 +597,9 @@ export async function updateBudgetAction(
     const data = await updateBudget(organizationId, idParsed.data, token, {
       name: parsed.data.name,
       description: parsed.data.description,
+      // Omitted (undefined) leaves the account unchanged; null clears it.
+      connection_id: parsed.data.connectionId,
+      target_id: parsed.data.targetId,
       amount: parsed.data.amount,
       currency: parsed.data.currency,
       period: parsed.data.period,
@@ -623,9 +638,20 @@ export async function deleteBudgetAction(
 // Allocations
 // ---------------------------------------------------------------------------
 
+// Mirrors Core's allocation limits (`modules.cost.schemas.allocation`).
+const MAX_ALLOCATION_PERIOD_DAYS = 366;
+
 const allocationInputSchema = z.object({
   name: nameSchema,
-  targetLabel: z.string().trim().min(1).max(255),
+  targetLabel: z
+    .string()
+    .trim()
+    .min(1)
+    .max(255)
+    .refine((value) => value.toLowerCase() !== "unallocated", {
+      message:
+        "“Unallocated” is reserved for spend no allocation matches. Choose another target label.",
+    }),
   priority: z.number().int().min(0).max(100000),
   scope: scopeSchema,
 });
@@ -709,6 +735,15 @@ const allocationBreakdownQuerySchema = z
       path: ["periodEnd"],
     },
   )
+  .refine(
+    (input) =>
+      Date.parse(input.periodEnd) - Date.parse(input.periodStart) <=
+      MAX_ALLOCATION_PERIOD_DAYS * 24 * 60 * 60 * 1000,
+    {
+      message: `Choose a period of at most ${MAX_ALLOCATION_PERIOD_DAYS} days.`,
+      path: ["periodEnd"],
+    },
+  )
   .refine((input) => !input.targetId || Boolean(input.connectionId), {
     message: "Choose a connection before choosing a target.",
     path: ["targetId"],
@@ -741,12 +776,12 @@ export async function getAllocationBreakdownAction(
 
 export async function updateAnomalyStatusAction(
   anomalyId: string,
-  status: "acknowledged" | "resolved",
+  status: AnomalyStatus,
 ): Promise<CostActionResult<CoreAnomaly>> {
   const parsed = z
     .object({
       anomalyId: idSchema,
-      status: z.enum(["acknowledged", "resolved"]),
+      status: z.enum(["open", "acknowledged", "resolved"]),
     })
     .safeParse({ anomalyId, status });
   if (!parsed.success) return { error: validationMessage(parsed.error) };
@@ -760,6 +795,31 @@ export async function updateAnomalyStatusAction(
       parsed.data.status,
     );
     revalidatePath(BASE_PATH);
+    return { data };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function updateAnomalyNotificationSettingsAction(
+  input: CoreAnomalyNotificationSettings,
+): Promise<CostActionResult<CoreAnomalyNotificationSettings>> {
+  const parsed = z
+    .object({
+      min_severity: z.enum(["low", "medium", "high"]),
+      destination_ids: z.array(idSchema).max(50),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { error: validationMessage(parsed.error) };
+
+  try {
+    const { token, organizationId } = await context();
+    const data = await updateAnomalyNotificationSettings(
+      organizationId,
+      token,
+      parsed.data,
+    );
+    revalidatePath(`${BASE_PATH}/anomalies`);
     return { data };
   } catch (error) {
     return { error: message(error) };
@@ -1020,6 +1080,8 @@ const reportInputSchema = z.object({
   periodPreset: reportPeriodPresetSchema,
   scheduleCron: z.string().trim().min(1).max(120).nullable(),
   scope: scopeSchema,
+  connectionId: idSchema.nullable(),
+  targetId: idSchema.nullable(),
 });
 
 export async function createReportAction(
@@ -1033,6 +1095,8 @@ export async function createReportAction(
     const data = await createReport(organizationId, token, {
       name: parsed.data.name,
       description: parsed.data.description,
+      connection_id: parsed.data.connectionId,
+      target_id: parsed.data.targetId,
       format: parsed.data.format,
       recipients: parsed.data.recipients,
       destination_ids: parsed.data.destinationIds,
@@ -1061,6 +1125,9 @@ export async function updateReportAction(
     const data = await updateReport(organizationId, idParsed.data, token, {
       name: parsed.data.name,
       description: parsed.data.description,
+      // Omitted (undefined) leaves the account unchanged; null clears it.
+      connection_id: parsed.data.connectionId,
+      target_id: parsed.data.targetId,
       format: parsed.data.format,
       recipients: parsed.data.recipients,
       destination_ids: parsed.data.destinationIds,

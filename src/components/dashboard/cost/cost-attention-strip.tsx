@@ -18,10 +18,15 @@ import { costOverviewAnchors } from "@/lib/tours/definitions/cost-overview";
 export function CostAttentionStrip({
   periodStart,
   periodEnd,
+  connectionId,
+  targetId,
   scopeSuffix,
 }: {
   periodStart: string;
   periodEnd: string;
+  /** The selected cost data scope — highlights follow it. */
+  connectionId: string | null;
+  targetId: string | null;
   scopeSuffix: string;
 }) {
   const [highlights, setHighlights] =
@@ -29,15 +34,18 @@ export function CostAttentionStrip({
 
   useEffect(() => {
     let cancelled = false;
-    getCostOverviewHighlightsAction({ periodStart, periodEnd }).then(
-      (response) => {
-        if (!cancelled) setHighlights(response.data ?? null);
-      },
-    );
+    getCostOverviewHighlightsAction({
+      periodStart,
+      periodEnd,
+      connectionId,
+      targetId,
+    }).then((response) => {
+      if (!cancelled) setHighlights(response.data ?? null);
+    });
     return () => {
       cancelled = true;
     };
-  }, [periodStart, periodEnd]);
+  }, [periodStart, periodEnd, connectionId, targetId]);
 
   if (!highlights) return null;
   const { budgets, anomalies } = highlights;

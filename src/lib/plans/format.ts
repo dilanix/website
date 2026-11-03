@@ -16,8 +16,9 @@ function money(amount: number, currency: string) {
   }).format(amount);
 }
 
-/** The price a card shows for the chosen interval: the yearly price as a
- * monthly equivalent when one exists, a custom price, or nothing. */
+/** The price a card shows for the chosen interval: "Free" for the trial, the
+ * yearly price as a monthly equivalent when one exists, a custom price, or
+ * nothing. */
 export function displayPrice(
   plan: CorePublicPlan,
   interval: BillingInterval,
@@ -27,6 +28,13 @@ export function displayPrice(
   note: string | null;
   custom: boolean;
 } | null {
+  if (plan.kind === "trial")
+    return {
+      headline: "Free",
+      suffix: null,
+      note: "Free trial · no card, no checkout",
+      custom: false,
+    };
   const byInterval = (wanted: PlanPriceInterval) =>
     plan.prices.find((price) => price.interval === wanted);
   const custom = byInterval("custom");

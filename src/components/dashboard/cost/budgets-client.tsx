@@ -24,6 +24,8 @@ import type {
   CoreBudgetStatus,
   CoreNotificationChannel,
   CoreNotificationDestination,
+  CoreIntegrationConnection,
+  CoreIntegrationTarget,
   CoreScopeCondition,
 } from "@/lib/core/api";
 import { formatAmount } from "@/components/dashboard/cost/format";
@@ -36,6 +38,11 @@ import {
   costBudgetsActions,
   costBudgetsAnchors as tourAnchors,
 } from "@/lib/tours/definitions/cost-budgets";
+import {
+  CostAccountSelect,
+  describeCostAccount,
+  type CostAccount,
+} from "./cost-account-select";
 import { ScopeEditor, summarizeScope } from "./scope-editor";
 
 const PERIOD_LABELS: Record<BudgetPeriod, string> = {
@@ -173,12 +180,18 @@ interface BudgetFormState {
   periodEnd: string;
   alertThresholds: string;
   destinationIds: string[];
+  recipients: string;
+  account: CostAccount;
 }
 
 function toFormState(budget?: CoreBudget): BudgetFormState {
   return {
     name: budget?.name ?? "",
     description: budget?.description ?? "",
+    account: {
+      connectionId: budget?.connection_id ?? null,
+      targetId: budget?.target_id ?? null,
+    },
     amount: budget?.amount ?? "",
     currency: budget?.currency ?? "USD",
     period: budget?.period ?? "monthly",
@@ -195,12 +208,16 @@ function BudgetDialog({
   onSaved,
   channels,
   destinations,
+  connections,
+  targets,
 }: {
   budget: CoreBudget | null;
   onClose: () => void;
   onSaved: (budget: CoreBudget) => void;
   channels: CoreNotificationChannel[];
   destinations: CoreNotificationDestination[];
+  connections: CoreIntegrationConnection[];
+  targets: CoreIntegrationTarget[];
 }) {
   const [form, setForm] = useState<BudgetFormState>(() =>
     toFormState(budget ?? undefined),
@@ -235,6 +252,8 @@ function BudgetDialog({
       recipients: budget?.recipients ?? [],
       destinationIds: form.destinationIds,
       scope,
+      connectionId: form.account.connectionId,
+      targetId: form.account.targetId,
     };
     startTransition(async () => {
       const result = budget
@@ -300,6 +319,19 @@ function BudgetDialog({
               className="border-foreground/15 bg-background focus:border-accent w-full rounded-lg border px-3 py-2 outline-none"
             />
           </label>
+
+          <div className="block text-sm">
+            <span className="mb-1.5 block font-medium">Account</span>
+            <CostAccountSelect
+              connections={connections}
+              targets={targets}
+              value={form.account}
+              onChange={(account) => setForm((f) => ({ ...f, account }))}
+            />
+            <p className="text-muted-foreground mt-1.5 text-xs">
+              The budget tracks only this account&apos;s spend.
+            </p>
+          </div>
 
           <div
             data-tour={tourAnchors.formAmount}
@@ -543,6 +575,15 @@ export function BudgetsClient({
   initialStatuses?: CoreBudgetStatus[];
   channels?: CoreNotificationChannel[];
   destinations?: CoreNotificationDestination[];
+  connections = [],
+  targets = [],
+}: {
+  initialBudgets: CoreBudget[];
+  initialStatuses?: CoreBudgetStatus[];
+  /** Connections with billing.read and their targets — the accounts a
+   *  budget can track. */
+  connections?: CoreIntegrationConnection[];
+  targets?: CoreIntegrationTarget[];
 }) {
   const [budgets, setBudgets] = useState(() => sortBudgets(initialBudgets));
   const [statuses, setStatuses] = useState<Record<string, CoreBudgetStatus>>(
@@ -716,7 +757,16 @@ export function BudgetsClient({
                   })}
                 </div>
                 <p className="text-muted-foreground mt-3 text-xs">
-                  Scope: {summarizeScope(budget.scope)}
+                  Account:{" "}
+                  {describeCostAccount(
+                    {
+                      connectionId: budget.connection_id,
+                      targetId: budget.target_id,
+                    },
+                    connections,
+                    targets,
+                  ) ?? "Unavailable account"}{" "}
+                  · Scope: {summarizeScope(budget.scope)}
                 </p>
                 <p className="text-muted-foreground mt-1 text-xs">
                   {budget.destination_ids.length} destination
@@ -770,6 +820,8 @@ export function BudgetsClient({
           budget={dialogState === "create" ? null : dialogState}
           channels={channels}
           destinations={destinations}
+          connections={connections}
+          targets={targets}
           onClose={() => setDialogState("closed")}
           onSaved={(budget) => {
             setBudgets((current) => {
