@@ -40,7 +40,7 @@ export const costBudgetsTour: TourDefinition = {
     {
       id: "welcome",
       title: "Welcome to Budgets",
-      body: "A budget is a spend limit for your whole cloud or one slice of it — an account, a service, a team's tagged resources. Dilanix tracks spend against it and emails you as it gets close. This tour shows how to create one, field by field, and how to read it.",
+      body: "A budget is a spend limit for your whole cloud or one slice of it - an account, a service, a team's tagged resources. Dilanix tracks spend against it and sends alerts through the Notification destinations you choose. This tour shows how to create one, field by field, and how to read it.",
     },
     {
       id: "create",
@@ -55,7 +55,7 @@ export const costBudgetsTour: TourDefinition = {
       prepare: inForm,
       placement: "right",
       title: "Name",
-      body: "Say what the budget covers, so alerts are clear at a glance — e.g. “Production AWS — monthly”. The name appears in every alert email.",
+      body: "Say what the budget covers, so alerts are clear at a glance - e.g. Production AWS - monthly. The name appears in every budget alert.",
     },
     {
       id: "form-description",
@@ -87,15 +87,15 @@ export const costBudgetsTour: TourDefinition = {
       prepare: inForm,
       placement: "right",
       title: "Alert thresholds",
-      body: "Percentages of the amount that send an email. With 50, 80, 100 on a 10000 USD budget, alerts go out at 5000, 8000 and 10000 USD. Each one fires once per period and resets when the next period starts — add 120 to hear about an overrun too.",
+      body: "Percentages of the amount that trigger a notification. With 50, 80, 100 on a 10000 USD budget, alerts go out at 5000, 8000 and 10000 USD. Each threshold fires once per period and resets when the next period starts - add 120 to hear about an overrun too.",
     },
     {
       id: "form-recipients",
       target: anchors.formRecipients,
       prepare: inForm,
       placement: "right",
-      title: "Recipients",
-      body: "The email addresses that get the alerts, separated by commas or new lines — e.g. finance@company.com and the owning team's list. With no recipients, the budget is still tracked but no email is sent.",
+      title: "Notification destinations",
+      body: "Choose where budget alerts should be delivered. Destinations are configured centrally in Notifications and can use Email, Slack, Telegram or Webhook. Select at least one destination for this budget.",
     },
     {
       id: "form-scope",
@@ -117,7 +117,7 @@ export const costBudgetsTour: TourDefinition = {
       id: "budget",
       target: anchors.budget,
       title: "A budget's card",
-      body: "Each card shows the limit and period, whether the budget is Active or Paused, its scope, and how many recipients get its alerts.",
+      body: "Each card shows the limit and period, whether the budget is Active or Paused, its scope, and how many notification destinations receive its alerts.",
     },
     {
       id: "status",
@@ -129,7 +129,7 @@ export const costBudgetsTour: TourDefinition = {
       id: "thresholds",
       target: anchors.thresholds,
       title: "Which alerts have fired",
-      body: "One chip per threshold. Amber chips with a bell have already sent their email this period; the rest are still waiting.",
+      body: "One chip per threshold. Amber chips with a bell have already sent their notification this period; the rest are still waiting.",
     },
     {
       id: "actions",
